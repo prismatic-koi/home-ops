@@ -51,6 +51,7 @@ spec:
               MEDIA_CACHE_PATH: /data/media
               SESSION_FILE: /data/instagram_session.json
               LOG_LEVEL: INFO
+              STORY_POLLING_ENABLED: "false" # need to figure out how to fix the nearly endless stream of stories...
 
             envFrom:
               - secretRef:
