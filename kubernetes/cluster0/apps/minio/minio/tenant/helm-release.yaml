@@ -41,5 +41,5 @@ spec:
             type: kubernetes.io/tls
         externalCaCertSecret:
           - name: internal-ca-bundle
-            type: kubernetes.io/tls
+            type: cert-manager.io/v1
         requestAutoCert: false
