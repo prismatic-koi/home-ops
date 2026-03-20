@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./secret.sops.yaml
+  - ./probe.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: grafana

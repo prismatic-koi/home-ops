@@ -1,0 +1,20 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/probe_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: plex
+  namespace: media
+spec:
+  jobName: blackbox-http
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:9115
+    path: /probe
+  # Plex returns 401 Unauthorized for unauthenticated requests - accepted as "up"
+  module: http_2xx_or_401
+  targets:
+    staticConfig:
+      static:
+        - http://plex.media.svc.cluster.local:32400
+      labels:
+        app: plex

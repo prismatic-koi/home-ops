@@ -19,8 +19,144 @@ spec:
     crds:
       enabled: true
     cleanPrometheusOperatorObjectNames: true
+
+    # -- Default alerting rules shipped with the chart.
+    # Disable entire groups or individual alerts by setting to false.
+    defaultRules:
+      create: true
+      rules:
+        # Alertmanager self-monitoring (is it up, can it send alerts, config valid)
+        alertmanager: true
+        # etcd cluster health - not exposed in k3s, these will never fire
+        etcd: false
+        # Config reloader sidecar errors (Prometheus/Alertmanager config reload failures)
+        configReloaders: true
+        # General: Watchdog (dead-man's switch), InfoInhibitor
+        general: true
+        # Recording rules for container CPU/memory metrics (no alerts, just pre-computed metrics)
+        k8sContainerCpuUsageSecondsTotal: true
+        k8sContainerMemoryCache: true
+        k8sContainerMemoryRss: true
+        k8sContainerMemorySwap: true
+        k8sContainerResource: true
+        k8sContainerMemoryWorkingSetBytes: true
+        k8sPodOwner: true
+        # API server availability and SLO burn rate alerts
+        kubeApiserverAvailability: true
+        kubeApiserverBurnrate: true
+        kubeApiserverHistogram: true
+        kubeApiserverSlos: true
+        # Controller manager - not exposed in k3s
+        kubeControllerManager: false
+        # Kubelet health and certificate expiry alerts
+        kubelet: true
+        # kube-proxy - not used, Cilium handles networking
+        kubeProxy: false
+        # General Prometheus recording rules
+        kubePrometheusGeneral: true
+        kubePrometheusNodeRecording: true
+        # Pod/Deployment/StatefulSet/DaemonSet health alerts - requires kube-state-metrics
+        kubernetesApps: true
+        # CPU/memory overcommit alerts - you are intentionally over-provisioned, consider disabling
+        kubernetesResources: true
+        # PVC filling up alerts - very useful, caught the Loki issue
+        kubernetesStorage: true
+        # KubeVersionMismatch, KubeClientErrors
+        kubernetesSystem: true
+        # Scheduler - not exposed in k3s
+        kubeSchedulerAlerting: false
+        kubeSchedulerRecording: false
+        # kube-state-metrics self-monitoring
+        kubeStateMetrics: true
+        # Node network error alerts
+        network: true
+        # Node recording rules (no alerts)
+        node: true
+        # Node exporter alerts (disk, memory, CPU, filesystem) - requires node-exporter
+        # node-exporter is disabled below; re-enable both together if you want host-level alerts
+        nodeExporterAlerting: false
+        nodeExporterRecording: false
+        # Prometheus self-monitoring
+        prometheus: true
+        # Prometheus Operator health
+        prometheusOperator: true
+        # Windows node alerts - not applicable
+        windows: false
+
+      # Disable specific noisy alerts without disabling entire rule groups.
+      # Individual alerts within an enabled group can be suppressed here.
+      disabled:
+        # You are intentionally over-provisioned - these will fire constantly
+        KubeCPUOvercommit: true
+        KubeMemoryOvercommit: true
+        # Quota alerts - you don't use resource quotas
+        KubeCPUQuotaOvercommit: true
+        KubeMemoryQuotaOvercommit: true
+        KubeQuotaAlmostFull: true
+        KubeQuotaExceeded: true
+        KubeQuotaFullyUsed: true
+        # HPA alerts - you don't use HorizontalPodAutoscaler
+        KubeHpaMaxedOut: true
+        KubeHpaReplicasMismatch: true
+        # CPUThrottlingHigh - very noisy in homelabs, normal for bursty workloads
+        CPUThrottlingHigh: true
+
     alertmanager:
-      enabled: false
+      enabled: true
+      ingress:
+        enabled: false
+      alertmanagerSpec:
+        replicas: 2
+        podAntiAffinity: hard
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              resources:
+                requests:
+                  storage: 1Gi
+      config:
+        global:
+          resolve_timeout: 5m
+          smtp_smarthost: "${SECRET_SMTP_HOST}:587"
+          smtp_from: "${SECRET_NOTIFICATION_EMAIL}"
+          smtp_require_tls: true
+        route:
+          group_by: ["alertname", "namespace"]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 12h
+          receiver: email
+          routes:
+            # Silence the dead-man's switch and info inhibitor
+            - receiver: "null"
+              matchers:
+                - alertname =~ "InfoInhibitor|Watchdog"
+        receivers:
+          - name: "null"
+          - name: email
+            email_configs:
+              - to: "${SECRET_ADMIN_EMAIL}"
+                send_resolved: true
+        inhibit_rules:
+          - source_matchers:
+              - severity = critical
+            target_matchers:
+              - severity =~ warning|info
+            equal: ["namespace", "alertname"]
+          - source_matchers:
+              - severity = warning
+            target_matchers:
+              - severity = info
+            equal: ["namespace", "alertname"]
+          - source_matchers:
+              - alertname = InfoInhibitor
+            target_matchers:
+              - severity = info
+            equal: ["namespace"]
+          - target_matchers:
+              - alertname = InfoInhibitor
+
     kubelet:
       enabled: true
       serviceMonitor:
@@ -97,7 +233,12 @@ spec:
           multicluster:
             etcd:
               enabled: true
-    nodeExporter:
-      enabled: false
+    # kube-state-metrics: exposes pod/deployment/statefulset/PVC state as metrics.
+    # Required for most kubernetesApps and kubernetesStorage alert rules to function.
     kubeStateMetrics:
+      enabled: true
+    # node-exporter: exposes host-level metrics (CPU, memory, disk, filesystem).
+    # Disabled for now - re-enable alongside nodeExporterAlerting/nodeExporterRecording
+    # above if you want host-level alerting.
+    nodeExporter:
       enabled: false

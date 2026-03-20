@@ -5,6 +5,7 @@ resources:
   - ./helm-release.yaml
   - ./secret.sops.yaml
   - ./middleware.yaml
+  - ./probe.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: authelia

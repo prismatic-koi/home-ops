@@ -1,0 +1,82 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: prometheus-blackbox-exporter
+      version: 11.9.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community-charts
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: blackbox-exporter
+
+    config:
+      modules:
+        # Standard HTTP 2xx check
+        http_2xx:
+          prober: http
+          timeout: 15s
+          http:
+            valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+            valid_status_codes: []  # defaults to 2xx
+            follow_redirects: true
+            preferred_ip_protocol: ip4
+
+        # HTTPS check that also validates the TLS certificate
+        https_2xx:
+          prober: http
+          timeout: 15s
+          http:
+            valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+            valid_status_codes: []  # defaults to 2xx
+            follow_redirects: true
+            preferred_ip_protocol: ip4
+            tls_config:
+              insecure_skip_verify: false
+
+        # HTTP check accepting 2xx or 401 (for apps that return 401 on unauthenticated requests, e.g. plex)
+        http_2xx_or_401:
+          prober: http
+          timeout: 15s
+          http:
+            valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+            valid_status_codes: [200, 201, 202, 204, 301, 302, 401]
+            follow_redirects: false
+            preferred_ip_protocol: ip4
+
+        # TCP connect check (for non-HTTP services like mosquitto)
+        tcp_connect:
+          prober: tcp
+          timeout: 15s
+
+        # DNS check - resolves a known hostname, used for blocky/internet connectivity
+        dns_a_lookup:
+          prober: dns
+          timeout: 15s
+          dns:
+            query_name: "${SECRET_PUBLIC_DOMAIN}"
+            query_type: A
+            valid_rcodes:
+              - NOERROR
+
+    serviceMonitor:
+      enabled: false  # Prometheus scrapes the exporter via Probe CRDs, not a ServiceMonitor; enabling both would cause duplicate scraping
+
+    # Allow Probe CRDs from any namespace to use this exporter
+    prometheusRule:
+      enabled: false  # alerts come from Probe metrics, not separate rules here
