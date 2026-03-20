@@ -15,5 +15,5 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "Probe failed for {{ $labels.target }}"
-            description: "Blackbox probe for {{ $labels.target }} (job: {{ $labels.job }}) has been failing for more than 2 minutes."
+            summary: "{{ $labels.app }} is down"
+            description: "{{ $labels.app }} ({{ $labels.instance }}) has been unreachable for more than 2 minutes."
