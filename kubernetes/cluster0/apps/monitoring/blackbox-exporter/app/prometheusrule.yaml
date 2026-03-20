@@ -1,0 +1,19 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+spec:
+  groups:
+    - name: blackbox
+      rules:
+        - alert: ProbeFailed
+          expr: probe_success == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Probe failed for {{ $labels.target }}"
+            description: "Blackbox probe for {{ $labels.target }} (job: {{ $labels.job }}) has been failing for more than 2 minutes."
