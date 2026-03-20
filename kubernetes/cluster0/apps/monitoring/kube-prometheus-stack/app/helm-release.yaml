@@ -129,6 +129,7 @@ spec:
           resolve_timeout: 5m
           smtp_smarthost: "${SECRET_SMTP_HOST}:587"
           smtp_from: "${SECRET_NOTIFICATION_EMAIL}"
+          smtp_hello: "${SECRET_PUBLIC_DOMAIN}"
           smtp_require_tls: true
         route:
           group_by: ["alertname", "namespace"]
