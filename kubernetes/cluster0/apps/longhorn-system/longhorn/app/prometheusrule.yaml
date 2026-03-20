@@ -1,0 +1,112 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+spec:
+  groups:
+    - name: longhorn.volumes
+      rules:
+        - alert: LonghornVolumeSpaceLow
+          expr: |
+            (longhorn_volume_actual_size_bytes / longhorn_volume_capacity_bytes) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} is over 85% full"
+            description: "Volume {{ $labels.volume }} on node {{ $labels.node }} is {{ $value | humanizePercentage }} full."
+
+        - alert: LonghornVolumeSpaceCritical
+          expr: |
+            (longhorn_volume_actual_size_bytes / longhorn_volume_capacity_bytes) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} is over 95% full"
+            description: "Volume {{ $labels.volume }} on node {{ $labels.node }} is {{ $value | humanizePercentage }} full."
+
+        - alert: LonghornVolumeDegraded
+          expr: longhorn_volume_robustness{state="degraded"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} is degraded"
+            description: "Volume {{ $labels.volume }} has fewer healthy replicas than desired."
+
+        - alert: LonghornVolumeFaulted
+          expr: longhorn_volume_robustness{state="faulted"} == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} is faulted"
+            description: "Volume {{ $labels.volume }} is in a faulted state and may be inaccessible."
+
+    - name: longhorn.snapshots
+      rules:
+        - alert: LonghornUserSnapshotSpaceHigh
+          # Sum user-created snapshot bytes per volume, alert when total exceeds 2GiB
+          expr: |
+            sum by (volume) (longhorn_snapshot_actual_size_bytes{user_created="true"}) > 2147483648
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} has large user-created snapshots"
+            description: "User-created snapshots for volume {{ $labels.volume }} are consuming {{ $value | humanize1024 }}B. Consider deleting unneeded snapshots."
+
+    - name: longhorn.nodes
+      rules:
+        - alert: LonghornNodeDiskSpaceLow
+          expr: |
+            (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn disk on node {{ $labels.node }} is over 85% full"
+            description: "Disk {{ $labels.disk }} on node {{ $labels.node }} is {{ $value | humanizePercentage }} full."
+
+        - alert: LonghornNodeDiskSpaceCritical
+          expr: |
+            (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn disk on node {{ $labels.node }} is over 95% full"
+            description: "Disk {{ $labels.disk }} on node {{ $labels.node }} is {{ $value | humanizePercentage }} full."
+
+        - alert: LonghornNodeDown
+          expr: longhorn_node_status{condition="ready"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn node {{ $labels.node }} is not ready"
+            description: "Longhorn node {{ $labels.node }} has been in a not-ready state for more than 5 minutes."
+
+        - alert: LonghornNodeSchedulingDisabled
+          expr: longhorn_node_status{condition="schedulable"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn node {{ $labels.node }} is not schedulable"
+            description: "Longhorn node {{ $labels.node }} cannot schedule new replicas (disk pressure or cordon)."
+
+    - name: longhorn.backups
+      rules:
+        - alert: LonghornBackupFailed
+          expr: longhorn_backup_state == 4
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn backup {{ $labels.backup }} failed"
+            description: "Backup {{ $labels.backup }} for volume {{ $labels.volume }} is in a failed state."

@@ -25,3 +25,6 @@ spec:
       backupTarget: "nfs://${NAS0_IP}:/volume1/longhorn-backups"
     longhornUI:
       replicas: 3
+    metrics:
+      serviceMonitor:
+        enabled: true

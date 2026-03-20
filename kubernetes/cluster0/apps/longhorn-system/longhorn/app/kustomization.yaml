@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - helm-release.yaml
   - httproute.yaml
+  - prometheusrule.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: longhorn
