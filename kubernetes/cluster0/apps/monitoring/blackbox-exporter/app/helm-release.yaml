@@ -13,7 +13,7 @@ spec:
       version: 11.9.0
       sourceRef:
         kind: HelmRepository
-        name: prometheus-community
+        name: prometheus-community-charts
         namespace: flux-system
   install:
     remediation:
@@ -49,7 +49,7 @@ spec:
             tls_config:
               insecure_skip_verify: false
 
-        # HTTP check accepting 2xx or 401 (for apps that return 401 on unauthenticated requests, e.g. plex, qbittorrent)
+        # HTTP check accepting 2xx or 401 (for apps that return 401 on unauthenticated requests, e.g. plex)
         http_2xx_or_401:
           prober: http
           timeout: 15s
@@ -65,7 +65,7 @@ spec:
           timeout: 15s
 
         # DNS check - resolves a known hostname, used for blocky/internet connectivity
-        dns_tinfoilforest:
+        dns_a_lookup:
           prober: dns
           timeout: 15s
           dns:
@@ -75,7 +75,7 @@ spec:
               - NOERROR
 
     serviceMonitor:
-      enabled: false  # blackbox itself doesn't need scraping; Probes handle targeting
+      enabled: false  # Prometheus scrapes the exporter via Probe CRDs, not a ServiceMonitor; enabling both would cause duplicate scraping
 
     # Allow Probe CRDs from any namespace to use this exporter
     prometheusRule:

@@ -10,7 +10,7 @@ spec:
   prober:
     url: blackbox-exporter.monitoring.svc.cluster.local:9115
     path: /probe
-  module: dns_tinfoilforest
+  module: dns_a_lookup
   targets:
     staticConfig:
       static:
@@ -30,7 +30,7 @@ spec:
   prober:
     url: blackbox-exporter.monitoring.svc.cluster.local:9115
     path: /probe
-  module: dns_tinfoilforest
+  module: dns_a_lookup
   targets:
     staticConfig:
       static:
