@@ -100,9 +100,6 @@ spec:
         KubeHpaReplicasMismatch: true
         # CPUThrottlingHigh - very noisy in homelabs, normal for bursty workloads
         CPUThrottlingHigh: true
-        # TargetDown - fires for any scrape target that goes away, often noisy
-        # re-enable once you've confirmed your scrape targets are stable
-        TargetDown: true
 
     alertmanager:
       enabled: true
