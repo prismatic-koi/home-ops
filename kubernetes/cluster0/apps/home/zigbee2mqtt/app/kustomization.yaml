@@ -5,6 +5,7 @@ resources:
   - ./helm-release.yaml
   # - ./configmap.yaml
   # - ./secret.sops.yaml
+  - ./probe.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: zigbee2mqtt

@@ -5,3 +5,4 @@ resources:
   - helm-release-primary.yaml
   - helm-release-secondary.yaml
   - config.yaml
+  - probe.yaml

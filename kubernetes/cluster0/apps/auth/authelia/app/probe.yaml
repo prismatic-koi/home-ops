@@ -1,0 +1,20 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/probe_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: authelia-public
+  namespace: auth
+spec:
+  jobName: blackbox-https
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:9115
+    path: /probe
+  module: https_2xx
+  targets:
+    staticConfig:
+      static:
+        # Public HTTPS probe - validates TLS cert, gateway, and external reachability
+        - https://auth.${SECRET_PUBLIC_DOMAIN}
+      labels:
+        app: authelia

@@ -1,0 +1,21 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/probe_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: blocky-dns
+  namespace: networking
+spec:
+  jobName: blackbox-dns
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:9115
+    path: /probe
+  module: dns_tinfoilforest
+  targets:
+    staticConfig:
+      static:
+        # Probe both blocky instances as DNS targets
+        - blocky-primary-dns.networking.svc.cluster.local:53
+        - blocky-secondary-dns.networking.svc.cluster.local:53
+      labels:
+        app: blocky
