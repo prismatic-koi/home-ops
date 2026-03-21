@@ -9,26 +9,6 @@ spec:
   groups:
     - name: longhorn.volumes
       rules:
-        - alert: LonghornVolumeSpaceLow
-          expr: |
-            (longhorn_volume_actual_size_bytes / longhorn_volume_capacity_bytes) > 0.85
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Longhorn volume {{ $labels.volume }} is over 85% full"
-            description: "Volume {{ $labels.volume }} on node {{ $labels.node }} is {{ $value | humanizePercentage }} full."
-
-        - alert: LonghornVolumeSpaceCritical
-          expr: |
-            (longhorn_volume_actual_size_bytes / longhorn_volume_capacity_bytes) > 0.95
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Longhorn volume {{ $labels.volume }} is over 95% full"
-            description: "Volume {{ $labels.volume }} on node {{ $labels.node }} is {{ $value | humanizePercentage }} full."
-
         - alert: LonghornVolumeDegraded
           expr: longhorn_volume_robustness{state="degraded"} == 1
           for: 5m
@@ -46,19 +26,6 @@ spec:
           annotations:
             summary: "Longhorn volume {{ $labels.volume }} is faulted"
             description: "Volume {{ $labels.volume }} is in a faulted state and may be inaccessible."
-
-    - name: longhorn.snapshots
-      rules:
-        - alert: LonghornUserSnapshotSpaceHigh
-          # Sum user-created snapshot bytes per volume, alert when total exceeds 2GiB
-          expr: |
-            sum by (volume) (longhorn_snapshot_actual_size_bytes{user_created="true"}) > 2147483648
-          for: 15m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Longhorn volume {{ $labels.volume }} has large user-created snapshots"
-            description: "User-created snapshots for volume {{ $labels.volume }} are consuming {{ $value | humanize1024 }}B. Consider deleting unneeded snapshots."
 
     - name: longhorn.nodes
       rules:
