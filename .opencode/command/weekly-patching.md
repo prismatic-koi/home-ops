@@ -15,33 +15,11 @@ This task reviews and merges Renovate PRs for weekly server patching.
 
 ## Task Overview
 
-1. Trigger Renovate to create all rate-limited PRs
-2. Review all open Renovate PRs
-3. Merge approved PRs sequentially
-4. Monitor deployment rollouts and verify health
+1. Review all open Renovate PRs
+2. Merge approved PRs sequentially
+3. Monitor deployment rollouts and verify health
 
-## Step 1: Trigger Rate-Limited PRs
-
-Renovate rate-limits major version updates. To create all pending rate-limited PRs:
-
-1. View issue #2603 (Renovate Dependency Dashboard):
-   ```bash
-   gh issue view 2603
-   ```
-
-2. Look for the checkbox with text: `🔐 **Create all rate-limited PRs at once** 🔐`
-
-3. Edit the issue and mark the checkbox with an "x":
-   ```bash
-   gh issue edit 1
-   ```
-   Change `- [ ]` to `- [x]` for that specific checkbox
-
-4. Save the issue. This triggers Renovate to create all rate-limited PRs immediately.
-
-5. Wait 2-3 minutes for Renovate to process and create PRs.
-
-## Step 2: List Open Renovate PRs
+## Step 1: List Open Renovate PRs
 
 ```bash
 gh pr list --state open --author "renovate[bot]" --json number,title,url
@@ -49,22 +27,22 @@ gh pr list --state open --author "renovate[bot]" --json number,title,url
 
 Create a todo list to track review progress for each PR.
 
-## Step 3: Review Each PR
+## Step 2: Review Each PR
 
 For each PR, follow this review process:
 
-### 3.1 Get PR Details
+### 2.1 Get PR Details
 ```bash
 gh pr view <PR_NUMBER> --json title,body,files
 ```
 
-### 3.2 Review Release Notes
+### 2.2 Review Release Notes
 - Check the PR body for release notes and changelogs
 - Identify the version bump type (patch/minor/major)
 - Look for security fixes (CVE mentions)
 - Note any breaking changes or migration requirements
 
-### 3.3 Read Current Configuration
+### 2.3 Read Current Configuration
 - Identify which files are being changed (usually 1 HelmRelease file)
 - Read the current configuration file(s):
   ```bash
@@ -72,7 +50,7 @@ gh pr view <PR_NUMBER> --json title,body,files
   ```
 - Understand the current setup to assess compatibility
 
-### 3.4 Assessment Criteria
+### 2.4 Assessment Criteria
 
 **Patch Updates (0.0.x):**
 - Generally safe, bug fixes only
@@ -96,14 +74,14 @@ gh pr view <PR_NUMBER> --json title,body,files
 - Any CVE fixes should be prioritized
 - Priority applications: cert-manager, trust-manager, authelia, prometheus-operator, cilium
 
-### 3.5 Document Assessment
+### 2.5 Document Assessment
 For each PR, note:
 - Version change (e.g., v1.2.3 -> v1.2.4)
 - Update type (patch/minor/major)
 - Key changes (security fixes, new features, breaking changes)
 - Safety assessment (SAFE TO MERGE / NEEDS CAUTION)
 
-## Step 4: Merge PRs Sequentially
+## Step 3: Merge PRs Sequentially
 
 ⚠️ **IMPORTANT**: Merge PRs one at a time, not in parallel. Parallel merges cause base branch conflicts.
 
@@ -115,7 +93,7 @@ gh pr merge <PR_NUMBER> --squash
 
 Wait a few seconds between merges to allow GitHub to update the base branch.
 
-## Step 5: Monitor Deployments
+## Step 4: Monitor Deployments
 
 After merging all PRs, force Flux to reconcile immediately instead of waiting:
 
@@ -125,7 +103,7 @@ flux reconcile source git home-ops-cluster0
 
 This triggers Flux to pull the latest changes from Git and reconcile all resources immediately. Wait 30-60 seconds for the reconciliation to complete.
 
-### 5.1 Check HelmRelease Status
+### 4.1 Check HelmRelease Status
 ```bash
 kubectl get helmreleases -A | grep -E "(app1|app2|app3)"
 ```
@@ -135,7 +113,7 @@ Look for:
 - Recent revision number in the STATUS message
 - Correct version in the chart name
 
-### 5.2 Find Actual Resource Names
+### 4.2 Find Actual Resource Names
 
 ⚠️ **CRITICAL**: Don't assume resource names match application names. Always verify first.
 
@@ -149,7 +127,7 @@ kubectl -n <namespace> get deployments,statefulsets,daemonsets | grep <app-name>
 
 Refer to `/AGENTS.md` for common resource naming patterns.
 
-### 5.3 Check Rollout Status
+### 4.3 Check Rollout Status
 
 Use the exact resource type and name found above:
 
@@ -164,7 +142,7 @@ kubectl -n <namespace> rollout status statefulset/<exact-name> --timeout=60s
 kubectl -n <namespace> rollout status daemonset/<exact-name> --timeout=60s
 ```
 
-### 5.4 Check Pod Health
+### 4.4 Check Pod Health
 
 ```bash
 kubectl get pods -A | grep -E "(app1|app2|app3)" | grep -v Completed
@@ -177,7 +155,7 @@ Look for:
 
 **Note**: Some pods (like home-assistant) have init containers - `Init:0/1` is normal during startup. Wait for init containers to complete.
 
-## Step 6: Report Results
+## Step 5: Report Results
 
 Provide a summary including:
 
