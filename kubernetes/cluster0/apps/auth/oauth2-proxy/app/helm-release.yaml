@@ -48,7 +48,7 @@ spec:
       configFile: |-
         provider = "google"
         provider_display_name = "Google Workspace"
-        email_domains = [ "tinfoilforest.nz" ]
+        email_domains = [ "${SECRET_PUBLIC_DOMAIN}" ]
 
         # Auth-only — upstream is a static 202 response; real traffic is
         # forwarded by Traefik after this proxy sets the auth verdict.
