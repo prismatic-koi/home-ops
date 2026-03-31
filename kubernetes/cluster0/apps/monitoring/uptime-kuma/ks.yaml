@@ -9,7 +9,6 @@ spec:
   dependsOn:
     - name: cluster-apps-traefik
     - name: cluster-apps-longhorn
-    - name: cluster-apps-oauth2-proxy
   path: ./kubernetes/cluster0/apps/monitoring/uptime-kuma/app
   prune: true
   sourceRef:
