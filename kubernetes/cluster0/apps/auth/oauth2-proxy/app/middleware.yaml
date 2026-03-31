@@ -1,10 +1,15 @@
 ---
 # Traefik ForwardAuth middleware for oauth2-proxy.
 #
-# /oauth2/auth returns 202 (authenticated) or 401 (not authenticated).
-# The errors middleware below catches the 401 and redirects the browser
-# to oauth2-proxy's sign_in page, which issues the Google OAuth redirect.
-# This avoids CSRF issues caused by calling /sign_in directly from ForwardAuth.
+# /oauth2/sign_in issues a 302 to Google on unauthenticated requests.
+# Traefik's ForwardAuth forwards non-2xx responses (including 3xx redirects)
+# directly to the browser, so the Google login flow initiates correctly.
+#
+# CSRF is not an issue here because the cookie and callback are both on
+# oauth.${SECRET_PUBLIC_DOMAIN}, completely separate from the application host.
+#
+# Duplicate into each namespace that needs this middleware — same pattern as
+# forwardauth-authelia.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -12,25 +17,8 @@ metadata:
   namespace: monitoring
 spec:
   forwardAuth:
-    address: http://oauth2-proxy.auth.svc.cluster.local:4180/oauth2/auth
+    address: http://oauth2-proxy.auth.svc.cluster.local:4180/oauth2/sign_in
     trustForwardHeader: true
     authResponseHeaders:
       - X-Auth-Request-User
       - X-Auth-Request-Email
----
-# Catches 401 from forwardauth-oauth2-proxy and redirects the browser to
-# the oauth2-proxy sign-in page, which then initiates the Google OAuth flow.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: errors-oauth2-proxy
-  namespace: monitoring
-spec:
-  errors:
-    status:
-      - "401"
-    service:
-      name: oauth2-proxy
-      namespace: auth
-      port: 4180
-    query: /oauth2/sign_in?rd={url}

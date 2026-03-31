@@ -57,11 +57,6 @@ spec:
                 extensionRef:
                   group: 'traefik.io'
                   kind: 'Middleware'
-                  name: 'errors-oauth2-proxy'
-              - type: 'ExtensionRef'
-                extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
                   name: 'forwardauth-oauth2-proxy'
     persistence:
       config:
