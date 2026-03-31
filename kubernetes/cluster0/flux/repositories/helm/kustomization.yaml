@@ -16,3 +16,4 @@ resources:
   - node-feature-discovery.yaml
   - prometheus-community-charts.yaml
   - traefik-charts.yaml
+  - oauth2-proxy-charts.yaml

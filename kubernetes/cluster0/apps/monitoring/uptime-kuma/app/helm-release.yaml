@@ -57,7 +57,7 @@ spec:
                 extensionRef:
                   group: 'traefik.io'
                   kind: 'Middleware'
-                  name: 'forwardauth-authelia'
+                  name: 'forwardauth-oauth2-proxy'
     persistence:
       config:
         existingClaim: pvc-uptime-kuma
