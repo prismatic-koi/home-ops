@@ -1,12 +1,13 @@
 ---
 # Traefik ForwardAuth middleware for oauth2-proxy.
 #
-# /oauth2/sign_in issues a 302 to Google on unauthenticated requests.
-# Traefik's ForwardAuth forwards non-2xx responses (including 3xx redirects)
-# directly to the browser, so the Google login flow initiates correctly.
+# Points at oauth2-proxy's root endpoint which handles both auth checking and
+# redirect to Google in a single request — authenticated users get a 202,
+# unauthenticated users get a 302 to Google login. No errors middleware needed.
 #
-# CSRF is not an issue here because the cookie and callback are both on
-# oauth.${SECRET_PUBLIC_DOMAIN}, completely separate from the application host.
+# Requires oauth2-proxy to be configured with:
+#   upstreams = ["static://202"]
+#   reverse_proxy = true
 #
 # Duplicate into each namespace that needs this middleware — same pattern as
 # forwardauth-authelia.
@@ -17,9 +18,8 @@ metadata:
   namespace: monitoring
 spec:
   forwardAuth:
-    address: http://oauth2-proxy.auth.svc.cluster.local:4180/oauth2/sign_in
+    address: http://oauth2-proxy.auth.svc.cluster.local:4180/
     trustForwardHeader: true
     authResponseHeaders:
-      - Set-Cookie
       - X-Auth-Request-User
       - X-Auth-Request-Email
