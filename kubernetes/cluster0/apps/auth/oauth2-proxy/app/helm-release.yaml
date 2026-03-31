@@ -39,12 +39,7 @@ spec:
   values:
     replicaCount: 1
 
-    # Auth-only mode: upstream is a static 202 so oauth2-proxy never proxies
-    # application traffic — Traefik ForwardAuth drives all routing.
     config:
-      # Provider credentials come from valuesFrom above.
-      # Cookie domain covers all sub-domains of the public domain so a single
-      # oauth2-proxy instance can gate multiple services in the future.
       configFile: |-
         provider = "google"
         provider_display_name = "Google Workspace"
@@ -54,44 +49,30 @@ spec:
         # forwarded by Traefik after this proxy sets the auth verdict.
         upstreams = [ "static://202" ]
 
-        # Mount all oauth2-proxy endpoints under /_auth to avoid collisions
-        # with application paths.
-        proxy_prefix = "/_auth"
-
-        redirect_url = "https://uptime.${SECRET_PUBLIC_DOMAIN}/_auth/callback"
+        redirect_url = "https://oauth.${SECRET_PUBLIC_DOMAIN}/oauth2/callback"
 
         # Pass identity headers downstream so applications can read them.
         set_xauthrequest = true
         pass_access_token = false
         pass_authorization_header = false
 
-        # Cookie settings
+        # Cookie domain covers all subdomains so the session cookie works
+        # across any service gated by this proxy in future.
         cookie_secure = true
         cookie_httponly = true
         cookie_samesite = "lax"
         cookie_domains = [ ".${SECRET_PUBLIC_DOMAIN}" ]
         whitelist_domains = [ ".${SECRET_PUBLIC_DOMAIN}" ]
 
-        # Required when running behind a reverse proxy — tells oauth2-proxy to
-        # trust X-Forwarded-For / X-Forwarded-Proto / X-Forwarded-Host headers
-        # set by Traefik so that post-auth redirects resolve correctly.
+        # Trust Traefik's forwarded headers for correct redirect behaviour.
         reverse_proxy = true
 
-        # Whitelist the ForwardAuth ping endpoint so Traefik health checks work
-        # without triggering a Google login redirect.
-        skip_auth_routes = [ "^/_auth/ping$" ]
-
-        # Silence the provider-selection page (only one provider configured).
         skip_provider_button = true
 
-    # Expose the service so Traefik's ForwardAuth middleware can reach it and
-    # so the /_auth/callback HTTPRoute can reach it from the gateway.
     service:
       type: ClusterIP
       portNumber: 4180
 
-    # Route the callback and all /_auth/* traffic through Traefik.
-    # The HTTPRoute is defined in this same kustomization (httproute.yaml).
     ingress:
       enabled: false
 

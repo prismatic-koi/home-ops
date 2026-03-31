@@ -1,12 +1,12 @@
 ---
-# Traefik Middleware: ForwardAuth → oauth2-proxy (auth-only mode)
+# Traefik ForwardAuth middleware for oauth2-proxy.
 #
-# This middleware is placed in the `monitoring` namespace because Traefik's
-# Gateway API ExtensionRef filter requires the Middleware to live in the same
-# namespace as the HTTPRoute that references it.
+# On an unauthenticated request, oauth2-proxy returns a 302 to Google login.
+# After Google authenticates the user it redirects to oauth.domain/oauth2/callback
+# which sets the session cookie, then sends the browser back to the original URL.
 #
-# If other namespaces later need oauth2-proxy gating, duplicate this resource
-# into those namespaces (same pattern as forwardauth-authelia).
+# Duplicate into each namespace that needs this middleware — same pattern as
+# forwardauth-authelia.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -14,11 +14,7 @@ metadata:
   namespace: monitoring
 spec:
   forwardAuth:
-    # Point at the sign_in endpoint (not /auth) so that unauthenticated requests
-    # receive a 302 redirect to Google rather than a bare 401. oauth2-proxy reads
-    # X-Forwarded-Host / X-Forwarded-Uri from Traefik to build the post-auth
-    # redirect_url back to the original request.
-    address: http://oauth2-proxy.auth.svc.cluster.local:4180/_auth/sign_in
+    address: http://oauth2-proxy.auth.svc.cluster.local:4180/oauth2/auth
     trustForwardHeader: true
     authResponseHeaders:
       - X-Auth-Request-User
