@@ -1,0 +1,38 @@
+---
+# HTTPRoute: expose oauth2-proxy's /_auth/* path on uptime.tinfoilforest.nz
+#
+# Google OAuth requires the redirect_uri host to match a registered URI in the
+# Google Cloud Console. We expose /_auth/* on the same host as uptime-kuma so
+# that `https://uptime.<domain>/_auth/callback` resolves without a separate
+# DNS record or certificate.
+#
+# This route has NO ForwardAuth filter — the /_auth/* paths must be reachable
+# without authentication so that:
+#   • GET /_auth/callback  — receives the Google authorization code
+#   • GET /_auth/sign_in   — shows / initiates the login flow
+#   • GET /_auth/ping      — health-check endpoint (used by Traefik liveness)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: oauth2-proxy-uptime
+  namespace: auth
+spec:
+  hostnames:
+    - uptime.${SECRET_PUBLIC_DOMAIN}
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecure
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /_auth
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: oauth2-proxy
+          namespace: auth
+          port: 4180

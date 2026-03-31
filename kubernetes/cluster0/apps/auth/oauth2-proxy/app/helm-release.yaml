@@ -1,0 +1,100 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: &app oauth2-proxy
+  namespace: auth
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: oauth2-proxy
+      version: 7.12.x
+      sourceRef:
+        kind: HelmRepository
+        name: oauth2-proxy-charts
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      strategy: rollback
+      retries: 3
+  valuesFrom:
+    - kind: Secret
+      name: oauth2-proxy-secrets
+      valuesKey: client-id
+      targetPath: config.clientID
+    - kind: Secret
+      name: oauth2-proxy-secrets
+      valuesKey: client-secret
+      targetPath: config.clientSecret
+    - kind: Secret
+      name: oauth2-proxy-secrets
+      valuesKey: cookie-secret
+      targetPath: config.cookieSecret
+  values:
+    replicaCount: 1
+
+    # Auth-only mode: upstream is a static 202 so oauth2-proxy never proxies
+    # application traffic — Traefik ForwardAuth drives all routing.
+    config:
+      # Provider credentials come from valuesFrom above.
+      # Cookie domain covers all sub-domains of the public domain so a single
+      # oauth2-proxy instance can gate multiple services in the future.
+      configFile: |-
+        provider = "google"
+        provider_display_name = "Google Workspace"
+        email_domains = [ "tinfoilforest.nz" ]
+
+        # Auth-only — upstream is a static 202 response; real traffic is
+        # forwarded by Traefik after this proxy sets the auth verdict.
+        upstreams = [ "static://202" ]
+
+        # Mount all oauth2-proxy endpoints under /_auth to avoid collisions
+        # with application paths.
+        proxy_prefix = "/_auth"
+
+        redirect_url = "https://uptime.${SECRET_PUBLIC_DOMAIN}/_auth/callback"
+
+        # Pass identity headers downstream so applications can read them.
+        set_xauthrequest = true
+        pass_access_token = false
+        pass_authorization_header = false
+
+        # Cookie settings
+        cookie_secure = true
+        cookie_httponly = true
+        cookie_samesite = "lax"
+        cookie_domains = [ ".${SECRET_PUBLIC_DOMAIN}" ]
+
+        # Whitelist the ForwardAuth ping endpoint so Traefik health checks work
+        # without triggering a Google login redirect.
+        skip_auth_routes = [ "^/_auth/ping$" ]
+
+        # Silence the provider-selection page (only one provider configured).
+        skip_provider_button = true
+
+    # Expose the service so Traefik's ForwardAuth middleware can reach it and
+    # so the /_auth/callback HTTPRoute can reach it from the gateway.
+    service:
+      type: ClusterIP
+      portNumber: 4180
+
+    # Route the callback and all /_auth/* traffic through Traefik.
+    # The HTTPRoute is defined in this same kustomization (httproute.yaml).
+    ingress:
+      enabled: false
+
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+    podAnnotations:
+      reloader.stakater.com/auto: "true"

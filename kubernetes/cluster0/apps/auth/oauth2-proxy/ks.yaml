@@ -3,14 +3,12 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: cluster-apps-uptime-kuma
+  name: cluster-apps-oauth2-proxy
   namespace: flux-system
 spec:
   dependsOn:
     - name: cluster-apps-traefik
-    - name: cluster-apps-longhorn
-    - name: cluster-apps-oauth2-proxy
-  path: ./kubernetes/cluster0/apps/monitoring/uptime-kuma/app
+  path: ./kubernetes/cluster0/apps/auth/oauth2-proxy/app
   prune: true
   sourceRef:
     kind: GitRepository
@@ -18,9 +16,8 @@ spec:
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
-      name: uptime-kuma
-      namespace: monitoring
+      name: oauth2-proxy
+      namespace: auth
   interval: 30m
   retryInterval: 1m
-  timeout: 3m
-
+  timeout: 5m
