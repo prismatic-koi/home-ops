@@ -14,11 +14,11 @@ metadata:
   namespace: monitoring
 spec:
   forwardAuth:
-    # The /auth endpoint returns 200 (pass) or 302 (redirect to Google login).
-    # It does NOT proxy the request body, which is what keeps long-running
-    # upstream connections alive — Traefik holds the connection open while
-    # this lightweight auth check completes in milliseconds.
-    address: http://oauth2-proxy.auth.svc.cluster.local:4180/_auth/auth
+    # Point at the sign_in endpoint (not /auth) so that unauthenticated requests
+    # receive a 302 redirect to Google rather than a bare 401. oauth2-proxy reads
+    # X-Forwarded-Host / X-Forwarded-Uri from Traefik to build the post-auth
+    # redirect_url back to the original request.
+    address: http://oauth2-proxy.auth.svc.cluster.local:4180/_auth/sign_in
     trustForwardHeader: true
     authResponseHeaders:
       - X-Auth-Request-User
