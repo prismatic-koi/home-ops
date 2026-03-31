@@ -47,16 +47,16 @@ spec:
             args:
               - --provider=google
               - --provider-display-name=Google Workspace
-              - --email-domain=tinfoilforest.nz
+              - --email-domain=${SECRET_PUBLIC_DOMAIN}
               - --upstream=http://localhost:3001
               - --http-address=0.0.0.0:4180
-              - --redirect-url=https://uptime.tinfoilforest.nz/oauth2/callback
+              - --redirect-url=https://uptime.${SECRET_PUBLIC_DOMAIN}/oauth2/callback
               - --set-xauthrequest=true
               - --cookie-secure=true
               - --cookie-httponly=true
               - --cookie-samesite=lax
-              - --cookie-domain=.tinfoilforest.nz
-              - --whitelist-domain=.tinfoilforest.nz
+              - --cookie-domain=.${SECRET_PUBLIC_DOMAIN}
+              - --whitelist-domain=.${SECRET_PUBLIC_DOMAIN}
               - --reverse-proxy=true
               - --skip-provider-button=true
             env:
