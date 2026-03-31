@@ -26,6 +26,8 @@ spec:
   values:
     controllers:
       main:
+        annotations:
+          reloader.stakater.com/auto: "true"
         containers:
           app:
             image:
@@ -35,12 +37,56 @@ spec:
               TZ: "${TIMEZONE}"
               UPTIME_KUMA_PORT: 3001
               UPTIME_KUMA_DISABLE_FRAME_SAMEORIGIN: 0
+          # oauth2-proxy sidecar — sits in front of uptime-kuma and handles
+          # the full Google OAuth flow. Traefik routes to this container,
+          # which proxies authenticated requests to uptime-kuma on localhost.
+          oauth2-proxy:
+            image:
+              repository: quay.io/oauth2-proxy/oauth2-proxy
+              tag: v7.9.0
+            args:
+              - --provider=google
+              - --provider-display-name=Google Workspace
+              - --email-domain=tinfoilforest.nz
+              - --upstream=http://localhost:3001
+              - --http-address=0.0.0.0:4180
+              - --redirect-url=https://uptime.tinfoilforest.nz/oauth2/callback
+              - --set-xauthrequest=true
+              - --cookie-secure=true
+              - --cookie-httponly=true
+              - --cookie-samesite=lax
+              - --cookie-domain=.tinfoilforest.nz
+              - --whitelist-domain=.tinfoilforest.nz
+              - --reverse-proxy=true
+              - --skip-provider-button=true
+            env:
+              OAUTH2_PROXY_CLIENT_ID:
+                valueFrom:
+                  secretKeyRef:
+                    name: oauth2-proxy-secrets
+                    key: client-id
+              OAUTH2_PROXY_CLIENT_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: oauth2-proxy-secrets
+                    key: client-secret
+              OAUTH2_PROXY_COOKIE_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: oauth2-proxy-secrets
+                    key: cookie-secret
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+              limits:
+                memory: 128Mi
     service:
       app:
         controller: main
         ports:
           http:
-            port: &port 3001
+            port: &port 4180
     route:
       app:
         hostnames: ["uptime.${SECRET_PUBLIC_DOMAIN}"]
@@ -52,12 +98,6 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
-            filters:
-              - type: 'ExtensionRef'
-                extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
-                  name: 'forwardauth-oauth2-proxy'
     persistence:
       config:
         existingClaim: pvc-uptime-kuma

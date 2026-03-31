@@ -8,4 +8,3 @@ resources:
   # Flux-Kustomizations
   - ./authelia/ks.yaml
   - ./openldap/ks.yaml
-  - ./oauth2-proxy/ks.yaml
