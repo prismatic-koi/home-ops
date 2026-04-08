@@ -33,7 +33,7 @@ spec:
           app:
             image:
               repository: docker.io/plexinc/pms-docker
-              tag: "1.43.0.10492-121068a07"
+              tag: "1.43.1.10576-06378bdcd"
             env:
               TZ: "${TIMEZONE}"
               PLEX_UID: 0
