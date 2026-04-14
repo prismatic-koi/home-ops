@@ -43,7 +43,7 @@ spec:
           oauth2-proxy:
             image:
               repository: quay.io/oauth2-proxy/oauth2-proxy
-              tag: v7.15.1
+              tag: v7.15.2
             args:
               - --provider=google
               - --provider-display-name=Google Workspace
