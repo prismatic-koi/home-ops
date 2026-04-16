@@ -140,17 +140,10 @@ spec:
                       - 10.0.0.0/8
                       - 172.16.0.0/12
                       - 192.168.0.0/16
-            # Allow reaching cluster-internal monitored services
-            - ports:
-                - port: 80
-                  protocol: TCP
-                - port: 443
-                  protocol: TCP
-                - port: 8080
-                  protocol: TCP
-                - port: 8443
-                  protocol: TCP
-              to:
+            # Allow reaching cluster-internal monitored services — no port
+            # restriction since uptime-kuma monitors many non-standard ports
+            # (e.g. 3000 grafana, 8123 home-assistant, 1883 mosquitto, etc.)
+            - to:
                 - ipBlock:
                     cidr: 10.0.0.0/8
 
