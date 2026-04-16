@@ -143,6 +143,8 @@ spec:
             - ports:
                 - port: 443
                   protocol: TCP
+                - port: 7844
+                  protocol: UDP
               to:
                 - ipBlock:
                     cidr: 0.0.0.0/0

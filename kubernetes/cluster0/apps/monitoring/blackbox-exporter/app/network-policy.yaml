@@ -73,8 +73,30 @@ spec:
               - 10.0.0.0/8
               - 172.16.0.0/12
               - 192.168.0.0/16
-    # Cluster-internal probes — allow all TCP to cluster CIDR so blackbox can
-    # reach arbitrary service ports without enumerating every target port
+    # Cluster-internal probes — allow all TCP/UDP to cluster CIDR.
+    # Note: Cilium resolves cross-namespace pod traffic via endpoint identity,
+    # so we also enumerate known service ports explicitly to ensure matching.
     - to:
         - ipBlock:
             cidr: 10.0.0.0/8
+    # Explicit port allowances for cluster-internal service probes
+    # (covers cases where Cilium matches by endpoint identity rather than CIDR)
+    - ports:
+        - port: 3000   # grafana
+          protocol: TCP
+        - port: 5055   # overseerr
+          protocol: TCP
+        - port: 7878   # radarr
+          protocol: TCP
+        - port: 8080   # sabnzbd, qbittorrent
+          protocol: TCP
+        - port: 8096   # jellyfin
+          protocol: TCP
+        - port: 8686   # lidarr
+          protocol: TCP
+        - port: 8989   # sonarr
+          protocol: TCP
+        - port: 32400  # plex
+          protocol: TCP
+      to:
+        - namespaceSelector: {}

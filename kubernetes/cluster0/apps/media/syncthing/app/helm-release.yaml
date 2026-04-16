@@ -107,6 +107,8 @@ spec:
                   protocol: UDP
                 - port: 21027
                   protocol: UDP
+                - port: 3478
+                  protocol: UDP
                 - port: 443
                   protocol: TCP
               to:
