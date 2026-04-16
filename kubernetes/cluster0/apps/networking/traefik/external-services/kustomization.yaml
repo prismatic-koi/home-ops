@@ -5,4 +5,5 @@ namespace: networking
 resources:
   - ./nas0-networking.yaml
   - ./octoprint-networking.yaml
+  - ./unifi-ca.sops.yaml
   - ./unifi-networking.yaml
