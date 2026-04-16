@@ -94,6 +94,17 @@ spec:
                       - 10.0.0.0/8
                       - 172.16.0.0/12
                       - 192.168.0.0/16
+      allow-blackbox-probe-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+              ports:
+                - port: 5055
       allow-sonarr-egress:
         controller: main
         policyTypes: [Egress]
@@ -106,9 +117,9 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
-                  podSelector:
+                   podSelector:
                     matchLabels:
-                      app.kubernetes.io/name: sonarr
+                      app.kubernetes.io/instance: sonarr
       allow-radarr-egress:
         controller: main
         policyTypes: [Egress]
@@ -121,9 +132,9 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
-                  podSelector:
+                   podSelector:
                     matchLabels:
-                      app.kubernetes.io/name: radarr
+                      app.kubernetes.io/instance: radarr
       allow-plex-egress:
         controller: main
         policyTypes: [Egress]
@@ -136,9 +147,9 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
-                  podSelector:
+                   podSelector:
                     matchLabels:
-                      app.kubernetes.io/name: plex
+                      app.kubernetes.io/instance: plex
 
     persistence:
       config:

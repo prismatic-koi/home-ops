@@ -117,7 +117,7 @@ spec:
                       kubernetes.io/metadata.name: monitoring
                   podSelector:
                     matchLabels:
-                      app.kubernetes.io/name: changedetection-browser
+                      app.kubernetes.io/instance: changedetection-browser
 
     persistence:
       config:

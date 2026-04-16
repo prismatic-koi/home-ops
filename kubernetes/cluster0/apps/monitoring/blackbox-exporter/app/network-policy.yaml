@@ -73,18 +73,8 @@ spec:
               - 10.0.0.0/8
               - 172.16.0.0/12
               - 192.168.0.0/16
-    # Cluster-internal probes (all namespaces)
-    - ports:
-        - port: 80
-          protocol: TCP
-        - port: 443
-          protocol: TCP
-        - port: 8080
-          protocol: TCP
-        - port: 8443
-          protocol: TCP
-        - port: 9090
-          protocol: TCP
-      to:
+    # Cluster-internal probes — allow all TCP to cluster CIDR so blackbox can
+    # reach arbitrary service ports without enumerating every target port
+    - to:
         - ipBlock:
             cidr: 10.0.0.0/8
