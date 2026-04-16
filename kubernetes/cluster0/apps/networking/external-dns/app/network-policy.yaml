@@ -71,6 +71,8 @@ spec:
         - ipBlock:
             cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
     - ports:
+        - port: 443
+          protocol: TCP
         - port: 6443
           protocol: TCP
       to:
