@@ -95,7 +95,7 @@ spec:
                     protocol: UDP
                   - port: 21027
                     protocol: UDP
-        - name: allow-sync-egress
+        - name: allow-sync-egress-internet
           spec:
             podSelector: {}
             policyTypes: [Egress]
@@ -116,6 +116,21 @@ spec:
                         - 10.0.0.0/8
                         - 172.16.0.0/12
                         - 192.168.0.0/16
+        - name: allow-sync-egress-lan
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 22000
+                    protocol: TCP
+                  - port: 22000
+                    protocol: UDP
+                  - port: 21027
+                    protocol: UDP
+                to:
+                  - ipBlock:
+                      cidr: 10.87.0.0/16
 
     persistence:
       config:

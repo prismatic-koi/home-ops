@@ -29,11 +29,11 @@ spec:
         - port: 53
           protocol: TCP
 ---
-# Allow egress to external APIs: Cloudflare API (443) and Kubernetes API server (6443)
+# Allow egress to Cloudflare API (443) — external only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: external-dns-allow-external-egress
+  name: external-dns-allow-cloudflare-api
   namespace: networking
 spec:
   podSelector:
@@ -44,8 +44,6 @@ spec:
     - ports:
         - port: 443
           protocol: TCP
-        - port: 6443
-          protocol: TCP
       to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -53,3 +51,28 @@ spec:
               - 10.0.0.0/8
               - 172.16.0.0/12
               - 192.168.0.0/16
+---
+# Allow egress to Kubernetes API server (in-cluster service + control plane node)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: external-dns-allow-k8s-api
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # Control plane node
