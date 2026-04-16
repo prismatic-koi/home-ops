@@ -117,7 +117,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
-                   podSelector:
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: sonarr
       allow-radarr-egress:
@@ -132,7 +132,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
-                   podSelector:
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: radarr
       allow-plex-egress:
@@ -147,7 +147,7 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
-                   podSelector:
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: plex
 
