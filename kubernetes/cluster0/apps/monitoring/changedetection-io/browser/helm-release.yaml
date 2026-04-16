@@ -72,51 +72,49 @@ spec:
           main:
             app:
               - path: /dev/shm
-    networkPolicies:
-      enabled: true
-      policies:
-        - name: default-deny
-          spec:
-            podSelector: {}
-            policyTypes: [Ingress, Egress]
-        - name: allow-dns
-          spec:
-            podSelector: {}
-            policyTypes: [Egress]
-            egress:
-              - ports:
-                  - port: 53
-                    protocol: UDP
-                  - port: 53
-                    protocol: TCP
-        - name: allow-changedetection-ingress
-          spec:
-            podSelector: {}
-            policyTypes: [Ingress]
-            ingress:
-              - from:
-                  - namespaceSelector:
-                      matchLabels:
-                        kubernetes.io/metadata.name: monitoring
-                ports:
-                  - port: 3000
-        - name: allow-external-egress
-          spec:
-            podSelector: {}
-            policyTypes: [Egress]
-            egress:
-              - ports:
-                  - port: 80
-                    protocol: TCP
-                  - port: 443
-                    protocol: TCP
-                to:
-                  - ipBlock:
-                      cidr: 0.0.0.0/0
-                      except:
-                        - 10.0.0.0/8
-                        - 172.16.0.0/12
-                        - 192.168.0.0/16
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+      allow-changedetection-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+              ports:
+                - port: 3000
+      allow-external-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 80
+                  protocol: TCP
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
 
     service:
       app:

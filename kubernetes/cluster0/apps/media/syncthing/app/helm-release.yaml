@@ -54,83 +54,81 @@ spec:
             enabled: true
             port: 22000
             protocol: TCP
-    networkPolicies:
-      enabled: true
-      policies:
-        - name: default-deny
-          spec:
-            podSelector: {}
-            policyTypes: [Ingress, Egress]
-        - name: allow-dns
-          spec:
-            podSelector: {}
-            policyTypes: [Egress]
-            egress:
-              - ports:
-                  - port: 53
-                    protocol: UDP
-                  - port: 53
-                    protocol: TCP
-        - name: allow-traefik-ingress
-          spec:
-            podSelector: {}
-            policyTypes: [Ingress]
-            ingress:
-              - from:
-                  - namespaceSelector:
-                      matchLabels:
-                        kubernetes.io/metadata.name: networking
-        - name: allow-lan-sync-ingress
-          spec:
-            podSelector: {}
-            policyTypes: [Ingress]
-            ingress:
-              - from:
-                  - ipBlock:
-                      cidr: 0.0.0.0/0
-                ports:
-                  - port: 22000
-                    protocol: TCP
-                  - port: 22000
-                    protocol: UDP
-                  - port: 21027
-                    protocol: UDP
-        - name: allow-sync-egress-internet
-          spec:
-            podSelector: {}
-            policyTypes: [Egress]
-            egress:
-              - ports:
-                  - port: 22000
-                    protocol: TCP
-                  - port: 22000
-                    protocol: UDP
-                  - port: 21027
-                    protocol: UDP
-                  - port: 443
-                    protocol: TCP
-                to:
-                  - ipBlock:
-                      cidr: 0.0.0.0/0
-                      except:
-                        - 10.0.0.0/8
-                        - 172.16.0.0/12
-                        - 192.168.0.0/16
-        - name: allow-sync-egress-lan
-          spec:
-            podSelector: {}
-            policyTypes: [Egress]
-            egress:
-              - ports:
-                  - port: 22000
-                    protocol: TCP
-                  - port: 22000
-                    protocol: UDP
-                  - port: 21027
-                    protocol: UDP
-                to:
-                  - ipBlock:
-                      cidr: 10.87.0.0/16
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-sync-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+              ports:
+                - port: 22000
+                  protocol: TCP
+                - port: 22000
+                  protocol: UDP
+                - port: 21027
+                  protocol: UDP
+      allow-sync-egress-internet:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 22000
+                  protocol: TCP
+                - port: 22000
+                  protocol: UDP
+                - port: 21027
+                  protocol: UDP
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+      allow-sync-egress-lan:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 22000
+                  protocol: TCP
+                - port: 22000
+                  protocol: UDP
+                - port: 21027
+                  protocol: UDP
+              to:
+                - ipBlock:
+                    cidr: 10.87.0.0/16
 
     persistence:
       config:
