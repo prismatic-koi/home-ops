@@ -109,6 +109,62 @@ spec:
                   originServerName: tun.${SECRET_PUBLIC_DOMAIN}
               - service: http_status:404
 
+    networkPolicies:
+      enabled: true
+      policies:
+        - name: default-deny
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress, Egress]
+        - name: allow-dns
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP
+        - name: allow-prometheus-scrape
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress]
+            ingress:
+              - from:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: monitoring
+                ports:
+                  - port: 8080
+        - name: allow-cloudflare-egress
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 443
+                    protocol: TCP
+                to:
+                  - ipBlock:
+                      cidr: 0.0.0.0/0
+                      except:
+                        - 10.0.0.0/8
+                        - 172.16.0.0/12
+                        - 192.168.0.0/16
+        - name: allow-traefik-egress
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 443
+                    protocol: TCP
+                to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: networking
+
     persistence:
       config:
         type: configMap

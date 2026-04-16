@@ -62,6 +62,62 @@ spec:
                   group: 'traefik.io'
                   kind: 'Middleware'
                   name: 'forwardauth-authelia'
+    networkPolicies:
+      enabled: true
+      policies:
+        - name: default-deny
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress, Egress]
+        - name: allow-dns
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP
+        - name: allow-traefik-ingress
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress]
+            ingress:
+              - from:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: networking
+        - name: allow-external-egress
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 80
+                    protocol: TCP
+                  - port: 443
+                    protocol: TCP
+                to:
+                  - ipBlock:
+                      cidr: 0.0.0.0/0
+                      except:
+                        - 10.0.0.0/8
+                        - 172.16.0.0/12
+                        - 192.168.0.0/16
+        - name: allow-browserless-egress
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 3000
+                    protocol: TCP
+                to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: monitoring
+
     persistence:
       config:
         existingClaim: pvc-changedetection-io

@@ -55,6 +55,67 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+    networkPolicies:
+      enabled: true
+      policies:
+        - name: default-deny
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress, Egress]
+        - name: allow-dns
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP
+        - name: allow-traefik-ingress
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress]
+            ingress:
+              - from:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: networking
+        - name: allow-external-egress
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  - port: 443
+                    protocol: TCP
+                to:
+                  - ipBlock:
+                      cidr: 0.0.0.0/0
+                      except:
+                        - 10.0.0.0/8
+                        - 172.16.0.0/12
+                        - 192.168.0.0/16
+        - name: allow-media-namespace-egress
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              - ports:
+                  # Sonarr
+                  - port: 8989
+                    protocol: TCP
+                  # Radarr
+                  - port: 7878
+                    protocol: TCP
+                  # Plex
+                  - port: 32400
+                    protocol: TCP
+                to:
+                  - namespaceSelector:
+                      matchLabels:
+                        kubernetes.io/metadata.name: media
+
     persistence:
       config:
         existingClaim: pvc-overseerr
