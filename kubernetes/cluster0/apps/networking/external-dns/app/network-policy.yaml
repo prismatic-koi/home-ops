@@ -77,8 +77,4 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.87.42.100/32  # control plane node0
-        - ipBlock:
-            cidr: 10.87.42.101/32  # control plane node1
-        - ipBlock:
-            cidr: 10.87.42.102/32  # control plane node2
+            cidr: 10.87.42.2/32  # control plane node
