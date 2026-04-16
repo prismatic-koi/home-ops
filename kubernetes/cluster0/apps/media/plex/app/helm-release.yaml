@@ -80,6 +80,78 @@ spec:
                   value: /library/streams
           - backendRefs:
               - identifier: app
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      # Intentionally open to all sources: Plex clients stream directly via the
+      # LoadBalancer IP (LAN and Plex relay traffic from the internet both arrive here)
+      allow-32400-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+              ports:
+                - port: 32400
+                  protocol: TCP
+      allow-external-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 32400
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+      allow-nfs-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 111
+                  protocol: TCP
+                - port: 111
+                  protocol: UDP
+                - port: 2049
+                  protocol: TCP
+                - port: 2049
+                  protocol: UDP
+              to:
+                - ipBlock:
+                    cidr: 10.87.42.200/32
+
     persistence:
       config:
         existingClaim: pvc-plex0

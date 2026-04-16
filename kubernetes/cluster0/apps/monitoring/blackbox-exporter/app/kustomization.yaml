@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./prometheusrule.yaml
+  - ./network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: blackbox-exporter

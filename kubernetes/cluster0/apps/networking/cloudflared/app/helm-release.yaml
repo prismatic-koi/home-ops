@@ -109,6 +109,60 @@ spec:
                   originServerName: tun.${SECRET_PUBLIC_DOMAIN}
               - service: http_status:404
 
+    networkpolicies:
+      default-deny:
+        controller: cloudflared
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: cloudflared
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+      allow-prometheus-scrape:
+        controller: cloudflared
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+              ports:
+                - port: 8080
+      allow-cloudflare-egress:
+        controller: cloudflared
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+      allow-traefik-egress:
+        controller: cloudflared
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+
     persistence:
       config:
         type: configMap

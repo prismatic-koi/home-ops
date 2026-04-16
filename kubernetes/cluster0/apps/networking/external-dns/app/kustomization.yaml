@@ -5,6 +5,7 @@ resources:
   - ./helm-release.yaml
   - ./secret.sops.yaml
   - ./crd.yaml
+  - ./network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: external-dns

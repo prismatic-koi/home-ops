@@ -98,6 +98,62 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-monitored-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            # Allow reaching external monitored endpoints and Google OAuth
+            - ports:
+                - port: 80
+                  protocol: TCP
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+            # Allow reaching cluster-internal monitored services
+            - ports:
+                - port: 80
+                  protocol: TCP
+                - port: 443
+                  protocol: TCP
+                - port: 8080
+                  protocol: TCP
+                - port: 8443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 10.0.0.0/8
+
     persistence:
       config:
         existingClaim: pvc-uptime-kuma
