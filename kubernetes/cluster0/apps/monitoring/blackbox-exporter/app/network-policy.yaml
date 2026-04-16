@@ -75,28 +75,131 @@ spec:
               - 192.168.0.0/16
     # Cluster-internal probes — allow all TCP/UDP to cluster CIDR.
     # Note: Cilium resolves cross-namespace pod traffic via endpoint identity,
-    # so we also enumerate known service ports explicitly to ensure matching.
+    # so we also add scoped namespace+pod selector rules for each probe target
+    # to ensure matching regardless of how Cilium evaluates the traffic.
     - to:
         - ipBlock:
             cidr: 10.0.0.0/8
-    # Explicit port allowances for cluster-internal service probes
-    # (covers cases where Cilium matches by endpoint identity rather than CIDR)
+    # media namespace probe targets
     - ports:
-        - port: 3000   # grafana
-          protocol: TCP
-        - port: 5055   # overseerr
-          protocol: TCP
-        - port: 7878   # radarr
-          protocol: TCP
-        - port: 8080   # sabnzbd, qbittorrent
-          protocol: TCP
-        - port: 8096   # jellyfin
-          protocol: TCP
-        - port: 8686   # lidarr
-          protocol: TCP
-        - port: 8989   # sonarr
-          protocol: TCP
-        - port: 32400  # plex
+        - port: 8096
           protocol: TCP
       to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jellyfin
+    - ports:
+        - port: 32400
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: plex
+    - ports:
+        - port: 5055
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: overseerr
+    - ports:
+        - port: 7878
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: radarr
+    - ports:
+        - port: 8989
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sonarr
+    - ports:
+        - port: 8686
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: lidarr
+    - ports:
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: sabnzbd
+    - ports:
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qbittorrent
+    - ports:
+        - port: 9696
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: media
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prowlarr
+    # monitoring namespace probe targets
+    - ports:
+        - port: 3000
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+    # home namespace probe targets
+    - ports:
+        - port: 8123
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: home
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: home-assistant
+    - ports:
+        - port: 1883
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: home
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mosquitto
