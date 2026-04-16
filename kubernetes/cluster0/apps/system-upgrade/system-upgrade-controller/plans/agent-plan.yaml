@@ -13,9 +13,9 @@ spec:
     args:
     - prepare
     - server-plan
-    image: rancher/k3s-upgrade
+    image: rancher/k3s-upgrade@sha256:3200176f13458428e0d3015f0b0c6cc83e54661ffc4074f9ba16aa6e4a7e36f2
   serviceAccountName: system-upgrade
   upgrade:
-    image: rancher/k3s-upgrade
+    image: rancher/k3s-upgrade@sha256:3200176f13458428e0d3015f0b0c6cc83e54661ffc4074f9ba16aa6e4a7e36f2
   # renovate: datasource=github-releases depName=k3s-io/k3s
   version: "v1.35.3+k3s1"
