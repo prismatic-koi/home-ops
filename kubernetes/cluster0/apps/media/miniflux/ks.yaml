@@ -38,24 +38,4 @@ spec:
   interval: 30m
   retryInterval: 1m
   timeout: 3m
----
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: cluster-apps-miniflux-ig2rss
-  namespace: flux-system
-spec:
-  path: ./kubernetes/cluster0/apps/media/miniflux/ig2rss
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: home-ops-cluster0
-  healthChecks:
-    - apiVersion: helm.toolkit.fluxcd.io/v2
-      kind: HelmRelease
-      name: ig2rss
-      namespace: media
-  interval: 30m
-  retryInterval: 1m
-  timeout: 3m
+
