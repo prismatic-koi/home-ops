@@ -104,7 +104,9 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: networking
-      allow-lan-direct-ingress:
+      # Intentionally open to all sources: Plex clients stream directly via the
+      # LoadBalancer IP (LAN and Plex relay traffic from the internet both arrive here)
+      allow-32400-ingress:
         controller: main
         policyTypes: [Ingress]
         rules:

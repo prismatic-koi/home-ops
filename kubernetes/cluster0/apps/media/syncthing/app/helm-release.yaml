@@ -78,7 +78,9 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: networking
-      allow-sync-ingress:
+      # Intentionally open to all sources: both LAN peers and internet peers
+      # (port-forwarded through the router) connect inbound to this LoadBalancer IP
+      allow-sync-ingress-all:
         controller: main
         policyTypes: [Ingress]
         rules:

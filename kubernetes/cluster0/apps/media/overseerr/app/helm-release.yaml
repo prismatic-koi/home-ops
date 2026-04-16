@@ -94,25 +94,51 @@ spec:
                       - 10.0.0.0/8
                       - 172.16.0.0/12
                       - 192.168.0.0/16
-      allow-media-namespace-egress:
+      allow-sonarr-egress:
         controller: main
         policyTypes: [Egress]
         rules:
           egress:
             - ports:
-                # Sonarr
                 - port: 8989
                   protocol: TCP
-                # Radarr
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: sonarr
+      allow-radarr-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
                 - port: 7878
                   protocol: TCP
-                # Plex
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: radarr
+      allow-plex-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
                 - port: 32400
                   protocol: TCP
               to:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: plex
 
     persistence:
       config:
