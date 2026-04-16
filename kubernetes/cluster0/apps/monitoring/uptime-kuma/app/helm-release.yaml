@@ -32,7 +32,7 @@ spec:
           app:
             image:
               repository: louislam/uptime-kuma
-              tag: "2.2.1"
+              tag: "2.2.1@sha256:7337368a77873f159435de9ef09567f68c31285ed5f951dec36256c4b267ee44"
             env:
               TZ: "${TIMEZONE}"
               UPTIME_KUMA_PORT: 3001
@@ -43,7 +43,7 @@ spec:
           oauth2-proxy:
             image:
               repository: quay.io/oauth2-proxy/oauth2-proxy
-              tag: v7.15.2
+              tag: v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd
             args:
               - --provider=google
               - --provider-display-name=Google Workspace

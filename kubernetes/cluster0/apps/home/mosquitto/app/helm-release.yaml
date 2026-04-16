@@ -30,7 +30,7 @@ spec:
           app:
             image:
               repository: eclipse-mosquitto
-              tag: 2.0.22
+              tag: 2.0.22@sha256:914f529386804c8278a4e581526b9be5e1604df44b30daabc70aa97dcefe5268
             env:
               TZ: "${TIMEZONE}"
     service:
