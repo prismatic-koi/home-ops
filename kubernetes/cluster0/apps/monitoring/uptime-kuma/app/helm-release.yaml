@@ -146,6 +146,25 @@ spec:
             - to:
                 - ipBlock:
                     cidr: 10.0.0.0/8
+            # Explicit namespace-selector rules for cross-namespace pod traffic —
+            # Cilium resolves these by endpoint identity, not CIDR, so we need
+            # explicit selectors for each monitored namespace alongside the CIDR rule.
+            - to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+            - to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+            - to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+            - to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
 
     persistence:
       config:

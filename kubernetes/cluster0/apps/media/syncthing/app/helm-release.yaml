@@ -109,6 +109,8 @@ spec:
                   protocol: UDP
                 - port: 3478
                   protocol: UDP
+                - port: 3479
+                  protocol: UDP
                 - port: 443
                   protocol: TCP
               to:
