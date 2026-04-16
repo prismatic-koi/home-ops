@@ -82,7 +82,6 @@ spec:
               name: "${SECRET_PUBLIC_DOMAIN/./-}-tls"
     additionalArguments:
       - "--api.insecure=true"
-      - "--serversTransport.insecureSkipVerify=true"
       - "--providers.kubernetesingress.ingressclass=traefik"
       - "--providers.kubernetesingress.ingressendpoint.ip=${TRAEFIK_IP}"
       - "--providers.kubernetescrd.allowexternalnameservices=true"

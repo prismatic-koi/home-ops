@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: unifi-ca
+    namespace: networking
+data:
+    ca.crt: ENC[AES256_GCM,data:DVLMFv6j4PVzF2O5+FDPkSc/9uwBs009MAy4q924mgkcf59mCuv7HmxZSBWRk8m9f5PDOYAooMqgPkk2yGXC5rlNH6Pigdg/Lgf9CL0jphdIi+fr86KMg8+rsYMqwphyVHOCrB3mhpxrYDdzx+AIbwtVp9SqHzPmC9yGQQrKiBOz8az7EcD3d7o/bCPOuSdkNGfX9mvrD/3l/4uU96fQxC3ebak3cPM0Ie7q06WLuVaKsNaC5lQsyYa1+gOLyq/tR7zit6X3XnVYX79ua2Lhh2GQVivpwKHtoOYAaJbHijsBECtHZ7KxSmH/9g0+TglVTgcSs+Ty0FAHYnyEYgPkiuYEPHR8kyCI/Hyy3S7AU6hQzE2yiWHq3RvGj1I/idQ+HO0pFQwR64GopqrJqN5pbRMzKWcI6Fhi2SEDUlYqwKIGAbZM0oZTGJp/csi5KkdTsagHnnklkQZkpiZlvE8gZQkXZAKxGQCk3Em5gCWmwrptkpMxG6Hhe3gQDm1Zcwg0ij0aRjTuWOqSHX4mb0iTTlVV+62arWefI12RXQHUaw1AYvJBg5VZKLo7jX7/P/kwOBN9BgVeJEBoJuR/MJgoeGBlKfpS+sWj3Wwk2ofKtiQ900ZR7Z9d7N89eghjFBnDCKiEtxEze/DZZ+0M9uETo2QgxL0kZgxdLpvUxBJQmP32MSJTeDvq315znybTW9MuQjifkfP2YR/dmJ7D0ifH+v4o4SlxqrucVkwMbcxkjiTT1BsreRDPGzaD9EgiSvguhm798/rwnANH1b+CcssL4Ip6NIshesGQveBduzrpT9DJv9AZJcEPRkOGfX0TeF2YfWenqq+PshG9KJ0RYiqMqw9xQ1WVG7ZPf1QMgXxG4QYehpDEfF9U7/7KdUvQhecv1UIPK2D9/ocCGghLCq3TxsxhkCc6yVTYobCGsDu0GvS2WZIrJTlh5Mxv7y810tUdzCLhoXmfdFzj8ajKK06jHIw2/O1dAfCt9+zyWvlHMJcAPBWbMrq3U2qbhxcVY6+EEl4wCtZ8R6sgoylmFUBgTxgOW1Uhaadoc6jAuQHbAGzNJVzokJeG9xQZRusaDi2l6Tj2HbwChtxQ+AXXVOSqxb1E7lVwig8LUjYXQldNrS1afgPzASPBsTKLgqIg19tYN4HIfpuvbSvvVTL9C3sKVN600dBTPRfFXBuIDV4WHsZDXkz4F0KXl8rW8JBmzV1NVCQbChRmr7r+MhW5j7wJP0/+bP/YVnEuKxnjgR5LyYit9c6seb06sPubT57jEtzNh+xnLdMpGSJokOb4dhP4Zwp/AbHEQVQXtbgKA4cvn74RxPx0FqMUZs0cFKO0afu70MnzNymva/xdlVj8y1lnBxEVOixAwueHgMejWbU426JwjGoShZJ4TuA6XqkCOYC/ehtOJlbJOrV1YfrrrasN15wvu9GFbB/IL/bCrNWyJ63UWAU8iTts4e29dQ/3/oXw6nl+HFqtYp1jOvCcuE8KpQNaG2blWsTl0NvNbhBK9RFDBfrX77WwI4P+aRUSGV/QHt/sGiCkLs+xScUxS5eY66foIxE=,iv:JGEXhnPU40vxVXPcwX5HwVjVs6WVwnJ6i5kHKAp0l9w=,tag:LH4lC9TYjN07WfWIfDnBOA==,type:str]
+sops:
+    age:
+        - recipient: age1582vh25trj6w7klwt38d44n5nr8njr8rrxxx5kcfu3y2ezx9ss3s6j24ex
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSArbCs4ZExKYkNXd1BxcklW
+            bXVjNjBXbnlZVG5aTVlGbXJNZ29XcVQ1blFRCk04YlBzcG0rY1VOWWFqM0NqdnRs
+            ellxUERhRjJHdjZrNlRZWjVET3dpNTQKLS0tIHJlOFFrS2I5RjYwWU1KamJLV3NF
+            ZTFSLzQvRWdrdHBFZGc2bDloazk3Q0EK32okpWi7cnGWIuD6Vo8lLoig93nJp8mr
+            0woCfGOLEq4aFOYKRGq3AJPIkZZQwZvvchi2O5iN2he4aNjZ2PtW/g==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age185kanaq3uw2gjx5enu2v69nk9ner3lamdevrfgx3wqucsl9ewa2qlt2gf7
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBYL0gxVWRuaTc5NUVadkxF
+            a3FIU01iSmZFNHNxSTZRZUNpcm1KUFVNTGtjClNpNnV4R2V4UFRQd3pVbjAxeE5Q
+            S3VQRmQrc0E3RWNDN0xHdFpEY1c1cDgKLS0tIC9JdlAvdGJDSG5nb1gvb1hwalNO
+            cGtHWDBQOUpnaEpaZzNXVWZHdjRDYmsK6jXb0JxPGUZ1tqyo7q3l6eB9e/tzVgqf
+            jG0Le5EY9mIOGfc7hyJRZZ3IgwZVXPsKhTRdx8adQp1SkAcQK2NkeA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-04-16T10:35:24Z"
+    mac: ENC[AES256_GCM,data:5Mjfy2MG3Img0im61pvVUzdcJb96zvtv47IBH8rmPTxKthekmV2cVpOhs3ElbCuPZiEyYXb5zc9A67OvgALkT2LMeotg5u+/vZ3FPbCcrNZvvQrZJCevGlxGiDDKDb9M+TYtpUxw639/AvrUkyxZBPKtmHjGIUWvuRvSu2gv9TY=,iv:SzJqA+ztCm5iNvTErRJbF1rc6vUZIgqJ9Hb027fzVoI=,tag:TmMtIykIqu545/PvKaIJ3Q==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.12.2
