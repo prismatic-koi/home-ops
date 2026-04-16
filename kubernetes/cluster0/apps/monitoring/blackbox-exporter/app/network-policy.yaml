@@ -203,3 +203,13 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: mosquitto
+    - ports:
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: home
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: zigbee2mqtt
