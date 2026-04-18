@@ -12,6 +12,6 @@ spec:
       - {key: node-role.kubernetes.io/control-plane, operator: Exists}
   serviceAccountName: system-upgrade
   upgrade:
-    image: rancher/k3s-upgrade@sha256:3200176f13458428e0d3015f0b0c6cc83e54661ffc4074f9ba16aa6e4a7e36f2
+    image: rancher/k3s-upgrade@sha256:11b97acdff08c22cb001b5f6bbff4f34d1a9c70e40f9605c2c6b5d5451bc508f
   # renovate: datasource=github-releases depName=k3s-io/k3s
   version: "v1.35.3+k3s1"
