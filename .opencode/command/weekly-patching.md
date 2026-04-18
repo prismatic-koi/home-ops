@@ -22,7 +22,7 @@ This task reviews and merges Renovate PRs for weekly server patching.
 ## Step 1: List Open Renovate PRs
 
 ```bash
-gh pr list --state open --author "renovate[bot]" --json number,title,url
+gh pr list --state open --author "app/prismatic-bot" --json number,title,url
 ```
 
 Create a todo list to track review progress for each PR.
