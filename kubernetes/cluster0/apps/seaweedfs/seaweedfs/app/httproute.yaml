@@ -1,0 +1,32 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: seaweedfs-console
+  namespace: seaweedfs
+spec:
+  hostnames:
+    - seaweedfs.${SECRET_PUBLIC_DOMAIN}
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecure
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: seaweedfs-filer
+          namespace: seaweedfs
+          port: 8888
+      filters:
+        - extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: forwardauth-authelia
+          type: ExtensionRef
+      matches:
+        - path:
+            type: PathPrefix
+            value: /

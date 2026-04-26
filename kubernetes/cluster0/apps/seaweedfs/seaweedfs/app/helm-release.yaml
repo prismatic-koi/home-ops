@@ -1,0 +1,82 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: seaweedfs
+  namespace: seaweedfs
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: seaweedfs
+      version: 4.21.0
+      sourceRef:
+        kind: HelmRepository
+        name: seaweedfs
+        namespace: seaweedfs
+      interval: 5m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  valuesFrom:
+    - kind: Secret
+      name: seaweedfs-s3-credentials
+      valuesKey: admin_access_key_id
+      targetPath: s3.credentials.admin.accessKey
+    - kind: Secret
+      name: seaweedfs-s3-credentials
+      valuesKey: admin_secret_access_key
+      targetPath: s3.credentials.admin.secretKey
+  values:
+    global:
+      seaweedfs:
+        enableSecurity: true
+
+    master:
+      replicas: 1
+      data:
+        type: persistentVolumeClaim
+        size: 1Gi
+        storageClass: longhorn
+      logs:
+        type: emptyDir
+
+    volume:
+      replicas: 2
+      dataDirs:
+        - name: data
+          type: persistentVolumeClaim
+          size: 50Gi
+          storageClass: longhorn
+          maxVolumes: 0
+      logs:
+        type: emptyDir
+
+    filer:
+      replicas: 1
+      data:
+        type: persistentVolumeClaim
+        size: 1Gi
+        storageClass: longhorn
+      logs:
+        type: emptyDir
+      s3:
+        enabled: true
+        enableAuth: true
+        createBuckets:
+          - name: postgresql
+            anonymousRead: false
+
+    s3:
+      enabled: true
+      httpsPort: 8443
+      tlsSecret: seaweedfs-s3-tls
+      enableAuth: true
+      replicas: 1
+      logs:
+        type: emptyDir
