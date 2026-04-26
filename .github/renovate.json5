@@ -52,6 +52,22 @@
       ],
       allowedVersions: '!/-(armhf|arm64|armv7|amd64|linux)$/',
     },
+    {
+      // Flux manager + OCIRepository hybrid digest shape is broken:
+      // Renovate writes `tag: <semver>@sha256:<digest>` instead of populating
+      // the separate `ref.digest` field (renovatebot/renovate#42082). flux-local
+      // then passes the hybrid string (or the bare digest, when split) to
+      // `helm template --version`, which Helm rejects as a non-semver
+      // constraint, breaking CI.
+      //
+      // Disable digest pinning on the reloader OCIRepository specifically.
+      // The flux-manifests OCIRepository keeps digest pinning because it is
+      // consumed by a Kustomization (not templated by helm) and is unaffected.
+      // See #2831 for full context.
+      matchManagers: ['flux'],
+      matchFileNames: ['kubernetes/cluster0/apps/kube-system/reloader/app/helm-release.yaml'],
+      pinDigests: false,
+    },
   ],
   customManagers: [
     {
