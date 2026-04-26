@@ -68,9 +68,6 @@ spec:
       s3:
         enabled: true
         enableAuth: true
-        createBuckets:
-          - name: postgresql
-            anonymousRead: false
 
     s3:
       enabled: true
@@ -80,3 +77,6 @@ spec:
       replicas: 1
       logs:
         type: emptyDir
+      createBuckets:
+        - name: postgresql
+          anonymousRead: false
