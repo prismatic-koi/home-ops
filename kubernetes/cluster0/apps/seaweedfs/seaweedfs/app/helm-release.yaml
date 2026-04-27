@@ -36,7 +36,7 @@ spec:
   values:
     global:
       seaweedfs:
-        enableSecurity: true
+        enableSecurity: false
 
     master:
       replicas: 1
