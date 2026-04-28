@@ -14,4 +14,4 @@ spec:
   upgrade:
     image: rancher/k3s-upgrade@sha256:be278597a6d115ec5ed900f9e6866ad51522c3ced2cf6b80def9c3abf0d774bc
   # renovate: datasource=github-releases depName=k3s-io/k3s
-  version: "v1.35.3+k3s1"
+  version: "v1.35.4+k3s1"
