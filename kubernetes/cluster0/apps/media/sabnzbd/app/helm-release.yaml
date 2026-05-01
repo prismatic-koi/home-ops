@@ -31,7 +31,7 @@ spec:
           app:
             image:
               repository: lscr.io/linuxserver/sabnzbd
-              tag: "4.5.5@sha256:374051b90f64d107f8658dcd9b9065c28826afe14562647214f45057e119fc04"
+              tag: "5.0.0@sha256:f8936b2cf62068e6515fb2859b1cdf6deb643f47be1a8cb20c9eea855e28ed15"
             env:
               TZ: "${TIMEZONE}"
             # to avoid permissions issues on volume
