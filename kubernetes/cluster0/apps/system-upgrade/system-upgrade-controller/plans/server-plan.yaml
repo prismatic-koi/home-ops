@@ -13,6 +13,6 @@ spec:
   serviceAccountName: system-upgrade
   upgrade:
     # renovate: datasource=docker depName=rancher/k3s-upgrade
-    image: rancher/k3s-upgrade:v1.35.4-k3s1@sha256:8448c66782e42c7dd562408f5494f2a83ba4086d261dfba2555317d087ce994b
+    image: rancher/k3s-upgrade:v1.35.4-k3s1@sha256:b5196d2799af4baa8aefb1653f2828b9145b53eb21d8508cec04f307eab3e11f
   # renovate: datasource=github-releases depName=k3s-io/k3s
   version: "v1.35.4+k3s1"
