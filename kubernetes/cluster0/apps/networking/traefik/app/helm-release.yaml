@@ -98,10 +98,6 @@ spec:
       websecure:
         port: 443
         exposedPort: 443
-        http:
-          tls:
-            enabled: true
-            options: "default"
     logs:
       general:
         level: "INFO"
