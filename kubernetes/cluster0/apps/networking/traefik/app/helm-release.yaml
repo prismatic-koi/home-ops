@@ -9,7 +9,7 @@ spec:
   chart:
     spec:
       chart: traefik
-      version: 39.0.9
+      version: 40.0.0
       sourceRef:
         kind: HelmRepository
         name: traefik-charts
@@ -27,9 +27,10 @@ spec:
       replicas: 3
     service:
       enabled: true
-      type: LoadBalancer
       annotations:
         io.cilium/lb-ipam-ips: ${TRAEFIK_IP}
+      spec:
+        type: LoadBalancer
     tlsStore:
       default:
         defaultCertificate:
