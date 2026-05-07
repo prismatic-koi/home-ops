@@ -60,6 +60,19 @@
       // `helm template --version`, which Helm rejects as a non-semver
       // constraint, breaking CI.
       //
+      // Disable digest pinning for rancher/k3s-upgrade: system-upgrade-controller
+      // substitutes spec.version into the image tag automatically (translating
+      // + -> - for Docker compat), so the image line must stay bare. Pinning a
+      // digest or tag here creates a second Renovate-tracked version marker that
+      // can desync from spec.version and cause upgrade jobs to spin forever.
+      // See #2819, #2876, #2895, #2898 for the full history.
+    },
+    {
+      matchDatasources: ['docker'],
+      matchPackageNames: ['rancher/k3s-upgrade'],
+      pinDigests: false,
+    },
+    {
       // Disable digest pinning on the reloader OCIRepository specifically.
       // The flux-manifests OCIRepository keeps digest pinning because it is
       // consumed by a Kustomization (not templated by helm) and is unaffected.
