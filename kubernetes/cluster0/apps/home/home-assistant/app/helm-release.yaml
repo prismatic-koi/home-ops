@@ -74,6 +74,106 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-monitoring-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: prometheus-blackbox-exporter
+              ports:
+                - port: 8123
+                  protocol: TCP
+      allow-postgres-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 5432
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: databases
+                  podSelector:
+                    matchLabels:
+                      cnpg.io/cluster: home-assistant-postgres-v18
+      allow-mosquitto-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 1883
+                  protocol: TCP
+              to:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: mosquitto
+      allow-zigbee2mqtt-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 8080
+                  protocol: TCP
+              to:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: zigbee2mqtt
+      allow-external-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 22
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+
     persistence:
       config:
         existingClaim: pvc-home-assistant

@@ -58,6 +58,62 @@ spec:
                   group: 'traefik.io'
                   kind: 'Middleware'
                   name: 'forwardauth-authelia'
+    networkpolicies:
+      default-deny:
+        controller: searxng
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: searxng
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: searxng
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-valkey-egress:
+        controller: searxng
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 6379
+                  protocol: TCP
+              to:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: searxng-valkey
+      allow-external-egress:
+        controller: searxng
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
+
     persistence:
       config:
         type: configMap
