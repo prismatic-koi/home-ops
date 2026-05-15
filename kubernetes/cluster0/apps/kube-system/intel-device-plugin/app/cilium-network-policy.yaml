@@ -1,0 +1,24 @@
+---
+# CiliumNetworkPolicy: inteldeviceplugins-controller-manager bi-directional
+# K8s API allow. Egress = kube-apiserver entity (CRD reconciliation), ingress
+# = kube-apiserver entity on :9443 (admission webhook). Same dual-policy
+# pattern as cnpg-operator (#2947) and cert-manager-webhook in this PR.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: inteldeviceplugins-controller-manager-allow-kube-apiserver
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      control-plane: controller-manager
+  egress:
+    - toEntities:
+        - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP

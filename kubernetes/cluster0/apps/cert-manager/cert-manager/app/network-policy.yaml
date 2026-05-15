@@ -1,0 +1,366 @@
+---
+# =============================================================================
+# cert-manager controller — Phase 4b (#2951)
+# Pod label: app.kubernetes.io/name=cert-manager,
+#            app.kubernetes.io/component=controller (Deployment, 1 replica)
+# Listens on: :9402 (http-metrics), :9403 (http-healthz)
+# Ingress from: intra-ns monitoring scrape on :9402 (ServiceMonitor)
+# Egress to: K8s API, external :443 (ACME challenges), DNS
+# =============================================================================
+---
+# Default deny-all for cert-manager controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-default-deny
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-allow-dns
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow Prometheus to scrape cert-manager controller metrics on :9402
+# ServiceMonitor "cert-manager" targets all three cert-manager components by
+# app.kubernetes.io/instance=cert-manager on the http-metrics port (9402).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-allow-prometheus-scrape
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9402
+          protocol: TCP
+---
+# Allow egress to Kubernetes API server (Issuer/Certificate/CertificateRequest
+# reconciliation).  ipBlock covers the cluster Service CIDR and control-plane
+# nodes.  Companion CiliumNetworkPolicy (cert-manager-allow-kube-apiserver) is
+# what Cilium actually enforces under kubeProxyReplacement=true; this rule is
+# defence-in-depth per #2829 / #2947.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-allow-k8s-api
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+---
+# Allow egress to external :443 for ACME HTTP-01 / DNS-01 challenges
+# (Let's Encrypt, ZeroSSL, etc.). Let's Encrypt and similar CAs are fronted by
+# Cloudflare CDN — IPs change frequently. Keeping this wide is intentional per
+# #2951 "Out of scope" — restricting to specific ACME endpoints isn't tractable.
+# RFC1918 ranges are excluded so this rule cannot reach internal services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-allow-external-acme-egress
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+# =============================================================================
+# cert-manager-cainjector — Phase 4b (#2951)
+# Pod label: app.kubernetes.io/name=cainjector (Deployment, 1 replica)
+# Listens on: :9402 (http-metrics)
+# Ingress: monitoring scrape on :9402 (ServiceMonitor selects all three
+#          cert-manager components)
+# Egress to: K8s API, DNS
+# =============================================================================
+---
+# Default deny-all for cert-manager-cainjector
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-cainjector-default-deny
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cainjector
+      app.kubernetes.io/component: cainjector
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-cainjector-allow-dns
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cainjector
+      app.kubernetes.io/component: cainjector
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow Prometheus to scrape cainjector metrics on :9402
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-cainjector-allow-prometheus-scrape
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cainjector
+      app.kubernetes.io/component: cainjector
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9402
+          protocol: TCP
+---
+# Allow egress to Kubernetes API server (cainjector injects CA bundles into
+# Mutating/ValidatingWebhookConfigurations, APIServices, and CRDs).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-cainjector-allow-k8s-api
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cainjector
+      app.kubernetes.io/component: cainjector
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+# =============================================================================
+# cert-manager-webhook — Phase 4b (#2951)
+# Pod label: app.kubernetes.io/name=webhook (Deployment, 1 replica)
+# Listens on: :10250 (https — the webhook port), :6080 (healthcheck),
+#             :9402 (http-metrics)
+# Ingress from:
+#   - kube-apiserver on :10250 (ValidatingWebhookConfiguration callbacks) —
+#     authoritative rule is the CiliumNetworkPolicy
+#     `cert-manager-webhook-allow-kube-apiserver` (fromEntities: kube-apiserver).
+#     The ipBlock rule here is defence-in-depth only.
+#   - monitoring scrape on :9402 (ServiceMonitor selects all three cert-manager
+#     components by instance label).
+# Egress to: K8s API, DNS
+# =============================================================================
+---
+# Default deny-all for cert-manager-webhook
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-webhook-default-deny
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-webhook-allow-dns
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from kube-apiserver to the webhook on :10250
+# (ValidatingWebhookConfiguration callbacks).
+# Standard NetworkPolicy ipBlock rule — defence-in-depth companion to the
+# CiliumNetworkPolicy `cert-manager-webhook-allow-kube-apiserver` which is
+# what Cilium actually enforces under kubeProxyReplacement=true (the API
+# server is host-networked and Cilium assigns it the `kube-apiserver` entity
+# identity, bypassing ipBlock matches). See #2947 / #2829.
+#
+# *** CRITICAL ***: if this allow is broken, kube-apiserver cannot call the
+# webhook and ALL cert-manager Issuer/Certificate/CertificateRequest
+# operations stall cluster-wide. Verified on the running pod that
+# containerPort 10250 (name: https) is the webhook port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-webhook-allow-kube-apiserver-ingress
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
+      ports:
+        - port: 10250
+          protocol: TCP
+---
+# Allow Prometheus to scrape webhook metrics on :9402
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-webhook-allow-prometheus-scrape
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9402
+          protocol: TCP
+---
+# Allow egress to Kubernetes API server (webhook resolves the requesting
+# resource and looks up referenced Issuers/Secrets).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-manager-webhook-allow-k8s-api
+  namespace: cert-manager
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)

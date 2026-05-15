@@ -1,0 +1,150 @@
+---
+# =============================================================================
+# metrics-server — Phase 4b (#2951)
+# Pod label: app.kubernetes.io/name=metrics-server (Deployment, 1 replica)
+# Listens on: :10250 (https — the apiservice + metrics endpoint)
+# Ingress from:
+#   - kube-apiserver on :10250 (the v1beta1.metrics.k8s.io APIService points
+#     at the metrics-server Service; HPA / `kubectl top` calls the aggregated
+#     API which kube-apiserver proxies to this pod). Authoritative allow is
+#     the sibling CiliumNetworkPolicy.
+#   - monitoring scrape on :10250 (ServiceMonitor metrics-server, scheme:
+#     https, insecureSkipVerify: true).
+# Egress to:
+#   - All node kubelets on :10250 (host-networked — node CIDR ipBlock +
+#     toEntities: [host, remote-node]).
+#   - K8s API for NodeMetrics / PodMetrics ApiService reconciliation.
+#   - DNS.
+# =============================================================================
+---
+# Default deny-all for metrics-server
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-server-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-server-allow-dns
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from kube-apiserver on :10250 (aggregated APIService callback
+# — pod containerPort 10250, Service maps :443 → :10250). Defence-in-depth
+# ipBlock; authoritative rule is the CiliumNetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-server-allow-kube-apiserver-ingress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
+      ports:
+        - port: 10250
+          protocol: TCP
+---
+# Allow Prometheus to scrape metrics-server on :10250 (https).
+# ServiceMonitor metrics-server, scheme=https, insecureSkipVerify=true,
+# targetPort name=https → containerPort 10250.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-server-allow-prometheus-scrape
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 10250
+          protocol: TCP
+---
+# Allow egress to all node kubelets on :10250 (host-networked — pod-selector
+# rules don't match `reserved:host` identity). The authoritative allow is the
+# CiliumNetworkPolicy `metrics-server-allow-kubelet` (toEntities: [host,
+# remote-node]); this ipBlock is defence-in-depth, mirroring the prometheus
+# kubelet-scrape pattern in #2965.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-server-allow-kubelet-egress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 10250
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.0/24  # node CIDR — kubelet on host network
+---
+# Allow egress to Kubernetes API server (APIService and node listing).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-server-allow-k8s-api
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)

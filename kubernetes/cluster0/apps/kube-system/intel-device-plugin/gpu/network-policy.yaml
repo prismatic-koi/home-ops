@@ -1,0 +1,47 @@
+---
+# =============================================================================
+# intel-gpu-plugin — Phase 4b (#2951)
+# Pod label: app=intel-gpu-plugin (DaemonSet, runs on every GPU-equipped node)
+# Listens on: nothing (no containerPort exposed — verified)
+# Ingress: none required (node-local only — the plugin communicates with the
+#          local kubelet device-plugin manager over a unix socket mounted
+#          from the host, not via the pod network).
+# Egress to: DNS only (no K8s API access from the plugin itself; CRD work
+#            happens in inteldeviceplugins-controller-manager).
+# =============================================================================
+---
+# Default deny-all for intel-gpu-plugin
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: intel-gpu-plugin-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app: intel-gpu-plugin
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system (kept for completeness even
+# though the plugin doesn't do meaningful network egress — DNS is the
+# Phase-2/3 baseline applied uniformly per the AC).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: intel-gpu-plugin-allow-dns
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app: intel-gpu-plugin
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system

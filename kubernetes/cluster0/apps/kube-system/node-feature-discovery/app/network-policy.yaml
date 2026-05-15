@@ -1,0 +1,93 @@
+---
+# =============================================================================
+# node-feature-discovery — Phase 4b (#2951)
+# Pod label: app.kubernetes.io/name=node-feature-discovery
+# Three roles share the selector — distinguished by `role`:
+#   - master (Deployment, 1 replica): containerPort :8080 (http — health
+#     probe endpoint only; no in-cluster ingress consumers).
+#   - gc (Deployment, 1 replica): containerPort :8080 (http — health probe).
+#   - worker (DaemonSet, 4 pods): containerPort :8080 (http — health probe).
+#
+# Modern NFD (≥v0.10) communicates worker → master via NodeFeature CRDs in
+# the K8s API; there is no direct worker→master gRPC. So no intra-ns NFD
+# rule is required.
+#
+# No ServiceMonitor / PodMonitor selects NFD pods today — no Prometheus-scrape
+# ingress added (per the AC: don't add a scrape allow speculatively).
+#
+# Egress: K8s API (master reads NodeFeature CRDs and labels nodes; worker
+#         writes NodeFeature CRDs; gc reaps stale NodeFeature CRDs), DNS.
+# Ingress: kubelet :8080 health probes — same as every other pod in the
+#          cluster, not explicitly allowed (Cilium handles host→pod probes
+#          per the standard pattern; no other policy in this repo adds an
+#          explicit kubelet-probe allow either).
+#
+# Targeting all three roles via the shared name/instance pair keeps the
+# policy count minimal while still being unambiguous (no other pods in
+# kube-system have these labels).
+# =============================================================================
+---
+# Default deny-all for all NFD pods (master, gc, worker)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-feature-discovery-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: node-feature-discovery
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-feature-discovery-allow-dns
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: node-feature-discovery
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow egress to Kubernetes API server (NodeFeature CRD reconciliation +
+# node label patching).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-feature-discovery-allow-k8s-api
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: node-feature-discovery
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)

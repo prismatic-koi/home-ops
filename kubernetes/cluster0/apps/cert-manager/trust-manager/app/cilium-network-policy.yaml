@@ -1,0 +1,27 @@
+---
+# CiliumNetworkPolicy: trust-manager bi-directional K8s API allow.
+#
+# Egress: standard kube-apiserver entity allow (same pattern as #2829 / #2947).
+# Ingress: trust-manager registers a ValidatingWebhookConfiguration for the
+# Bundle CRD; kube-apiserver calls back on the pod's :6443 (verified
+# containerPort, name: webhook). The companion ipBlock NetworkPolicy
+# (trust-manager-allow-kube-apiserver-ingress) is kept for defence-in-depth.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trust-manager-allow-kube-apiserver
+  namespace: cert-manager
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: trust-manager
+  egress:
+    - toEntities:
+        - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

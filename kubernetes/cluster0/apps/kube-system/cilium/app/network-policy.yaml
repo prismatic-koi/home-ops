@@ -1,0 +1,201 @@
+---
+# =============================================================================
+# Phase 4b (#2951): NetworkPolicies for hubble-relay and hubble-ui only.
+#
+# The Cilium agent (cilium-* daemonset), Cilium operator, Cilium envoy, and
+# kube-vip pods all run with hostNetwork=true and NetworkPolicy does NOT apply
+# to them. Only the two non-host-networked Hubble pods are in scope here.
+# =============================================================================
+
+# =============================================================================
+# hubble-relay
+# Pod label: k8s-app=hubble-relay (Deployment, 1 replica)
+# Listens on: :4245 (grpc — the relay port; verified containerPort name=grpc)
+# Ingress from: intra-ns hubble-ui only on :4245
+# Egress to:
+#   - cilium-agent hubble-peer endpoint on :4244 (cilium agents are host-
+#     networked across all nodes; authoritative allow lives in the sibling
+#     CiliumNetworkPolicy with toEntities: [host, remote-node]).
+#   - DNS to kube-system.
+# =============================================================================
+---
+# Default deny-all for hubble-relay
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-relay-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-relay
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system (AND-shape: namespaceSelector
+# matches this namespace explicitly per Phase 2/3 lessons — bare selectors
+# silently drop).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-relay-allow-dns
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-relay
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from intra-ns hubble-ui only on :4245 (AND-shape with explicit
+# kube-system namespaceSelector per Phase 2 lessons).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-relay-allow-hubble-ui-ingress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-relay
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: hubble-ui
+      ports:
+        - port: 4245
+          protocol: TCP
+---
+# Allow egress to the cilium-agent hubble-peer endpoint on :4244 on every
+# node — defence-in-depth ipBlock companion. Cilium agents are host-networked
+# across the node CIDR 10.87.42.0/24. The authoritative allow lives in the
+# sibling CiliumNetworkPolicy `hubble-relay-allow-cilium-agents`
+# (toEntities: [host, remote-node]); ipBlock is bypassed by Cilium for host-
+# network identities under kubeProxyReplacement=true. See #2965 for the same
+# pattern on prometheus → host-network scrape targets.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-relay-allow-cilium-agents-egress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-relay
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 4244
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.0/24  # node CIDR — cilium agents on host network
+
+# =============================================================================
+# hubble-ui
+# Pod label: k8s-app=hubble-ui (Deployment, 1 replica, 2 containers)
+# Listens on:
+#   - frontend container: :8081 (http)  — served to clients via Service:80
+#   - backend container:  :8090 (grpc)  — internal to the pod, frontend->backend
+# Ingress from: networking ns Traefik on :8081 (UI frontend)
+# Egress to: intra-ns hubble-relay :4245 (backend gRPC client), DNS
+#
+# The intra-pod frontend->backend traffic on :8090 stays within the pod and
+# does not traverse NetworkPolicy enforcement.
+# =============================================================================
+---
+# Default deny-all for hubble-ui
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-ui-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-ui-allow-dns
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from Traefik (networking ns) on :8081 (frontend HTTP).
+# AND-shape: namespaceSelector + podSelector under a single list entry.
+# Service hubble-ui :80 -> pod :8081 (verified Service spec + pod containerPort).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-ui-allow-traefik-ingress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8081
+          protocol: TCP
+---
+# Allow egress to intra-ns hubble-relay :4245 (backend gRPC client).
+# AND-shape with explicit kube-system namespaceSelector per Phase 2 lessons.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-ui-allow-hubble-relay-egress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 4245
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: hubble-relay

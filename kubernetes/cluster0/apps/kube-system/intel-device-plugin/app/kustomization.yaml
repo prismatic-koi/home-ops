@@ -3,4 +3,6 @@ kind: Kustomization
 namespace: kube-system
 resources:
   - helm-release.yaml
+  - network-policy.yaml
+  - cilium-network-policy.yaml
 

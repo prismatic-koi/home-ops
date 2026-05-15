@@ -5,6 +5,8 @@ kind: Kustomization
 namespace: cert-manager
 resources:
   - ./helm-release.yaml
+  - ./network-policy.yaml
+  - ./cilium-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: cert-manager

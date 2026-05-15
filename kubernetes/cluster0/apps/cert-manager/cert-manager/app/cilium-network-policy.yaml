@@ -1,0 +1,74 @@
+---
+# CiliumNetworkPolicy: allow cert-manager controller egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy
+# (cert-manager-allow-k8s-api) is kept for defence-in-depth, but this
+# CiliumNetworkPolicy is what actually enforces the allow in practice. See
+# #2829 (external-dns) and #2947 (cnpg) for the same pattern.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-allow-kube-apiserver
+  namespace: cert-manager
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+# CiliumNetworkPolicy: allow cert-manager-cainjector egress to the K8s API server.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-cainjector-allow-kube-apiserver
+  namespace: cert-manager
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cainjector
+      app.kubernetes.io/component: cainjector
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+# CiliumNetworkPolicy: cert-manager-webhook bi-directional K8s API allow.
+#
+# *** THIS IS THE MOST CRITICAL RULE IN PHASE 4b ***
+# kube-apiserver calls the webhook whenever any Certificate, Issuer,
+# ClusterIssuer, CertificateRequest, etc. is created or modified anywhere in
+# the cluster. The ingress allow must use `fromEntities: [kube-apiserver]` —
+# ipBlock alone is silently bypassed by Cilium because the API server runs in
+# the host network namespace under kubeProxyReplacement=true.
+#
+# Webhook containerPort is 10250 (name: https) — verified on the running pod.
+# Service-side port (cert-manager-webhook Service :443) does NOT apply here —
+# NetworkPolicy and CiliumNetworkPolicy both enforce on pod containerPorts.
+#
+# The egress allow (toEntities: kube-apiserver) covers the webhook's outbound
+# lookups for referenced Issuers/Secrets.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-webhook-allow-kube-apiserver
+  namespace: cert-manager
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  egress:
+    - toEntities:
+        - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP

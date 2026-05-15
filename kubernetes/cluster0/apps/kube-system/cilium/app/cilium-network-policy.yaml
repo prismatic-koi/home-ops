@@ -1,0 +1,28 @@
+---
+# CiliumNetworkPolicy: hubble-relay egress to host-networked cilium-agent
+# pods' hubble-peer endpoint on :4244.
+#
+# Cilium agents run with hostNetwork=true and Cilium assigns them the
+# `reserved:host` / `reserved:remote-node` entity identities. Standard
+# NetworkPolicy podSelector rules don't match these entities, so the egress
+# allow on :4244 must use `toEntities: [host, remote-node]`. The companion
+# ipBlock NetworkPolicy `hubble-relay-allow-cilium-agents-egress` is kept
+# for defence-in-depth. Pattern parallels #2965 (Prometheus → host-network
+# scrape targets) and #2962.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hubble-relay-allow-cilium-agents
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s-app: hubble-relay
+  egress:
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "4244"
+              protocol: TCP
