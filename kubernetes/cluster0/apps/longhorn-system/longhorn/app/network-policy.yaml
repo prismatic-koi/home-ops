@@ -2,13 +2,36 @@
 # =============================================================================
 # Longhorn — Phase 4c (#2952, parent design #2812)
 #
-# Wide-then-tighten storage policies. Longhorn's data plane allocates dynamic
-# ports in the 10000-30000 range across instance-manager pods and engines;
-# narrow per-port allows risk silent volume corruption when the engine
-# re-binds. The conscious decision (#2812 Phase 4 baseline, #2952 design) is
-# to start with a wide intra-namespace allow and tighten only after a
-# multi-day Hubble baseline confirms a clean steady state — explicitly
-# deferred to a hypothetical Phase 5.
+# The wide intra-namespace allow below is a PERMANENT design choice, not a
+# temporary state to be tightened later. Intra-namespace traffic within a
+# single trust domain is not a meaningful security boundary; the real
+# enforcement lives on the cross-namespace flows (Traefik → longhorn-ui
+# ingress, K8s API egress, Prometheus scrape ingress, backup NFS egress,
+# DNS egress) which are all tightly scoped below.
+#
+# Why intra-ns narrowing buys ~nothing here:
+#   - All Longhorn pods are rendered by a single Helm release, share the
+#     same SOPS-encrypted credentials, and run with storage-admin-equivalent
+#     privileges by design.
+#   - A compromised longhorn-ui can already reach longhorn-manager via the
+#     official admin API on :9500.
+#   - A compromised CSI sidecar already has cluster-wide volume-control
+#     authority via its K8s API allow (Volume/VolumeAttachment CRDs).
+#   - So per-pod intra-ns NetworkPolicy splits would only frustrate a future
+#     reader without raising the bar for an attacker.
+#
+# Why intra-ns narrowing also has real downside:
+#   - The data plane (instance-manager + engine processes) binds ephemeral
+#     ports across the 10000-30000 range and re-allocates them as volumes
+#     attach/detach. Per-port allows would silently drop replica traffic on
+#     every re-allocation and risk volume corruption.
+#
+# Same shape of argument as the seaweedfs intra-ns widening in #2969:
+# anything Helm renders in this namespace as part of the longhorn release is
+# co-trusted with the data plane.
+#
+# See the parent design doc (#2812) and child issue (#2952) for the full
+# Phase 4 context.
 #
 # Pod inventory (selectors used below):
 #   - longhorn-manager     (DaemonSet)    — app=longhorn-manager
@@ -39,9 +62,6 @@
 #   - Backup target NFS: instance-manager + longhorn-manager pods write the
 #     Friday backup to nfs://${NAS0_IP}:/volume1/longhorn-backups
 #     (NAS0 = 10.87.42.200 — same /24 as the nodes but NOT a node)
-#
-# Out of scope (per #2952 / #2812): narrowing the 10000-30000 data-plane port
-# range, blocking node-to-node Longhorn traffic.
 # =============================================================================
 ---
 # -----------------------------------------------------------------------------
@@ -57,24 +77,33 @@ spec:
   policyTypes: [Ingress, Egress]
 ---
 # -----------------------------------------------------------------------------
-# INTENTIONAL WIDE INTRA-NAMESPACE ALLOW.
+# INTENTIONAL WIDE INTRA-NAMESPACE ALLOW — permanent design choice.
 #
 # Selects EVERY pod in longhorn-system (`podSelector: {}`) and allows BOTH
-# ingress from and egress to every other pod in longhorn-system. This is the
-# rare "intentional wide allow" case in the netpol rollout (#2812, #2952).
+# ingress from and egress to every other pod in longhorn-system. This is one
+# of the rare "intentional wide allow" cases in the netpol rollout (#2812,
+# #2952) — see the top-of-file block for the full rationale.
 #
-# Rationale: Longhorn's data plane (instance-manager pods, engine processes)
-# binds ephemeral ports across the 10000-30000 range. Replicas, engines, and
-# managers all talk to each other on these dynamic ports. Per-port allows
-# would silently drop replica traffic on every port re-allocation and risk
-# volume corruption. The wide intra-ns allow is correct here because every
-# pod in this namespace is part of the same storage subsystem and there is
-# no cross-tenant trust boundary inside it.
+# Summary: longhorn-system is a single trust domain. Every pod is rendered
+# by the same Helm release, shares the same SOPS-encrypted credentials, and
+# runs with storage-admin-equivalent privileges by design — a compromised
+# longhorn-ui already has longhorn-manager admin API access on :9500, and a
+# compromised CSI sidecar already has cluster-wide volume-control authority
+# via its K8s API allow. Intra-ns NetworkPolicy splits inside this trust
+# domain would not raise the bar for an attacker.
 #
-# Tightening this is explicitly out-of-scope for Phase 4c; defer to a Phase
-# 5 only with a multi-day Hubble baseline that enumerates the actual port
-# distribution under sustained load. See #2812 §"Out of scope" and #2952
-# §"Out of scope".
+# The data plane separately makes narrowing technically risky: instance-
+# manager and engine processes bind ephemeral ports across 10000-30000 and
+# re-allocate them on every attach/detach. Per-port allows would silently
+# drop replica traffic and risk volume corruption.
+#
+# Same shape of argument as the seaweedfs intra-ns widening in #2969:
+# anything Helm renders in this namespace as part of the longhorn release
+# is co-trusted with the data plane.
+#
+# The meaningful enforcement for this namespace is on the cross-namespace
+# flows below (Traefik → longhorn-ui, K8s API egress, Prometheus scrape,
+# backup NFS, DNS) — all tightly scoped.
 # -----------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
