@@ -9,6 +9,13 @@ spec:
   env:
     - name: TZ
       value: Pacific/Auckland
+    # Workaround for CloudNativePG endpointCA SSL validation issue
+    # The endpointCA feature mounts the CA cert but doesn't set SSL env vars
+    # See: https://github.com/cloudnative-pg/cloudnative-pg/issues/7946
+    - name: CURL_CA_BUNDLE
+      value: /run/certificates/backup-barman-ca.crt
+    - name: REQUESTS_CA_BUNDLE
+      value: /run/certificates/backup-barman-ca.crt
   imageName: ghcr.io/cloudnative-pg/postgresql:18.0
   primaryUpdateStrategy: unsupervised
   storage:
@@ -43,7 +50,7 @@ spec:
         compression: bzip2
         maxParallel: 4
       destinationPath: s3://postgresql/
-      endpointURL: https://minio-tenant-hl.minio.svc:9000
+      endpointURL: https://seaweedfs-s3.seaweedfs.svc:8443
       endpointCA:
         name: internal-ca-bundle
         key: ca.crt
@@ -51,10 +58,10 @@ spec:
       s3Credentials:
         accessKeyId:
           name: cloudnative-pg-secret
-          key: MINIO_ACCESS_KEY
+          key: S3_ACCESS_KEY
         secretAccessKey:
           name: cloudnative-pg-secret
-          key: MINIO_SECRET_KEY
+          key: S3_SECRET_KEY
   bootstrap:
     initdb:
       database: hass
