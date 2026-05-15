@@ -45,7 +45,7 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
 ---
-# Allow intra-ns ingress from volume/filer/s3 on :9333/:19333
+# Allow intra-ns ingress from volume/filer/s3/master on :9333/:19333
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -81,6 +81,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: s3
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: master
       ports:
         - port: 9333
           protocol: TCP
@@ -133,7 +140,7 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
 ---
-# Allow intra-ns ingress from filer and peer volume pods
+# Allow intra-ns ingress from master/filer/s3/volume pods on :8080/:18080
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -162,11 +169,53 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: s3
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: master
       ports:
         - port: 8080
           protocol: TCP
         - port: 18080
           protocol: TCP
+---
+# Allow egress from master to volume (admin/health) on :8080/:18080
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-master-allow-intra-egress
+  namespace: seaweedfs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: master
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+        - port: 18080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: volume
 ---
 # Allow egress from volume to master (register/heartbeat) and peer volumes
 apiVersion: networking.k8s.io/v1
@@ -255,7 +304,7 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
 ---
-# Allow intra-ns ingress from s3 pod on :8888/:18888
+# Allow intra-ns ingress from master/volume/s3/filer on :8888/:18888
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -277,6 +326,27 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: s3
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: filer
       ports:
         - port: 8888
           protocol: TCP
@@ -448,7 +518,7 @@ spec:
         - port: 8333
           protocol: TCP
 ---
-# Allow egress from s3 to filer and master
+# Allow egress from s3 to filer, master, and volume (direct object reads)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -488,3 +558,16 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+    - ports:
+        - port: 8080
+          protocol: TCP
+        - port: 18080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: volume
