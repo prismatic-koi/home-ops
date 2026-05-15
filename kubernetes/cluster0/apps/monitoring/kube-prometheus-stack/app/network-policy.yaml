@@ -1,0 +1,53 @@
+---
+# Prometheus egress allows for databases namespace scraping (Phase 3a)
+# Note: Prometheus default-deny and full egress lockdown land in Phase 3b (#2945).
+# This file adds only the targeted egress allows needed for databases/seaweedfs scraping.
+
+# Allow Prometheus to scrape CNPG cluster pod metrics on :9187
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-databases-cnpg-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 9187
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchExpressions:
+              - key: cnpg.io/cluster
+                operator: Exists
+---
+# Allow Prometheus to scrape cloudnative-pg operator metrics on :8080
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-databases-operator-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
