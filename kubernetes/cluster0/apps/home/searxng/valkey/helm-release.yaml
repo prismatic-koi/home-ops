@@ -24,6 +24,37 @@ spec:
             image:
               repository: valkey/valkey
               tag: 9.0.4-alpine@sha256:d1cc70645bbcef743615463a2fa4616e841407545e18f560aed0c49671a90147
+    networkpolicies:
+      default-deny:
+        controller: valkey
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: valkey
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-searxng-ingress:
+        controller: valkey
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: searxng
+              ports:
+                - port: 6379
+                  protocol: TCP
     persistence:
       data:
         type: emptyDir

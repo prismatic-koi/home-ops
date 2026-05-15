@@ -61,6 +61,56 @@ spec:
                   group: 'traefik.io'
                   kind: 'Middleware'
                   name: 'forwardauth-authelia'
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-home-assistant-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: home-assistant
+      allow-mosquitto-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 1883
+                  protocol: TCP
+              to:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: mosquitto
+
     persistence:
       # config:
       #   enabled: true
