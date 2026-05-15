@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./secret.sops.yaml
+  - ./networkpolicy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: openldap
