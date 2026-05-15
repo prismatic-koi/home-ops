@@ -36,7 +36,7 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
 ---
-# Allow intra-namespace primary <-> replica replication on :5432
+# Allow intra-namespace primary <-> replica replication on :5432/:8000 (instance manager)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -60,9 +60,13 @@ spec:
       ports:
         - port: 5432
           protocol: TCP
+        - port: 8000
+          protocol: TCP
   egress:
     - ports:
         - port: 5432
+          protocol: TCP
+        - port: 8000
           protocol: TCP
       to:
         - namespaceSelector:
@@ -71,6 +75,30 @@ spec:
           podSelector:
             matchLabels:
               cnpg.io/cluster: authelia-postgres-v17
+---
+# Allow ingress from cloudnative-pg operator on :8000 (instance manager HTTP endpoint)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authelia-postgres-v17-allow-operator-ingress
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: authelia-postgres-v17
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - port: 8000
+          protocol: TCP
 ---
 # Allow ingress from auth/authelia on :5432
 apiVersion: networking.k8s.io/v1
