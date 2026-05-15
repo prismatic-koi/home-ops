@@ -26,6 +26,10 @@ spec:
   values:
     controllers:
       main:
+        pod:
+          securityContext:
+            fsGroup: 1883
+            fsGroupChangePolicy: OnRootMismatch
         containers:
           app:
             image:
@@ -135,6 +139,7 @@ spec:
       passwd:
         type: secret
         name: mosquitto-passwd
+        defaultMode: 0400
         advancedMounts:
           main:
             app:
