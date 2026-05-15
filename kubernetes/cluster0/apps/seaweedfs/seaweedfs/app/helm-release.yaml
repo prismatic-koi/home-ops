@@ -69,6 +69,3 @@ spec:
       replicas: 1
       logs:
         type: emptyDir
-      createBuckets:
-        - name: postgresql
-          anonymousRead: false
