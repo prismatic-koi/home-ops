@@ -87,6 +87,32 @@ spec:
         - port: 9443
           protocol: TCP
 ---
+# Allow operator egress to CNPG cluster pods on :8000 (instance manager HTTP endpoint)
+# Used for failover, promote, restart, status checks, and base-backup coordination
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudnative-pg-allow-instance-manager-egress
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 8000
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchExpressions:
+              - key: cnpg.io/cluster
+                operator: Exists
+---
 # Allow Prometheus to scrape cloudnative-pg operator metrics
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
