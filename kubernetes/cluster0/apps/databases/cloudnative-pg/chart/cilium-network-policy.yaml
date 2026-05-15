@@ -1,0 +1,21 @@
+---
+# CiliumNetworkPolicy: allow cloudnative-pg operator egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy is still kept
+# for defence-in-depth, but this CiliumNetworkPolicy is what actually enforces
+# the allow in practice. See #2829 (external-dns fix-forward) for context.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cloudnative-pg-allow-kube-apiserver
+  namespace: databases
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  egress:
+    - toEntities:
+        - kube-apiserver

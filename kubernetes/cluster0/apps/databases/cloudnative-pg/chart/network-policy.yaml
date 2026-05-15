@@ -64,6 +64,29 @@ spec:
         - ipBlock:
             cidr: 10.87.42.2/32  # control plane node
 ---
+# Allow Kubernetes API server to call back to the CNPG admission webhook on :9443
+# (MutatingWebhookConfiguration + ValidatingWebhookConfiguration)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudnative-pg-allow-webhook-ingress
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
+      ports:
+        - port: 9443
+          protocol: TCP
+---
 # Allow Prometheus to scrape cloudnative-pg operator metrics
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
