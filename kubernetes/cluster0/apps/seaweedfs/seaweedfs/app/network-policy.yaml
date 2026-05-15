@@ -88,6 +88,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
       ports:
         - port: 9333
           protocol: TCP
@@ -183,6 +190,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
       ports:
         - port: 8080
           protocol: TCP
@@ -216,6 +230,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
 ---
 # Allow egress from volume to master (register/heartbeat) and peer volumes
 apiVersion: networking.k8s.io/v1
@@ -244,6 +265,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
     - ports:
         - port: 8080
           protocol: TCP
@@ -257,6 +285,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
 ---
 # =============================================================================
 # seaweedfs-filer
@@ -347,6 +382,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: filer
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
       ports:
         - port: 8888
           protocol: TCP
@@ -406,6 +448,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
     - ports:
         - port: 8080
           protocol: TCP
@@ -419,6 +468,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
 ---
 # =============================================================================
 # seaweedfs-s3
@@ -514,6 +570,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
       ports:
         - port: 8333
           protocol: TCP
@@ -545,6 +608,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: filer
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
     - ports:
         - port: 9333
           protocol: TCP
@@ -558,6 +628,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
     - ports:
         - port: 8080
           protocol: TCP
@@ -571,3 +648,10 @@ spec:
             matchLabels:
               app.kubernetes.io/name: seaweedfs
               app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: seaweedfs
+              app.kubernetes.io/managed-by: Helm
