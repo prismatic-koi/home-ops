@@ -1,0 +1,22 @@
+---
+# CiliumNetworkPolicy: allow home-assistant-postgres-v18 cluster pods egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy is still kept
+# for defence-in-depth, but this CiliumNetworkPolicy is what actually enforces
+# the allow in practice. Required by CNPG instance-manager wait-for-get-cluster
+# init step. See #2960.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: home-assistant-postgres-v18-allow-kube-apiserver-egress
+  namespace: databases
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: home-assistant-postgres-v18
+  egress:
+    - toEntities:
+        - kube-apiserver
