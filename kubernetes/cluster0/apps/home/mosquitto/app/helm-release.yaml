@@ -139,7 +139,7 @@ spec:
       passwd:
         type: secret
         name: mosquitto-passwd
-        defaultMode: 0400
+        defaultMode: 0440
         advancedMounts:
           main:
             app:
