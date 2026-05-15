@@ -24,6 +24,12 @@ spec:
     remediation:
       retries: 5
   values:
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
     controllers:
       main:
         containers:
@@ -33,13 +39,10 @@ spec:
               tag: "6.1.1@sha256:15417a594ebda4c660a9fa9748e7199d33e2d17b31bbc5ad7ba2e86f0b414763"
             env:
               TZ: "${TIMEZONE}"
+              # PUID/PGID are read by the linuxserver s6-overlay entrypoint;
+              # they must match the pod securityContext runAsUser/runAsGroup.
               PUID: 1000
               PGID: 1000
-            # to avoid permissions issues on volume
-            securityContext:
-              runAsUser: 0
-              runAsGroup: 0
-              fsGroup: 0
             resources:
               requests:
                 cpu: 50m
