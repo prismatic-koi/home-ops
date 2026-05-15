@@ -111,6 +111,9 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: prometheus-blackbox-exporter
               ports:
                 - port: 8123
                   protocol: TCP
