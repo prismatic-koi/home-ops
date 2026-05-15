@@ -72,8 +72,6 @@ spec:
 
     s3:
       enabled: true
-      httpsPort: 8443
-      tlsSecret: seaweedfs-s3-tls
       enableAuth: true
       replicas: 1
       logs:
