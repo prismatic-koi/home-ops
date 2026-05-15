@@ -27,6 +27,21 @@ spec:
     defaultPodOptions:
       nodeSelector:
         intel.feature.node.kubernetes.io/gpu: "true"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        # supplementalGroups covers `video` and `render` GIDs across common
+        # node distros so the Plex transcoder can access /dev/dri/*:
+        #   44  = video (Debian/Ubuntu)
+        #   105 = render (Debian)
+        #   107 = render (Ubuntu)
+        #   109 = render (some k3s/Alpine-derivative nodes)
+        # Intentionally a defensive superset — the actual node-side render GID
+        # is what matters; the extras are harmless. If transcode breaks, narrow
+        # to the GID observed via `ls -l /dev/dri` inside the pod.
+        supplementalGroups: [44, 105, 107, 109]
     controllers:
       main:
         containers:
@@ -36,13 +51,10 @@ spec:
               tag: "1.43.1.10611-1e34174b1@sha256:8b5bcdf7b506fe051aa1a0a0d464efdb3ad8c0fb1f8a4dfb27a8c489b609920c"
             env:
               TZ: "${TIMEZONE}"
-              PLEX_UID: 0
-              PLEX_GID: 0
-            # to avoid permissions issues on volume
-            securityContext:
-              runAsUser: 0
-              runAsGroup: 0
-              fsGroup: 0
+              # PLEX_UID/PLEX_GID are read by the plexinc/pms-docker entrypoint
+              # and must match the pod securityContext runAsUser/runAsGroup.
+              PLEX_UID: 1000
+              PLEX_GID: 1000
             resources:
               requests:
                 gpu.intel.com/i915: 1
