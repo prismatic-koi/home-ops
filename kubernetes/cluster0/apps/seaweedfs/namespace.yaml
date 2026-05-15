@@ -5,4 +5,5 @@ metadata:
   name: seaweedfs
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
+    netpol.home-ops/traefik-backend: "true"
     trust.cert-manager.io/enabled: "true"
