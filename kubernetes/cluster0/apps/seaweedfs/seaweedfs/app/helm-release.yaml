@@ -24,15 +24,6 @@ spec:
     cleanupOnFail: true
     remediation:
       retries: 3
-  valuesFrom:
-    - kind: Secret
-      name: seaweedfs-s3-credentials
-      valuesKey: admin_access_key_id
-      targetPath: s3.credentials.admin.accessKey
-    - kind: Secret
-      name: seaweedfs-s3-credentials
-      valuesKey: admin_secret_access_key
-      targetPath: s3.credentials.admin.secretKey
   values:
     global:
       seaweedfs:
@@ -73,6 +64,7 @@ spec:
     s3:
       enabled: true
       enableAuth: true
+      existingConfigSecret: seaweedfs-s3-config
       replicas: 1
       logs:
         type: emptyDir
