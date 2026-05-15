@@ -87,6 +87,34 @@ spec:
         - port: 443
           protocol: TCP
 ---
+# Allow intra-pod ingress on :8080 from Traefik itself.
+# The `traefik-dashboard` Service in this namespace selects Traefik pods and
+# routes Service:80 → pod:8080 — the dashboard route terminates on the same
+# Traefik pods serving the request. AND-shape: namespaceSelector (networking)
+# + podSelector (traefik).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-dashboard-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8080
+          protocol: TCP
+---
 # Allow egress to any pod in any namespace labelled
 # netpol.home-ops/traefik-backend: "true", on any TCP port.
 #
@@ -114,6 +142,43 @@ spec:
       ports:
         - port: 1
           endPort: 65535
+          protocol: TCP
+---
+# Allow egress to off-cluster LAN backends fronted by manually-managed
+# EndpointSlices in this namespace (nas0, octoprint, unifi). Each is a stable
+# /32 on the home LAN; the namespace-label egress rule above does not cover
+# these because NetworkPolicy namespaceSelector matches pod destinations, not
+# ipBlock-backed Service endpoints. Ports are per the EndpointSlice spec for
+# each backend (see apps/networking/traefik/external-services/).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-external-services-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.87.42.200/32  # nas0
+      ports:
+        - port: 5000
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 10.87.1.74/32  # octoprint
+      ports:
+        - port: 80
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 10.87.1.1/32  # unifi
+      ports:
+        - port: 443
           protocol: TCP
 ---
 # Allow egress to Authelia for forward-auth.
