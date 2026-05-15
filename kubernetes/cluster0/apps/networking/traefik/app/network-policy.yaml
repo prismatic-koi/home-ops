@@ -62,6 +62,50 @@ spec:
         - port: 443
           protocol: TCP
 ---
+# -----------------------------------------------------------------------------
+# INTENTIONAL WILDCARD INGRESS — every pod in every namespace can reach
+# Traefik on :80 and :443.
+#
+# Companion to `traefik-allow-external-ingress` above: that rule uses
+# `ipBlock: 0.0.0.0/0` which covers external / host-network sources, but
+# under Cilium `kubeProxyReplacement=true` in-cluster pod-to-pod flows are
+# matched by pod identity rather than source IP — so the ipBlock rule does
+# NOT cover an in-cluster pod (e.g. `monitoring/uptime-kuma`) connecting to
+# `https://<route>.tinfoilforest.nz/`. The two rules are complementary: the
+# ipBlock rule matches non-pod sources, this rule matches pod-identity
+# sources. See #2977 for the root cause and the Phase 4a origin (#2950 /
+# #2968).
+#
+# The `namespaceSelector: {}` wildcard is correct here, and follows the
+# precedent set by `coredns-allow-dns-ingress` in PR #2976: Traefik is THE
+# cluster-wide ingress point for every HTTPRoute, so enumerating namespaces
+# would create a maintenance burden every time a new monitor / health-check
+# / webhook pod is deployed in any namespace. The risk surface is tightly
+# bound by port — only :80 TCP and :443 TCP. The Traefik dashboard (:8080)
+# and all other ports remain governed by their own scoped ingress rules.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-intracluster-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}    # universal — see comment above; complements
+                                   # the ipBlock 0.0.0.0/0 rule for in-cluster
+                                   # pod-identity sources under Cilium kpr.
+      ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+---
 # Allow intra-ns ingress from cloudflared — the Cloudflare tunnel terminates
 # at Traefik via the local cluster network on :443.
 apiVersion: networking.k8s.io/v1
