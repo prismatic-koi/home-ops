@@ -40,6 +40,10 @@ spec:
               runAsUser: 0
               runAsGroup: 0
               fsGroup: 0
+            resources:
+              requests:
+                cpu: 50m
+                memory: 256Mi
     service:
       app:
         controller: main

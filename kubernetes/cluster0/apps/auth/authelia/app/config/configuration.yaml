@@ -42,8 +42,8 @@ password_policy:
     require_number: false
     require_special: false
   zxcvbn:
-    enabled: false
-    min_score: 0
+    enabled: true
+    min_score: 3
 session:
   same_site: lax
   name: "${SECRET_PUBLIC_DOMAIN}_auth_session"
