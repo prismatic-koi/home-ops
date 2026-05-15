@@ -1,0 +1,459 @@
+---
+# =============================================================================
+# Longhorn — Phase 4c (#2952, parent design #2812)
+#
+# Wide-then-tighten storage policies. Longhorn's data plane allocates dynamic
+# ports in the 10000-30000 range across instance-manager pods and engines;
+# narrow per-port allows risk silent volume corruption when the engine
+# re-binds. The conscious decision (#2812 Phase 4 baseline, #2952 design) is
+# to start with a wide intra-namespace allow and tighten only after a
+# multi-day Hubble baseline confirms a clean steady state — explicitly
+# deferred to a hypothetical Phase 5.
+#
+# Pod inventory (selectors used below):
+#   - longhorn-manager     (DaemonSet)    — app=longhorn-manager
+#   - longhorn-ui          (Deployment)   — app=longhorn-ui
+#   - longhorn-driver-deployer (Deploy)   — app=longhorn-driver-deployer
+#   - csi-attacher / -provisioner /
+#     -resizer / -snapshotter (Deploys)   — app=csi-{attacher,provisioner,…}
+#   - longhorn-csi-plugin  (DaemonSet)    — app=longhorn-csi-plugin
+#   - instance-manager-*   (dynamic)      — longhorn.io/component=instance-manager
+#   - engine-image-ei-*    (DaemonSet)    — longhorn.io/component=engine-image
+#   - friday-backup-*      (Job pods from a CronJob; weekly backup) —
+#                                           recurring-job.longhorn.io=friday-backup
+#                                           This is the "longhorn-friday" pod
+#                                           investigated in #2952 — it's a
+#                                           short-lived backup job that only
+#                                           talks intra-ns to longhorn-backend
+#                                           :9500; folded into the wide
+#                                           intra-ns allow.
+#
+# External flows (NOT covered by the wide intra-ns allow):
+#   - DNS: every pod → CoreDNS :53 in kube-system
+#   - K8s API egress: longhorn-manager, longhorn-csi-plugin, csi-*, and
+#     longhorn-driver-deployer reconcile CRDs and watch resources
+#   - Traefik ingress: longhorn-ui :8000 from networking ns
+#   - Prometheus scrape ingress: longhorn-manager :9500 (ServiceMonitor
+#     `longhorn-prometheus-servicemonitor` selects app=longhorn-manager,
+#     port name=manager → containerPort 9500)
+#   - Backup target NFS: instance-manager + longhorn-manager pods write the
+#     Friday backup to nfs://${NAS0_IP}:/volume1/longhorn-backups
+#     (NAS0 = 10.87.42.200 — same /24 as the nodes but NOT a node)
+#
+# Out of scope (per #2952 / #2812): narrowing the 10000-30000 data-plane port
+# range, blocking node-to-node Longhorn traffic.
+# =============================================================================
+---
+# -----------------------------------------------------------------------------
+# Default-deny — applies to every pod in longhorn-system.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-default-deny
+  namespace: longhorn-system
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# -----------------------------------------------------------------------------
+# INTENTIONAL WIDE INTRA-NAMESPACE ALLOW.
+#
+# Selects EVERY pod in longhorn-system (`podSelector: {}`) and allows BOTH
+# ingress from and egress to every other pod in longhorn-system. This is the
+# rare "intentional wide allow" case in the netpol rollout (#2812, #2952).
+#
+# Rationale: Longhorn's data plane (instance-manager pods, engine processes)
+# binds ephemeral ports across the 10000-30000 range. Replicas, engines, and
+# managers all talk to each other on these dynamic ports. Per-port allows
+# would silently drop replica traffic on every port re-allocation and risk
+# volume corruption. The wide intra-ns allow is correct here because every
+# pod in this namespace is part of the same storage subsystem and there is
+# no cross-tenant trust boundary inside it.
+#
+# Tightening this is explicitly out-of-scope for Phase 4c; defer to a Phase
+# 5 only with a multi-day Hubble baseline that enumerates the actual port
+# distribution under sustained load. See #2812 §"Out of scope" and #2952
+# §"Out of scope".
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-allow-intra-namespace
+  namespace: longhorn-system
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: longhorn-system
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: longhorn-system
+---
+# -----------------------------------------------------------------------------
+# DNS egress to CoreDNS in kube-system — applies to every pod.
+#
+# The wide intra-ns allow above does NOT cover DNS because CoreDNS lives in
+# kube-system. Without this explicit cross-namespace rule no pod could
+# resolve any name once the default-deny is in effect.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-allow-dns
+  namespace: longhorn-system
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# -----------------------------------------------------------------------------
+# longhorn-ui — Traefik ingress on :8000 (pod containerPort named `http`;
+# Service `longhorn-frontend` maps :80 → targetPort http).
+#
+# AND-shape: namespaceSelector (networking) + podSelector (Traefik) under a
+# single from-entry.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-ui-allow-traefik-ingress
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-ui
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8000
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# longhorn-manager — Prometheus scrape ingress on :9500 (port name `manager`,
+# matching ServiceMonitor `longhorn-prometheus-servicemonitor` which selects
+# app=longhorn-manager and scrapes port name `manager`).
+#
+# AND-shape: monitoring ns + Prometheus pod selector.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-manager-allow-prometheus-scrape
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-manager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9500
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# K8s API egress — longhorn-manager.
+#
+# longhorn-manager is the control plane: it watches CRDs (Volume, Engine,
+# Replica, BackingImage, RecurringJob, etc.), updates status, creates/deletes
+# instance-manager pods, and runs the admission + recovery-backend
+# controllers. Talks to the apiserver constantly.
+#
+# Dual-policy pattern: standard NetworkPolicy ipBlock (defence-in-depth) +
+# sibling CiliumNetworkPolicy `toEntities: [kube-apiserver]` (authoritative
+# under Cilium kubeProxyReplacement=true — see #2829 / #2947).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-manager-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-manager
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+---
+# -----------------------------------------------------------------------------
+# K8s API egress — longhorn-csi-plugin (DaemonSet).
+#
+# longhorn-csi-plugin runs the CSI node-plugin sidecars (driver-registrar,
+# liveness-probe, csi-plugin) and watches Node/VolumeAttachment for mount
+# coordination. Needs apiserver access for the node-registrar handshake.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-csi-plugin-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-csi-plugin
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
+---
+# -----------------------------------------------------------------------------
+# K8s API egress — csi-attacher / csi-provisioner / csi-resizer /
+# csi-snapshotter (the external CSI sidecars, each a Deployment with 3
+# replicas). Each watches a distinct CRD set (VolumeAttachment, PVC,
+# VolumeSnapshot, etc.) and patches status back via the apiserver.
+#
+# One NetworkPolicy per sidecar app label so a regression on one doesn't
+# silently affect the others.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: csi-attacher-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: csi-attacher
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: csi-provisioner-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: csi-provisioner
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: csi-resizer-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: csi-resizer
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: csi-snapshotter-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: csi-snapshotter
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32
+---
+# -----------------------------------------------------------------------------
+# K8s API egress — longhorn-driver-deployer.
+#
+# Bootstraps the CSI driver registration; touches the apiserver to create the
+# CSIDriver object and the CSI sidecar Deployments at startup. Small, but a
+# default-deny without this would block first-boot reconciliation.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-driver-deployer-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-driver-deployer
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32
+---
+# -----------------------------------------------------------------------------
+# NFS backup egress — longhorn-manager + instance-manager pods write the
+# weekly backup to nfs://${NAS0_IP}:/volume1/longhorn-backups (NAS0 =
+# 10.87.42.200, sits in the node /24 but is NOT a node and so not covered by
+# any node-network entity allow). NFSv4 uses :2049 TCP; NFSv3 also opens
+# rpcbind :111 + mountd. The backup target is configured for NFSv4 in this
+# cluster (Longhorn defaults), but rpcbind :111 is allowed defensively to
+# cover mount negotiation.
+#
+# Scoped to the two pod kinds that actually do the I/O:
+#   - app=longhorn-manager        (DaemonSet, orchestrates the backup)
+#   - longhorn.io/component=instance-manager (streams the volume data)
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-allow-backup-nfs-egress
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [longhorn-manager]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.87.42.200/32  # ${NAS0_IP} — backup target NFS server
+      ports:
+        - port: 2049
+          protocol: TCP
+        - port: 111
+          protocol: TCP
+        - port: 111
+          protocol: UDP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-instance-manager-allow-backup-nfs-egress
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      longhorn.io/component: instance-manager
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.87.42.200/32  # ${NAS0_IP} — backup target NFS server
+      ports:
+        - port: 2049
+          protocol: TCP
+        - port: 111
+          protocol: TCP
+        - port: 111
+          protocol: UDP

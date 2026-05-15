@@ -6,16 +6,22 @@ metadata:
   name: cluster-apps-coredns
   namespace: flux-system
 spec:
-  path: ./kubernetes/cluster0/apps/kube-system/coredns/app
+  # The CoreDNS HelmRelease in ./app/ is intentionally NOT reconciled — the
+  # historical Flux Kustomization line in apps/kube-system/kustomization.yaml
+  # was disabled long before Phase 4 because the live CoreDNS install pre-
+  # dates Flux management of the chart and re-adopting it without an outage
+  # window is risky.
+  #
+  # Phase 4c (#2952) re-enables this Flux Kustomization but points it at a
+  # dedicated ./policy/ directory containing only the NetworkPolicy and
+  # CiliumNetworkPolicy that lock down the in-cluster CoreDNS pods (selector
+  # k8s-app=kube-dns). Same pattern as
+  # apps/kube-system/local-path-provisioner/{policy,ks.yaml} from Phase 4b.
+  path: ./kubernetes/cluster0/apps/kube-system/coredns/policy
   prune: false # never should be deleted
   sourceRef:
     kind: GitRepository
     name: home-ops-cluster0
-  healthChecks:
-    - apiVersion: helm.toolkit.fluxcd.io/v2
-      kind: HelmRelease
-      name: coredns
-      namespace: kube-system
   wait: false
   interval: 30m
   retryInterval: 1m

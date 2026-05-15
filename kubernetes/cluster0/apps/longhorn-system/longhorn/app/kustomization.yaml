@@ -5,6 +5,8 @@ resources:
   - helm-release.yaml
   - httproute.yaml
   - prometheusrule.yaml
+  - network-policy.yaml
+  - cilium-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: longhorn
