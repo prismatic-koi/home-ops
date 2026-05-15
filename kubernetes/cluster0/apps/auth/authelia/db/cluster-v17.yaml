@@ -9,13 +9,6 @@ spec:
   env:
     - name: TZ
       value: Pacific/Auckland
-    # Workaround for CloudNativePG endpointCA SSL validation issue
-    # The endpointCA feature mounts the CA cert but doesn't set SSL env vars
-    # See: https://github.com/cloudnative-pg/cloudnative-pg/issues/7946
-    - name: CURL_CA_BUNDLE
-      value: /run/certificates/backup-barman-ca.crt
-    - name: REQUESTS_CA_BUNDLE
-      value: /run/certificates/backup-barman-ca.crt
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5-21
   primaryUpdateStrategy: unsupervised
   storage:
@@ -50,10 +43,7 @@ spec:
         compression: bzip2
         maxParallel: 4
       destinationPath: s3://postgresql/
-      endpointURL: https://seaweedfs-s3.seaweedfs.svc:8443
-      endpointCA:
-        name: internal-ca-bundle
-        key: ca.crt
+      endpointURL: http://seaweedfs-s3.seaweedfs.svc:8333
       serverName: authelia-postgres-v17
       s3Credentials:
         accessKeyId:
