@@ -6,6 +6,7 @@ resources:
   - ./scheduled-backup.yaml
   - ./cluster-v18.yaml
   - ./network-policy.yaml
+  - ./cilium-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: home-assistant

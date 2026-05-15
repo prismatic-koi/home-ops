@@ -6,3 +6,4 @@ resources:
   - scheduled-backup.yaml
   - secret.sops.yaml
   - network-policy.yaml
+  - cilium-network-policy.yaml
