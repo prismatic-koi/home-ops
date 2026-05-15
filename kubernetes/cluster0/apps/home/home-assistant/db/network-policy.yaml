@@ -76,6 +76,30 @@ spec:
             matchLabels:
               cnpg.io/cluster: home-assistant-postgres-v18
 ---
+# Allow ingress from cloudnative-pg operator on :8000 (instance manager HTTP endpoint)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: home-assistant-postgres-v18-allow-operator-ingress
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: home-assistant-postgres-v18
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - port: 8000
+          protocol: TCP
+---
 # Allow ingress from home/home-assistant on :5432
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
