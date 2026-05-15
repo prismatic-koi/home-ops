@@ -19,3 +19,10 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
