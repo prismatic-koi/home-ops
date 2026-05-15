@@ -102,6 +102,18 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: networking
+      allow-monitoring-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+              ports:
+                - port: 8123
+                  protocol: TCP
       allow-postgres-egress:
         controller: main
         policyTypes: [Egress]

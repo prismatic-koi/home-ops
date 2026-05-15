@@ -89,6 +89,18 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: networking
+      allow-monitoring-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+              ports:
+                - port: 8080
+                  protocol: TCP
       allow-home-assistant-ingress:
         controller: main
         policyTypes: [Ingress]
