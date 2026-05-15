@@ -6,7 +6,18 @@ metadata:
   name: cluster-apps-local-path-provisioner
   namespace: flux-system
 spec:
-  path: ./kubernetes/cluster0/apps/kube-system/local-path-provisioner/app
+  # This path was historically `./app` (the Helm release for the upstream
+  # local-path-provisioner chart) but is intentionally disabled in the root
+  # kube-system kustomization — the actual local-path-provisioner running in
+  # the cluster is the k3s built-in addon reconciled by the k3s
+  # `objectset.rio.cattle.io` machinery, not Helm. See the comment in
+  # `apps/kube-system/kustomization.yaml`.
+  #
+  # Phase 4b (#2951) re-enables this Flux Kustomization but points it at a
+  # dedicated `policy/` directory that contains only the NetworkPolicy and
+  # CiliumNetworkPolicy that lock down the k3s-managed pod. Adding policies
+  # without re-introducing the Helm release.
+  path: ./kubernetes/cluster0/apps/kube-system/local-path-provisioner/policy
   prune: true
   sourceRef:
     kind: GitRepository

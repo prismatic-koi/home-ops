@@ -1,0 +1,16 @@
+---
+# CiliumNetworkPolicy: local-path-provisioner egress to the K8s API server.
+# Companion to local-path-provisioner-allow-k8s-api (defence-in-depth ipBlock).
+# Authoritative under Cilium kubeProxyReplacement=true — see #2829 / #2947.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: local-path-provisioner-allow-kube-apiserver
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: local-path-provisioner
+  egress:
+    - toEntities:
+        - kube-apiserver

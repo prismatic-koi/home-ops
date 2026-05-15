@@ -1,0 +1,43 @@
+---
+# CiliumNetworkPolicy: metrics-server bi-directional K8s API allow + kubelet
+# egress on the host-network entity.
+#
+# Egress block 1: kube-apiserver entity allow (resource lookups for nodes,
+# APIService reconciliation). Standard ipBlock rules are bypassed by Cilium
+# under kubeProxyReplacement=true because the API server runs in the host
+# network namespace — see #2829 / #2947.
+#
+# Egress block 2: kubelet :10250 on every node. Kubelets run with
+# hostNetwork=true and Cilium assigns them `reserved:host` /
+# `reserved:remote-node` entity identity, so the egress on :10250 must use
+# `toEntities: [host, remote-node]`. Same pattern as #2965 (Prometheus host-
+# network scrape targets).
+#
+# Ingress: kube-apiserver calls back to the pod on :10250 (the aggregated
+# v1beta1.metrics.k8s.io APIService routes through the metrics-server Service).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-server-allow-kube-apiserver
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  egress:
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP

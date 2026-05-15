@@ -1,0 +1,16 @@
+---
+# CiliumNetworkPolicy: reloader egress to the K8s API server.
+# Companion to reloader-allow-k8s-api (defence-in-depth ipBlock). Authoritative
+# under Cilium kubeProxyReplacement=true — see #2829 / #2947.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: reloader-allow-kube-apiserver
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: reloader
+  egress:
+    - toEntities:
+        - kube-apiserver

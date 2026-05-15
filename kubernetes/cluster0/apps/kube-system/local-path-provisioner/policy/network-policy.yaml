@@ -1,0 +1,80 @@
+---
+# =============================================================================
+# local-path-provisioner — Phase 4b (#2951)
+# Pod label: app=local-path-provisioner (Deployment, k3s built-in addon —
+#            NOT managed by the sibling Helm release in ../app/, which is
+#            commented out in apps/kube-system/kustomization.yaml).
+# Listens on: nothing (no exposed containerPort — verified).
+# Ingress: none required.
+# Egress to: K8s API (watches PersistentVolumeClaims and Pods; creates/
+#            deletes helper Pods for volume setup/teardown), DNS.
+#
+# Note: this policy lives under a dedicated `policy/` subdirectory because
+# the Helm-based local-path-provisioner ks.yaml is intentionally disabled —
+# the running addon ships with k3s and is reconciled by the k3s
+# `objectset.rio.cattle.io` machinery. The dedicated Flux Kustomization in
+# `policy/ks.yaml` reconciles only this NetworkPolicy + sibling
+# CiliumNetworkPolicy without touching the k3s-managed Deployment.
+# =============================================================================
+---
+# Default deny-all for local-path-provisioner
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: local-path-provisioner-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app: local-path-provisioner
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution to CoreDNS in kube-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: local-path-provisioner-allow-dns
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app: local-path-provisioner
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow egress to Kubernetes API server (PVC/Pod watch + helper Pod
+# create/delete).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: local-path-provisioner-allow-k8s-api
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app: local-path-provisioner
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)

@@ -10,7 +10,10 @@ resources:
   # I manged to with cilium, but when there is no coredns, things fall apart
   # - ./coredns/ks.yaml
   - ./intel-device-plugin/ks.yaml
-  # - ./local-path-provisioner/ks.yaml
+  # Phase 4b (#2951): re-enabled but pointing at a NetworkPolicy-only path —
+  # the actual local-path-provisioner running in the cluster is the k3s
+  # built-in addon, not the Helm release in ./local-path-provisioner/app/.
+  - ./local-path-provisioner/ks.yaml
   - ./node-feature-discovery/ks.yaml
   - ./metrics-server/ks.yaml
   - ./reloader/ks.yaml

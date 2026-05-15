@@ -1,0 +1,18 @@
+---
+# CiliumNetworkPolicy: NFD egress to the K8s API server.
+# Companion to node-feature-discovery-allow-k8s-api (defence-in-depth ipBlock).
+# Authoritative under Cilium kubeProxyReplacement=true — see #2829 / #2947.
+# Selects all three NFD roles (master, gc, worker).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: node-feature-discovery-allow-kube-apiserver
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: node-feature-discovery
+  egress:
+    - toEntities:
+        - kube-apiserver
