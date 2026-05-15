@@ -136,7 +136,9 @@ spec:
         rules:
           egress:
             - ports:
-                - port: 389
+                - port: 1389
+                  protocol: TCP
+                - port: 1636
                   protocol: TCP
               to:
                 - namespaceSelector:
