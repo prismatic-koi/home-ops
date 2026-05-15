@@ -99,6 +99,99 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+    networkpolicies:
+      default-deny:
+        controller: authelia
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: authelia
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: authelia
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+              ports:
+                - port: 80
+                  protocol: TCP
+      allow-openldap-egress:
+        controller: authelia
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 389
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: auth
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: openldap
+      allow-valkey-egress:
+        controller: authelia
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 6379
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: auth
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: valkey
+      allow-postgres-egress:
+        controller: authelia
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 5432
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: databases
+                  podSelector:
+                    matchLabels:
+                      cnpg.io/cluster: authelia-postgres-v17
+      allow-external-egress:
+        controller: authelia
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 587
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
     persistence:
       config:
         type: configMap

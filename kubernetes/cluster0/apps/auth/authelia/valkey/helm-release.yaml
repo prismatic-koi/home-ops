@@ -27,6 +27,40 @@ spec:
             env:
               VALKEY_PASSWORD_FILE: /secret/valkey-password
               VALKEY_PORT: &port 6379
+    networkpolicies:
+      default-deny:
+        controller: valkey
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: valkey
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-authelia-ingress:
+        controller: valkey
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: auth
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: authelia
+              ports:
+                - port: 6379
+                  protocol: TCP
     persistence:
       data:
         type: emptyDir

@@ -1,0 +1,153 @@
+---
+# NetworkPolicy: openldap (LDAP server pod)
+# Allows ingress from intra-ns authelia (LDAP queries :389)
+# and from intra-ns phpldapadmin (LDAP queries :389 — phpLDAPadmin is a separate pod in this chart)
+# Default-deny + DNS egress only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openldap-default-deny
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: openldap
+      app.kubernetes.io/component: openldap
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openldap-allow-dns
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: openldap
+      app.kubernetes.io/component: openldap
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openldap-allow-ldap-ingress
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: openldap
+      app.kubernetes.io/component: openldap
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: auth
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: authelia
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: auth
+          podSelector:
+            matchLabels:
+              app: phpldapadmin
+      ports:
+        - port: 389
+          protocol: TCP
+---
+# NetworkPolicy: openldap-phpldapadmin (separate deployment pod)
+# Allows ingress from networking ns (Traefik — web UI access)
+# Default-deny + DNS egress + egress to openldap :389 (phpLDAPadmin needs to query LDAP)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phpldapadmin-default-deny
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app: phpldapadmin
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phpldapadmin-allow-dns
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app: phpldapadmin
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phpldapadmin-allow-traefik-ingress
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app: phpldapadmin
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+      ports:
+        - port: 80
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phpldapadmin-allow-openldap-egress
+  namespace: auth
+spec:
+  podSelector:
+    matchLabels:
+      app: phpldapadmin
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 389
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: auth
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: openldap
+              app.kubernetes.io/component: openldap
