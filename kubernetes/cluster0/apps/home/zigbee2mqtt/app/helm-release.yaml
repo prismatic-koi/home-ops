@@ -101,6 +101,12 @@ spec:
                   podSelector:
                     matchLabels:
                       app.kubernetes.io/name: prometheus-blackbox-exporter
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: uptime-kuma
               ports:
                 - port: 8080
                   protocol: TCP
@@ -110,7 +116,10 @@ spec:
         rules:
           ingress:
             - from:
-                - podSelector:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: home-assistant
       allow-mosquitto-egress:
@@ -122,7 +131,10 @@ spec:
                 - port: 1883
                   protocol: TCP
               to:
-                - podSelector:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: mosquitto
 

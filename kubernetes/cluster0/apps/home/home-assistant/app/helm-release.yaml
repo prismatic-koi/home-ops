@@ -114,6 +114,12 @@ spec:
                   podSelector:
                     matchLabels:
                       app.kubernetes.io/name: prometheus-blackbox-exporter
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: uptime-kuma
               ports:
                 - port: 8123
                   protocol: TCP
@@ -141,7 +147,10 @@ spec:
                 - port: 1883
                   protocol: TCP
               to:
-                - podSelector:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: mosquitto
       allow-zigbee2mqtt-egress:
@@ -153,9 +162,24 @@ spec:
                 - port: 8080
                   protocol: TCP
               to:
-                - podSelector:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: zigbee2mqtt
+      allow-lan-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - to:
+                - ipBlock:
+                    cidr: 10.0.0.0/8
+                - ipBlock:
+                    cidr: 172.16.0.0/12
+                - ipBlock:
+                    cidr: 192.168.0.0/16
       allow-external-egress:
         controller: main
         policyTypes: [Egress]

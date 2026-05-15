@@ -49,7 +49,10 @@ spec:
         rules:
           ingress:
             - from:
-                - podSelector:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: searxng
               ports:
