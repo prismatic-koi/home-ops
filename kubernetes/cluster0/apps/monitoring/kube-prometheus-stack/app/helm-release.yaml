@@ -220,7 +220,7 @@ spec:
         podMonitorSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
         scrapeConfigSelectorNilUsesHelmValues: false
-        enableAdminAPI: true
+        enableAdminAPI: false
         walCompression: true
         enableFeatures:
           - auto-gomaxprocs

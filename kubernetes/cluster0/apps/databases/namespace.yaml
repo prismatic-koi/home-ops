@@ -5,4 +5,6 @@ metadata:
   name: databases
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
     trust.cert-manager.io/enabled: "true"
