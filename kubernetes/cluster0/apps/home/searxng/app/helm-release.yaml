@@ -95,7 +95,10 @@ spec:
                 - port: 6379
                   protocol: TCP
               to:
-                - podSelector:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: searxng-valkey
       allow-external-egress:
