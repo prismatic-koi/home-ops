@@ -297,8 +297,8 @@ spec:
               app.kubernetes.io/name: prometheus
 ---
 # Allow Prometheus egress to scrape cert-manager metrics on :9402
-# ServiceMonitor cert-manager/cert-manager targets app.kubernetes.io/name=cert-manager pods
-# containerPort: 9402 (name: http-metrics)
+# All three cert-manager pods (controller, cainjector, webhook) share
+# app.kubernetes.io/instance=cert-manager and expose :9402 (http-metrics)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -319,7 +319,33 @@ spec:
               kubernetes.io/metadata.name: cert-manager
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: cert-manager
+              app.kubernetes.io/instance: cert-manager
+---
+# Allow Prometheus self-scrape ingress — receiving end of the self-scrape
+# (egress is already covered by prometheus-allow-self-scrape-egress)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-self-scrape-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9090
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
 ---
 # Allow Prometheus egress to scrape kube-system namespace targets:
 # - cilium-agent: containerPort 9962 (name: prometheus), pod label k8s-app=cilium
