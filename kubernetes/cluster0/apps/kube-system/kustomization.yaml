@@ -6,9 +6,11 @@ resources:
   - ./namespace.yaml
   # Flux-Kustomizations
   - ./cilium/ks.yaml
-  # I havent been able to figure out how to override the cusotm coredns addon
-  # I manged to with cilium, but when there is no coredns, things fall apart
-  # - ./coredns/ks.yaml
+  # The CoreDNS HelmRelease in ./coredns/app/ remains intentionally disabled
+  # (live CoreDNS predates Flux management of the chart). Phase 4c (#2952)
+  # re-enables this Flux Kustomization pointing at ./coredns/policy/ — see
+  # ./coredns/ks.yaml for the rationale.
+  - ./coredns/ks.yaml
   - ./intel-device-plugin/ks.yaml
   # Phase 4b (#2951): re-enabled but pointing at a NetworkPolicy-only path —
   # the actual local-path-provisioner running in the cluster is the k3s

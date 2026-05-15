@@ -1,0 +1,102 @@
+---
+# =============================================================================
+# Longhorn — CiliumNetworkPolicy companions for K8s API egress (Phase 4c,
+# #2952). Authoritative under Cilium kubeProxyReplacement=true because the
+# apiserver runs in the host network namespace and standard NetworkPolicy
+# ipBlock matches are bypassed — see #2829 (external-dns) and #2947 (cnpg-
+# operator) for the original investigation.
+#
+# Each policy mirrors a sibling NetworkPolicy in ./network-policy.yaml and
+# selects the same pod label set.
+# =============================================================================
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-manager-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-manager
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-csi-plugin-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-csi-plugin
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: csi-attacher-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: csi-attacher
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: csi-provisioner-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: csi-provisioner
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: csi-resizer-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: csi-resizer
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: csi-snapshotter-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: csi-snapshotter
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-driver-deployer-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-driver-deployer
+  egress:
+    - toEntities:
+        - kube-apiserver

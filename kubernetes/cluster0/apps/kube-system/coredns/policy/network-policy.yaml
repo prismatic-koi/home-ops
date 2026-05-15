@@ -1,0 +1,230 @@
+---
+# =============================================================================
+# CoreDNS — Phase 4c (#2952, parent design #2812).
+# **The final Phase 4 child PR — deliberately last in the whole rollout.**
+#
+# CoreDNS is the cluster's DNS server. A mistake here means every pod cluster-
+# wide loses name resolution. This policy is deliberately landed last so that
+# every other namespace has had its DNS egress rule verified working in
+# practice in steady state before CoreDNS itself is locked down.
+#
+# Running deployment: `coredns` (Deployment, replicaCount=2) selected by
+# `k8s-app=kube-dns`. The Deployment was installed from the upstream CoreDNS
+# Helm chart and the in-cluster ConfigMap `coredns` carries this Corefile:
+#
+#     dns://.:53 {
+#         log
+#         errors
+#         health { lameduck 5s }
+#         ready
+#         kubernetes cluster.local in-addr.arpa ip6.arpa {
+#             pods insecure
+#             fallthrough in-addr.arpa ip6.arpa
+#             ttl 30
+#         }
+#         prometheus 0.0.0.0:9153
+#         forward . /etc/resolv.conf
+#         cache 30
+#         loop
+#         reload
+#         loadbalance
+#     }
+#
+# The `forward . /etc/resolv.conf` clause delegates upstream resolution to the
+# node's resolv.conf (the Deployment runs with dnsPolicy=Default). On this
+# cluster the node resolv.conf points at the Blocky DNS appliances exposed as
+# LoadBalancer services in the `networking` namespace:
+#   - blocky-primary-dns   LB IP 10.87.42.11
+#   - blocky-secondary-dns LB IP 10.87.42.15
+# Both LB IPs sit in the node /24 (10.87.42.0/24). The egress allow below
+# scopes upstream DNS to that /24 — covering the Blocky LBs plus the router
+# and any other LAN-side DNS device on the same subnet. Per #2812 and #2952
+# the upstream-DNS narrowing beyond this point is explicitly router-config
+# territory and out of scope.
+#
+# This file lives under a dedicated `policy/` subdirectory (sibling to `app/`)
+# in the same pattern as `local-path-provisioner/policy/`: the Helm release
+# in `coredns/app/helm-release.yaml` is intentionally NOT reconciled by the
+# root `apps/kube-system/kustomization.yaml` because the live CoreDNS install
+# predates Flux management of this chart and the team has chosen not to take
+# it over yet. The dedicated Flux Kustomization in `coredns/ks.yaml` (re-
+# enabled by this PR) reconciles only the policies in this directory.
+# =============================================================================
+---
+# -----------------------------------------------------------------------------
+# Default-deny for CoreDNS pods.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coredns-default-deny
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes: [Ingress, Egress]
+---
+# -----------------------------------------------------------------------------
+# INTENTIONAL WILDCARD INGRESS — every pod in every namespace can reach
+# CoreDNS on :53.
+#
+# This is the single, deliberate `namespaceSelector: {}` rule in the whole
+# Phase 4 rollout (#2812, #2952). Every other ingress rule in this PR — and
+# every other rule across Phases 1-3 — uses tightly-scoped namespaceSelector
+# + podSelector AND-shape entries.
+#
+# The wildcard is correct here, and ONLY here, because:
+#   - DNS is universal. Every pod cluster-wide needs to resolve names via
+#     CoreDNS; the alternative is enumerating every namespace selector here
+#     and updating this file on every new namespace.
+#   - The risk surface is tightly bound by port: only :53 UDP and :53 TCP
+#     are allowed. CoreDNS exposes :9153 for Prometheus scrape; that port
+#     has its own ingress rule below scoped to the Prometheus pod selector.
+#
+# Reference: #2952 Acceptance Criteria — "CoreDNS wildcard
+# `namespaceSelector: {}` is the only wildcard in this PR".
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coredns-allow-dns-ingress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}    # universal — see comment above; this is
+                                   # the ONE deliberate wildcard in Phase 4.
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# Prometheus scrape ingress on :9153 (CoreDNS `prometheus 0.0.0.0:9153`).
+# Scope: monitoring ns + app.kubernetes.io/name=prometheus pod selector.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coredns-allow-prometheus-scrape
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9153
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# Egress to upstream DNS on :53 — scoped to the node /24 (10.87.42.0/24).
+#
+# CoreDNS's `forward . /etc/resolv.conf` delegates to the node's resolv.conf,
+# which on this cluster points at the Blocky LB IPs (10.87.42.11,
+# 10.87.42.15) in the same /24 as the nodes. Narrowing beyond the /24 is
+# router-config territory and explicitly out of scope per #2812 / #2952.
+#
+# This rule is the closest equivalent to "ipBlock entries from the Corefile"
+# expected by the issue ACs — the Corefile delegates to resolv.conf, and
+# resolv.conf resolves to addresses in this /24.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coredns-allow-upstream-dns-egress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.87.42.0/24   # node /24 — covers Blocky LB IPs
+                                  # (10.87.42.11, 10.87.42.15) and any other
+                                  # LAN-side DNS appliance on this subnet
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# Egress to K8s API — CoreDNS's `kubernetes cluster.local …` plugin watches
+# Endpoints/Services/Pods via the apiserver to answer in-cluster lookups.
+#
+# Dual-policy pattern: this ipBlock NetworkPolicy is defence-in-depth; the
+# authoritative rule under kubeProxyReplacement=true is the sibling
+# CiliumNetworkPolicy with `toEntities: [kube-apiserver]`.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coredns-allow-k8s-api
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16   # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+---
+# -----------------------------------------------------------------------------
+# Intra-CoreDNS egress on :53 — the two replicas occasionally chat to each
+# other (loop detection, health probes via Service). Scoped tight to the
+# `k8s-app=kube-dns` pod selector inside kube-system; no broader kube-system
+# allow (CoreDNS does NOT need to talk to other kube-system pods).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coredns-allow-peer-egress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
