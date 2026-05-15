@@ -4,6 +4,8 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./httpsredirect.yaml
+  - ./network-policy.yaml
+  - ./cilium-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: traefik

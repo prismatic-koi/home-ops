@@ -1,0 +1,22 @@
+---
+# CiliumNetworkPolicy: allow Traefik egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy
+# (traefik-allow-k8s-api) is kept for defence-in-depth, but this
+# CiliumNetworkPolicy is what actually enforces the allow in practice. See
+# #2829 (external-dns fix-forward) and #2947 (cnpg) for the same pattern.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: traefik-allow-kube-apiserver
+  namespace: networking
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  egress:
+    - toEntities:
+        - kube-apiserver

@@ -1,0 +1,176 @@
+---
+# Default deny-all for Traefik pods.
+# Traefik is the cluster ingress entrypoint; every legitimate flow is explicitly
+# allowed by the sibling NetworkPolicies in this file. See Phase 4a design
+# (#2950) and the parent design doc (#2812).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow DNS resolution to CoreDNS in kube-system.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow external ingress on :80 and :443 from anywhere.
+# Traefik IS the cluster entrypoint — no RFC1918 exclusion.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-external-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+---
+# Allow intra-ns ingress from cloudflared — the Cloudflare tunnel terminates
+# at Traefik via the local cluster network on :443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-cloudflared-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflared
+      ports:
+        - port: 443
+          protocol: TCP
+---
+# Allow egress to any pod in any namespace labelled
+# netpol.home-ops/traefik-backend: "true", on any TCP port.
+#
+# This is intentionally broad. The security boundary is enforced on the
+# backend side: each backend pod retains its existing tight
+# `allow-traefik-ingress` rule from Phase 1/2, scoped to Traefik's pod
+# selector and the backend's specific port. A Traefik compromise can still
+# only reach pods that opt in via their own ingress allow. See #2812 design.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-backend-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              netpol.home-ops/traefik-backend: "true"
+      ports:
+        - port: 1
+          endPort: 65535
+          protocol: TCP
+---
+# Allow egress to Authelia for forward-auth.
+# AND-shape: namespaceSelector (auth) AND podSelector (authelia instance).
+# Port 80 is Authelia's actual containerPort (Service targetPort 80 → pod 80),
+# NOT 9091 — see #2942 forward-auth correction.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-authelia-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: auth
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: authelia
+      ports:
+        - port: 80
+          protocol: TCP
+---
+# Allow egress to Kubernetes API server (in-cluster service CIDR + control
+# plane node) for IngressRoute / HTTPRoute / Gateway reconciliation.
+# Companion to the CiliumNetworkPolicy (toEntities: kube-apiserver) — both are
+# required because Cilium's kubeProxyReplacement bypasses ipBlock matches for
+# the host-networked API server. Defence-in-depth per #2829 / #2947.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-k8s-api
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
