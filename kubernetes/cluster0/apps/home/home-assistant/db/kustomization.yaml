@@ -5,6 +5,7 @@ resources:
   - ./secret.sops.yaml
   - ./scheduled-backup.yaml
   - ./cluster-v18.yaml
+  - ./network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: home-assistant

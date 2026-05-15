@@ -1,0 +1,89 @@
+---
+# Default deny-all for cloudnative-pg operator pod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudnative-pg-default-deny
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudnative-pg-allow-dns
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow egress to Kubernetes API server (in-cluster service CIDR + control plane node)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudnative-pg-allow-k8s-api
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
+---
+# Allow Prometheus to scrape cloudnative-pg operator metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudnative-pg-allow-prometheus-scrape
+  namespace: databases
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 8080
+          protocol: TCP
