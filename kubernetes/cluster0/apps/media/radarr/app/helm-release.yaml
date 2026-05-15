@@ -33,8 +33,8 @@ spec:
               tag: "6.1.1@sha256:15417a594ebda4c660a9fa9748e7199d33e2d17b31bbc5ad7ba2e86f0b414763"
             env:
               TZ: "${TIMEZONE}"
-              PUID: 0
-              PGID: 0
+              PUID: 1000
+              PGID: 1000
             # to avoid permissions issues on volume
             securityContext:
               runAsUser: 0
