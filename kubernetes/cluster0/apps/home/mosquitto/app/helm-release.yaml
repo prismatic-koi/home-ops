@@ -119,7 +119,8 @@ spec:
         data:
           mosquitto.conf: |
             listener 1883
-            allow_anonymous true
+            allow_anonymous false
+            password_file /mosquitto/secret/passwd
             persistence false
             connection_messages false
     persistence:
@@ -131,3 +132,12 @@ spec:
             app:
               - path: /mosquitto/config/mosquitto.conf
                 subPath: mosquitto.conf
+      passwd:
+        type: secret
+        name: mosquitto-passwd
+        advancedMounts:
+          main:
+            app:
+              - path: /mosquitto/secret/passwd
+                subPath: passwd
+                readOnly: true

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mosquitto-passwd
+  namespace: home
+stringData:
+  passwd: ENC[AES256_GCM,data:THDgQ4T5p1ON4W5LjZcDWCh5/DiPEXJLBxJ4rLFurZxyVlLs7fGZxbc93vPJ6luuxBWUNjyeREIOoqF0n/kcsy/YQewyFvUobMqhRjCRKfqd46E1eY2Yx6pqk8p+OMmQgz+7IlreNevtaL5rep4j6awLI/H+Rj49lbZtKcsyx6rfotxWXJ0N2DlcuqrO5RPwytuxIa1h7RBwr37AENWUexADxGme3qyPrHn7KsZUxGU+8jKWlZf0l/D0HrXofQ8js2iamUx1I9fIHedgZaUAeQWHy/ovbVtC3DpY/UMYLra1AV8lua5EAxOv4xsI6XFvhQIcThdJ6vu92KQy,iv:RYRACKIurMw43wWQ9Sfk0b/dPNRilgFBYR4GW/NPLwM=,tag:M6A0Jetr84vr/3r5UCluaw==,type:str]
+sops:
+  age:
+    - enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAwQS9uNGpVUW1YMk1HUUVQ
+        a283RUVMRE5NV01wRlpBcTkraWErK1pHTzFZCmdOVm9nM0NjOS9KNHlKb003bnRS
+        YlJVSmhJQXhNUXl1NUd0d3FwWmtTclkKLS0tIDhZRkk1SlYzLzh1WGt4V2JJWGtx
+        S3JBcWZKK3dHWUhLd3Z5Z1lnbkJCQVUKEXwPRg1dgVxX6QSazcds6yHeYWJmWngk
+        De2cc/3s1D+Bw4tUMtD4Nr7KCdqjVnm8Jirg0wUUlxewZamQq7jcRw==
+        -----END AGE ENCRYPTED FILE-----
+      recipient: age1582vh25trj6w7klwt38d44n5nr8njr8rrxxx5kcfu3y2ezx9ss3s6j24ex
+    - enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBZUlY0amcrY3ZralpTQzVj
+        Q0NXYjI2dTFvdDhGZWxpVCtWbDlleFNVTGlRCjA3V2h3K1RVRml2RGc1Ky9ZbTJp
+        NEFOellmbGppdHRiTG5ZMDJKQUFEdW8KLS0tIE5HSFJDZk1ZSjlTUm9qUkZYMzNU
+        TW5FbENlT3c0WmsvcVlrYmhGc1hYRmsKTdcViX/HqWBo+RHiJJE4PVDVdlEUIi7M
+        JSfmbhb6S6aabtQsDxmDVd75McwjLiRxeG0DTNe2YEjexaXv07oL5Q==
+        -----END AGE ENCRYPTED FILE-----
+      recipient: age185kanaq3uw2gjx5enu2v69nk9ner3lamdevrfgx3wqucsl9ewa2qlt2gf7
+  encrypted_regex: ^(data|stringData)$
+  lastmodified: "2026-05-15T08:19:09Z"
+  mac: ENC[AES256_GCM,data:wMvz85tOG8UjvN6W/nzqcHaprkWs3jlpnfNRBOpDzd0B7MaKn7y3TrkVG3ckY7Ga0Q3/6v9oX97BJTQDJynhYU1025Gz2edFQ4e/wP7vADVFVtQDEXb7NjdUvfpHKauSC2peHKkzMp7Qp0idq7XUa61B15TiTWsarIbu+Q09Aq8=,iv:+fUEROPE9ld+lSv3rB5zslT+WYzc1E1e3QRWeL6eS/M=,tag:bmw8GTfLQYDVkdLb6tTdmA==,type:str]
+  version: 3.13.0
