@@ -5,6 +5,7 @@ resources:
   - ./helm-release.yaml
   - ./secret.sops.yaml
   - ./probe.yaml
+  - ./network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: grafana

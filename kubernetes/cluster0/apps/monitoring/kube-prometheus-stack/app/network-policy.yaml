@@ -1,7 +1,10 @@
 ---
+# =============================================================================
 # Prometheus egress allows for databases namespace scraping (Phase 3a)
-# Note: Prometheus default-deny and full egress lockdown land in Phase 3b (#2945).
-# This file adds only the targeted egress allows needed for databases/seaweedfs scraping.
+# Note: Default-deny on Prometheus lands in Phase 3b (this PR), below.
+# These rules were added first (by #2947) to preserve scraping while
+# the full default-deny was staged.
+# =============================================================================
 
 # Allow Prometheus to scrape CNPG cluster pod metrics on :9187
 apiVersion: networking.k8s.io/v1
@@ -51,3 +54,861 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: cloudnative-pg
+
+# =============================================================================
+# Prometheus — Phase 3b full lockdown (#2945)
+# Pod label: app.kubernetes.io/name=prometheus (StatefulSet, 2 replicas)
+# Listens on: :9090 (http-web), :8080 (config-reloader)
+# Ingress from: intra-ns grafana :9090, intra-ns prometheus-operator :8080 (reload)
+# Egress to: intra-ns alertmanager :9093, K8s API, every scrape target namespace
+# =============================================================================
+---
+# Default deny-all for Prometheus
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from intra-ns Grafana on :9090 (datasource queries)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-grafana-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - port: 9090
+          protocol: TCP
+---
+# Allow ingress from intra-ns prometheus-operator (config reload sidecar on :8080)
+# The prometheus-operator pod sends reload requests to the config-reloader on :8080
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-operator-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+      ports:
+        - port: 9090
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+---
+# Allow egress to intra-ns Alertmanager on :9093 (alert push)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-alertmanager-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9093
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+---
+# Allow egress to K8s API server (service discovery, label lookups)
+# ipBlock covers the cluster service CIDR (kubernetes.default.svc) and control-plane nodes.
+# The companion CiliumNetworkPolicy (prometheus-allow-kube-apiserver) is what Cilium actually
+# enforces when kubeProxyReplacement=true — the ipBlock rule is defence-in-depth.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-k8s-api
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth; CiliumNP is authoritative)
+---
+# Allow Prometheus egress to scrape intra-ns kube-state-metrics on :8080
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-state-metrics-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kube-state-metrics
+---
+# Allow Prometheus egress to scrape intra-ns alertmanager on :9093 + :8080 (reloader)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-alertmanager-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9093
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+---
+# Allow Prometheus egress to scrape intra-ns prometheus-operator on :10250 (https)
+# The operator exposes metrics on containerPort 10250 (named "https")
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-operator-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 10250
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+---
+# Allow Prometheus egress to scrape intra-ns prometheus itself (self-scrape on :9090 + reloader :8080)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-self-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9090
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+---
+# Allow Prometheus egress to scrape cert-manager metrics on :9402
+# ServiceMonitor cert-manager/cert-manager targets app.kubernetes.io/name=cert-manager pods
+# containerPort: 9402 (name: http-metrics)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-cert-manager-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9402
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cert-manager
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cert-manager
+---
+# Allow Prometheus egress to scrape kube-system namespace targets:
+# - cilium-agent: containerPort 9962 (name: prometheus), pod label k8s-app=cilium
+# - hubble-metrics: containerPort 9965 (name: hubble-metrics) on same cilium-agent pods
+# - cilium-envoy: containerPort 9964 (name: envoy-metrics), pod label k8s-app=cilium-envoy
+# - cilium-operator: containerPort 9963, pod label io.cilium/app=operator
+# - coredns metrics: containerPort 9153, pod label k8s-app=kube-dns
+# - metrics-server: containerPort 10250 (name: https), pod label app.kubernetes.io/name=metrics-server
+# - reloader: containerPort 9090 (name: http), pod label app.kubernetes.io/name=reloader
+# - kubelet: node IPs on :10250 and :4194 (host-network, addressed via ipBlock below)
+# - apiserver: kubernetes service in default ns -> :443/:6443 (covered by k8s-api rule above)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-system-cilium-agent-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # cilium-agent metrics (:9962) and hubble-metrics (:9965) — same pod, k8s-app=cilium
+    - ports:
+        - port: 9962
+          protocol: TCP
+        - port: 9965
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: cilium
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-system-cilium-envoy-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # cilium-envoy metrics (:9964)
+    - ports:
+        - port: 9964
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: cilium-envoy
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-system-cilium-operator-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # cilium-operator metrics (:9963)
+    - ports:
+        - port: 9963
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              io.cilium/app: operator
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-system-coredns-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # coredns metrics (:9153)
+    - ports:
+        - port: 9153
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-system-metrics-server-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # metrics-server (:10250 https)
+    - ports:
+        - port: 10250
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: metrics-server
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kube-system-reloader-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # reloader metrics (:9090)
+    - ports:
+        - port: 9090
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: reloader
+---
+# Allow Prometheus egress to scrape kubelet on node IPs (:10250 https-metrics, :4194 cadvisor)
+# Kubelet runs in the host network — endpoints are node IPs, not namespaced pods.
+# The node CIDR is 10.87.42.0/24.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-kubelet-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 10250
+          protocol: TCP
+        - port: 4194
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.0/24  # node CIDR — kubelet/cadvisor on host network
+---
+# Allow Prometheus egress to scrape longhorn-system on :9500
+# ServiceMonitor longhorn-prometheus-servicemonitor targets app=longhorn-manager pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-longhorn-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9500
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: longhorn-system
+          podSelector:
+            matchLabels:
+              app: longhorn-manager
+---
+# Allow Prometheus egress to scrape networking/blocky-primary and blocky-secondary on :4000
+# ServiceMonitors blocky-primary and blocky-secondary target port http -> :4000
+# Pod labels: app.kubernetes.io/name=blocky-primary / blocky-secondary
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-networking-blocky-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 4000
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: blocky-primary
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: blocky-secondary
+
+# =============================================================================
+# Alertmanager — Phase 3b (#2945)
+# Pod label: app.kubernetes.io/name=alertmanager (StatefulSet, 2 replicas)
+# Listens on: :9093 (http-web), :9094 (mesh TCP/UDP), :8080 (reloader-web)
+# Ingress from: intra-ns prometheus :9093 (alert push)
+# Egress to: external SMTP :587 (email notifications), alertmanager mesh :9094 (intra-ns)
+# =============================================================================
+---
+# Default deny-all for alertmanager
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from intra-ns Prometheus on :9093 (alert push)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-allow-prometheus-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9093
+          protocol: TCP
+---
+# Allow ingress from intra-ns prometheus scrape on :9093 + reloader :8080
+# (Prometheus scrapes alertmanager metrics via ServiceMonitor)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-allow-prometheus-scrape-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9093
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+---
+# Allow alertmanager mesh (HA gossip) between the two alertmanager replicas on :9094
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-allow-mesh
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+      ports:
+        - port: 9094
+          protocol: TCP
+        - port: 9094
+          protocol: UDP
+  egress:
+    - ports:
+        - port: 9094
+          protocol: TCP
+        - port: 9094
+          protocol: UDP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+---
+# Allow egress to external SMTP :587 (email notifications via smtp_smarthost)
+# Alertmanager is configured to send notifications via SMTP (not Discord webhooks).
+# RFC1918 ranges excluded — only external SMTP hosts.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-allow-external-smtp-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 587
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+
+# =============================================================================
+# prometheus-operator — Phase 3b (#2945)
+# Pod label: app.kubernetes.io/name=kube-prometheus-stack-prometheus-operator
+# Listens on: :10250 (https metrics), :9443 (admission webhook)
+# Ingress: webhook from K8s API server (needed for MutatingWebhookConfiguration)
+# Egress to: K8s API only
+# =============================================================================
+---
+# Default deny-all for prometheus-operator
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-operator-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-operator-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from Prometheus on :10250 (scrape of operator metrics)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-operator-allow-prometheus-scrape-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 10250
+          protocol: TCP
+---
+# Allow ingress from K8s API server for admission webhook on :9443
+# The prometheus-operator registers admission webhooks; the API server calls back on :9443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-operator-allow-webhook-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
+      ports:
+        - port: 9443
+          protocol: TCP
+---
+# Allow egress to K8s API server (reconciliation of PrometheusRule/ServiceMonitor/etc.)
+# ipBlock covers the cluster service CIDR and control-plane nodes (defence-in-depth).
+# CiliumNetworkPolicy prometheus-operator-allow-kube-apiserver is authoritative under Cilium.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-operator-allow-k8s-api
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+
+# =============================================================================
+# kube-state-metrics — Phase 3b (#2945)
+# Pod label: app.kubernetes.io/name=kube-state-metrics
+# Listens on: :8080 (http metrics), :8081 (telemetry)
+# Ingress from: intra-ns prometheus :8080 (scrape)
+# Egress to: K8s API (reads cluster state)
+# =============================================================================
+---
+# Default deny-all for kube-state-metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from intra-ns Prometheus on :8080 (scrape)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-allow-prometheus-scrape-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+# Allow egress to K8s API server (kube-state-metrics reads cluster state)
+# ipBlock covers the cluster service CIDR and control-plane nodes (defence-in-depth).
+# CiliumNetworkPolicy kube-state-metrics-allow-kube-apiserver is authoritative under Cilium.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-allow-k8s-api
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
