@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: mosquitto-passwd
+    namespace: home
+stringData:
+    passwd: ENC[AES256_GCM,data:t8m+9LxwcY1r7zqS0GyqY1hKbBNvFWY6UA14XXgt4+nVz7OgNsMxykAnzyGXb0doIIklKEECDxMMLgcoXfhkAGGI4KftPoqqLrPGhP3OmJGv6v/Nxp5KQFdDE14oJZFE4rWPr8crFWR6esAylFo2lwbQW1gfjEb7dmrphLZ3dP6uVRqK8QQyarxNtZatdIFqva1WHMS4qOsQ6QrdwJsFWaWRXXmkCEGNenXfVwIix0JIMzrWwJxU8u65yPERqHfzV/QifpxG9Qbsi9FQAzz7KjeW5+/3Q4XxXUTIMQ8MxTAEAh9kSIHlC/uO2dvlu/r2SzPWXwpvKbzHocYr,iv:3RosywFt3fZJOiaT8brj/tliunZZaeFeFTZl063MRo0=,tag:TVFWW9R6LcVssUHslucd3g==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBUcFZyVjdUSjNqTGk3QnV0
+            akZucEJaMG94dXpxQWo2ZlhnWXRseXN5NG5BCk9YR2lDOXV3c0pIN0hqNVJLUzQ3
+            RksyM0ViZ053eFhrTTUyNFBXTUpjNHcKLS0tIDhGcXByZ2J5Z255bVJyQ3VBWFFZ
+            L2ZxRkt0ekRLbjQzbTVpQ1lWZllkcHcK/x5y9IaXNunhatFHopaCiPFVX/d5qBlV
+            IeGV6o4Aok1XHmTiuCqqx/IfXWzNAz2ldjzAr4WdWAQ/T6xGIJFmfQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1582vh25trj6w7klwt38d44n5nr8njr8rrxxx5kcfu3y2ezx9ss3s6j24ex
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBLUFFNenNPOWlwTTZGZGRw
+            K241OXJ6VnJrMVdDak5hQ0x6RFo2U2F4d2lJCmF6aDBVSU1GcTAxU0JsOUdGNDN1
+            NUpHYkU0dzd4V2JjUCtRTG5lclQ3VXcKLS0tIGdiRS9rOTlheGo0ZWhPQ1A1OUJQ
+            V1prWkJVVTdsL0NrMDg2aWd1b3lnRkEKcHDdj3i7KfqF8pa5zdQ8p2HimnD9np+Z
+            5r/6LDOPgB+PEDhOGN3LiBZn9aANzIJnszqPnjROBSdA0Nt7XABfaA==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age185kanaq3uw2gjx5enu2v69nk9ner3lamdevrfgx3wqucsl9ewa2qlt2gf7
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-05-15T08:10:55Z"
+    mac: ENC[AES256_GCM,data:3XV857DGL5zwN2fVxu0OXo5um0TJrE+bJvoHyqPxV+2yLq8hcf4Y5IzX5O2gNxFeNd8ouN7f0Bm6JeysiBDlpXQpJJi7+l0gSH79eAEAYeyBMYJcMSrLPfyk1oCx0A5cyVTinTo9OAsol1uQXmVPZwACjcPnSawi0UorRz3ZFB8=,iv:VcLcyz03vaysxMZO++AUPC/VirXVVnEEOHgDziOJw90=,tag:oPAhxA/YNQo0+HMAwMtiFA==,type:str]
+    version: 3.13.0
