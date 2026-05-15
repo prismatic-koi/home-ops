@@ -1,0 +1,2331 @@
+diff --git a/.prism-review/pr-2947-round-1.diff b/.prism-review/pr-2947-round-1.diff
+new file mode 100644
+index 000000000..405dba3e3
+--- /dev/null
++++ b/.prism-review/pr-2947-round-1.diff
+@@ -0,0 +1,1137 @@
++diff --git a/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml b/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml
++index b735a8772..91430dd55 100644
++--- a/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml
+++++ b/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml
++@@ -4,3 +4,4 @@ kind: Kustomization
++ resources:
++   - cluster-v17.yaml
++   - scheduled-backup.yaml
+++  - network-policy.yaml
++diff --git a/kubernetes/cluster0/apps/auth/authelia/db/network-policy.yaml b/kubernetes/cluster0/apps/auth/authelia/db/network-policy.yaml
++new file mode 100644
++index 000000000..59d56866f
++--- /dev/null
+++++ b/kubernetes/cluster0/apps/auth/authelia/db/network-policy.yaml
++@@ -0,0 +1,145 @@
+++---
+++# Default deny-all for authelia-postgres-v17 CNPG cluster pods
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: authelia-postgres-v17-default-deny
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: authelia-postgres-v17
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: authelia-postgres-v17-allow-dns
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: authelia-postgres-v17
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow intra-namespace primary <-> replica replication on :5432
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: authelia-postgres-v17-allow-replication
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: authelia-postgres-v17
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              cnpg.io/cluster: authelia-postgres-v17
+++      ports:
+++        - port: 5432
+++          protocol: TCP
+++  egress:
+++    - ports:
+++        - port: 5432
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              cnpg.io/cluster: authelia-postgres-v17
+++---
+++# Allow ingress from auth/authelia on :5432
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: authelia-postgres-v17-allow-authelia-ingress
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: authelia-postgres-v17
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: auth
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: authelia
+++      ports:
+++        - port: 5432
+++          protocol: TCP
+++---
+++# Allow egress to seaweedfs-s3 on :8333 (WAL archiving)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: authelia-postgres-v17-allow-seaweedfs-s3-egress
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: authelia-postgres-v17
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 8333
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/component: s3
+++---
+++# Allow Prometheus to scrape postgres_exporter metrics on :9187
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: authelia-postgres-v17-allow-prometheus-scrape
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: authelia-postgres-v17
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: monitoring
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: prometheus
+++      ports:
+++        - port: 9187
+++          protocol: TCP
++diff --git a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml
++index 3c6547c33..76d0de09e 100644
++--- a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml
+++++ b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml
++@@ -4,3 +4,4 @@ kind: Kustomization
++ resources:
++   - ./helm-release.yaml
++   - ./secret.yaml
+++  - ./network-policy.yaml
++diff --git a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/network-policy.yaml b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/network-policy.yaml
++new file mode 100644
++index 000000000..7dd295479
++--- /dev/null
+++++ b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/network-policy.yaml
++@@ -0,0 +1,89 @@
+++---
+++# Default deny-all for cloudnative-pg operator pod
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: cloudnative-pg-default-deny
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: cloudnative-pg
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: cloudnative-pg-allow-dns
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: cloudnative-pg
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow egress to Kubernetes API server (in-cluster service CIDR + control plane node)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: cloudnative-pg-allow-k8s-api
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: cloudnative-pg
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 443
+++          protocol: TCP
+++      to:
+++        - ipBlock:
+++            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+++    - ports:
+++        - port: 443
+++          protocol: TCP
+++        - port: 6443
+++          protocol: TCP
+++      to:
+++        - ipBlock:
+++            cidr: 10.87.42.2/32  # control plane node
+++---
+++# Allow Prometheus to scrape cloudnative-pg operator metrics
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: cloudnative-pg-allow-prometheus-scrape
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: cloudnative-pg
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: monitoring
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: prometheus
+++      ports:
+++        - port: 8080
+++          protocol: TCP
++diff --git a/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml b/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml
++index 57d2090a2..9a8992253 100644
++--- a/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml
+++++ b/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml
++@@ -5,6 +5,7 @@ resources:
++   - ./secret.sops.yaml
++   - ./scheduled-backup.yaml
++   - ./cluster-v18.yaml
+++  - ./network-policy.yaml
++ labels:
++   - pairs:
++       app.kubernetes.io/name: home-assistant
++diff --git a/kubernetes/cluster0/apps/home/home-assistant/db/network-policy.yaml b/kubernetes/cluster0/apps/home/home-assistant/db/network-policy.yaml
++new file mode 100644
++index 000000000..6daaae081
++--- /dev/null
+++++ b/kubernetes/cluster0/apps/home/home-assistant/db/network-policy.yaml
++@@ -0,0 +1,145 @@
+++---
+++# Default deny-all for home-assistant-postgres-v18 CNPG cluster pods
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: home-assistant-postgres-v18-default-deny
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: home-assistant-postgres-v18
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: home-assistant-postgres-v18-allow-dns
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: home-assistant-postgres-v18
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow intra-namespace primary <-> replica replication on :5432
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: home-assistant-postgres-v18-allow-replication
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: home-assistant-postgres-v18
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              cnpg.io/cluster: home-assistant-postgres-v18
+++      ports:
+++        - port: 5432
+++          protocol: TCP
+++  egress:
+++    - ports:
+++        - port: 5432
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              cnpg.io/cluster: home-assistant-postgres-v18
+++---
+++# Allow ingress from home/home-assistant on :5432
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: home-assistant-postgres-v18-allow-home-assistant-ingress
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: home-assistant-postgres-v18
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: home
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: home-assistant
+++      ports:
+++        - port: 5432
+++          protocol: TCP
+++---
+++# Allow egress to seaweedfs-s3 on :8333 (WAL archiving)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: home-assistant-postgres-v18-allow-seaweedfs-s3-egress
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: home-assistant-postgres-v18
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 8333
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/component: s3
+++---
+++# Allow Prometheus to scrape postgres_exporter metrics on :9187
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: home-assistant-postgres-v18-allow-prometheus-scrape
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: home-assistant-postgres-v18
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: monitoring
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: prometheus
+++      ports:
+++        - port: 9187
+++          protocol: TCP
++diff --git a/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml b/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml
++index 35afab4d0..351800498 100644
++--- a/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml
+++++ b/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml
++@@ -5,3 +5,4 @@ resources:
++   - cluster-v17.yaml
++   - scheduled-backup.yaml
++   - secret.sops.yaml
+++  - network-policy.yaml
++diff --git a/kubernetes/cluster0/apps/media/miniflux/db/network-policy.yaml b/kubernetes/cluster0/apps/media/miniflux/db/network-policy.yaml
++new file mode 100644
++index 000000000..01bf39821
++--- /dev/null
+++++ b/kubernetes/cluster0/apps/media/miniflux/db/network-policy.yaml
++@@ -0,0 +1,145 @@
+++---
+++# Default deny-all for miniflux-postgres-v17 CNPG cluster pods
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: miniflux-postgres-v17-default-deny
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: miniflux-postgres-v17
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: miniflux-postgres-v17-allow-dns
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: miniflux-postgres-v17
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow intra-namespace primary <-> replica replication on :5432
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: miniflux-postgres-v17-allow-replication
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: miniflux-postgres-v17
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              cnpg.io/cluster: miniflux-postgres-v17
+++      ports:
+++        - port: 5432
+++          protocol: TCP
+++  egress:
+++    - ports:
+++        - port: 5432
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              cnpg.io/cluster: miniflux-postgres-v17
+++---
+++# Allow ingress from media/miniflux on :5432
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: miniflux-postgres-v17-allow-miniflux-ingress
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: miniflux-postgres-v17
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: media
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: miniflux
+++      ports:
+++        - port: 5432
+++          protocol: TCP
+++---
+++# Allow egress to seaweedfs-s3 on :8333 (WAL archiving)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: miniflux-postgres-v17-allow-seaweedfs-s3-egress
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: miniflux-postgres-v17
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 8333
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/component: s3
+++---
+++# Allow Prometheus to scrape postgres_exporter metrics on :9187
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: miniflux-postgres-v17-allow-prometheus-scrape
+++  namespace: databases
+++spec:
+++  podSelector:
+++    matchLabels:
+++      cnpg.io/cluster: miniflux-postgres-v17
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: monitoring
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: prometheus
+++      ports:
+++        - port: 9187
+++          protocol: TCP
++diff --git a/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml
++index 76251b282..855d27b2b 100644
++--- a/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml
+++++ b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml
++@@ -3,6 +3,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
++ kind: Kustomization
++ resources:
++   - ./helm-release.yaml
+++  - ./network-policy.yaml
++ labels:
++   - pairs:
++       app.kubernetes.io/name: prometheus
++diff --git a/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml
++new file mode 100644
++index 000000000..be42a8950
++--- /dev/null
+++++ b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml
++@@ -0,0 +1,53 @@
+++---
+++# Prometheus egress allows for databases namespace scraping (Phase 3a)
+++# Note: Prometheus default-deny and full egress lockdown land in Phase 3b (#2945).
+++# This file adds only the targeted egress allows needed for databases/seaweedfs scraping.
+++
+++# Allow Prometheus to scrape CNPG cluster pod metrics on :9187
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: prometheus-allow-databases-cnpg-scrape-egress
+++  namespace: monitoring
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: prometheus
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 9187
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchExpressions:
+++              - key: cnpg.io/cluster
+++                operator: Exists
+++---
+++# Allow Prometheus to scrape cloudnative-pg operator metrics on :8080
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: prometheus-allow-databases-operator-scrape-egress
+++  namespace: monitoring
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: prometheus
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 8080
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: cloudnative-pg
++diff --git a/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml
++index 07e65da58..ec149087f 100644
++--- a/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml
+++++ b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml
++@@ -7,3 +7,4 @@ resources:
++   - httproute.yaml
++   - s3-config.sops.yaml
++   - secret.sops.yaml
+++  - network-policy.yaml
++diff --git a/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/network-policy.yaml b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/network-policy.yaml
++new file mode 100644
++index 000000000..48b1ccf9f
++--- /dev/null
+++++ b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/network-policy.yaml
++@@ -0,0 +1,464 @@
+++---
+++# =============================================================================
+++# seaweedfs-master
+++# Ports: :9333 (HTTP), :19333 (gRPC)
+++# Receives from: volume (register/heartbeat), filer (metadata), s3 (metadata via filer)
+++# Sends to: (responds only; master is essentially a server)
+++# =============================================================================
+++
+++# Default deny-all for seaweedfs-master pod
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-master-default-deny
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: master
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution for seaweedfs-master
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-master-allow-dns
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: master
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow intra-ns ingress from volume/filer/s3 on :9333/:19333
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-master-allow-intra-ingress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: master
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: volume
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: filer
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: s3
+++      ports:
+++        - port: 9333
+++          protocol: TCP
+++        - port: 19333
+++          protocol: TCP
+++---
+++# =============================================================================
+++# seaweedfs-volume
+++# Ports: :8080 (HTTP), :18080 (gRPC)
+++# Receives from: filer (data read/write), peer volumes (replication)
+++# Sends to: master (register/heartbeat)
+++# =============================================================================
+++
+++# Default deny-all for seaweedfs-volume pods
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-volume-default-deny
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: volume
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution for seaweedfs-volume
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-volume-allow-dns
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: volume
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow intra-ns ingress from filer and peer volume pods
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-volume-allow-intra-ingress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: volume
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: filer
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: volume
+++      ports:
+++        - port: 8080
+++          protocol: TCP
+++        - port: 18080
+++          protocol: TCP
+++---
+++# Allow egress from volume to master (register/heartbeat) and peer volumes
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-volume-allow-intra-egress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: volume
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 9333
+++          protocol: TCP
+++        - port: 19333
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: master
+++    - ports:
+++        - port: 8080
+++          protocol: TCP
+++        - port: 18080
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: volume
+++---
+++# =============================================================================
+++# seaweedfs-filer
+++# Ports: :8888 (HTTP), :18888 (gRPC), :8333 (S3-proxy)
+++# Receives from: s3 (frontend operations)
+++# Sends to: master (metadata), volume (data read/write)
+++# =============================================================================
+++
+++# Default deny-all for seaweedfs-filer pod
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-filer-default-deny
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: filer
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution for seaweedfs-filer
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-filer-allow-dns
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: filer
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow intra-ns ingress from s3 pod on :8888/:18888
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-filer-allow-intra-ingress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: filer
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: s3
+++      ports:
+++        - port: 8888
+++          protocol: TCP
+++        - port: 18888
+++          protocol: TCP
+++---
+++# Allow egress from filer to master (metadata) and volume (data)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-filer-allow-intra-egress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: filer
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 9333
+++          protocol: TCP
+++        - port: 19333
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: master
+++    - ports:
+++        - port: 8080
+++          protocol: TCP
+++        - port: 18080
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: volume
+++---
+++# =============================================================================
+++# seaweedfs-s3
+++# Port: :8333 (S3 endpoint)
+++# Receives from: databases CNPG cluster pods (WAL archiving)
+++# Sends to: filer (data operations), master (health/metadata)
+++# =============================================================================
+++
+++# Default deny-all for seaweedfs-s3 pod
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-s3-default-deny
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: s3
+++  policyTypes:
+++    - Ingress
+++    - Egress
+++---
+++# Allow DNS resolution for seaweedfs-s3
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-s3-allow-dns
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: s3
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 53
+++          protocol: UDP
+++        - port: 53
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: kube-system
+++---
+++# Allow ingress from databases CNPG cluster pods on :8333 (WAL archiving)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-s3-allow-cnpg-ingress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: s3
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: databases
+++          podSelector:
+++            matchExpressions:
+++              - key: cnpg.io/cluster
+++                operator: Exists
+++      ports:
+++        - port: 8333
+++          protocol: TCP
+++---
+++# Allow ingress from intra-ns master pod (health checks)
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-s3-allow-intra-ingress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: s3
+++  policyTypes:
+++    - Ingress
+++  ingress:
+++    - from:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: master
+++      ports:
+++        - port: 8333
+++          protocol: TCP
+++---
+++# Allow egress from s3 to filer and master
+++apiVersion: networking.k8s.io/v1
+++kind: NetworkPolicy
+++metadata:
+++  name: seaweedfs-s3-allow-intra-egress
+++  namespace: seaweedfs
+++spec:
+++  podSelector:
+++    matchLabels:
+++      app.kubernetes.io/name: seaweedfs
+++      app.kubernetes.io/component: s3
+++  policyTypes:
+++    - Egress
+++  egress:
+++    - ports:
+++        - port: 8888
+++          protocol: TCP
+++        - port: 18888
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: filer
+++    - ports:
+++        - port: 9333
+++          protocol: TCP
+++        - port: 19333
+++          protocol: TCP
+++      to:
+++        - namespaceSelector:
+++            matchLabels:
+++              kubernetes.io/metadata.name: seaweedfs
+++          podSelector:
+++            matchLabels:
+++              app.kubernetes.io/name: seaweedfs
+++              app.kubernetes.io/component: master
+diff --git a/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml b/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml
+index b735a8772..91430dd55 100644
+--- a/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml
++++ b/kubernetes/cluster0/apps/auth/authelia/db/kustomization.yaml
+@@ -4,3 +4,4 @@ kind: Kustomization
+ resources:
+   - cluster-v17.yaml
+   - scheduled-backup.yaml
++  - network-policy.yaml
+diff --git a/kubernetes/cluster0/apps/auth/authelia/db/network-policy.yaml b/kubernetes/cluster0/apps/auth/authelia/db/network-policy.yaml
+new file mode 100644
+index 000000000..59d56866f
+--- /dev/null
++++ b/kubernetes/cluster0/apps/auth/authelia/db/network-policy.yaml
+@@ -0,0 +1,145 @@
++---
++# Default deny-all for authelia-postgres-v17 CNPG cluster pods
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: authelia-postgres-v17-default-deny
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: authelia-postgres-v17
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: authelia-postgres-v17-allow-dns
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: authelia-postgres-v17
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow intra-namespace primary <-> replica replication on :5432
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: authelia-postgres-v17-allow-replication
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: authelia-postgres-v17
++  policyTypes:
++    - Ingress
++    - Egress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              cnpg.io/cluster: authelia-postgres-v17
++      ports:
++        - port: 5432
++          protocol: TCP
++  egress:
++    - ports:
++        - port: 5432
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              cnpg.io/cluster: authelia-postgres-v17
++---
++# Allow ingress from auth/authelia on :5432
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: authelia-postgres-v17-allow-authelia-ingress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: authelia-postgres-v17
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: auth
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: authelia
++      ports:
++        - port: 5432
++          protocol: TCP
++---
++# Allow egress to seaweedfs-s3 on :8333 (WAL archiving)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: authelia-postgres-v17-allow-seaweedfs-s3-egress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: authelia-postgres-v17
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 8333
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/component: s3
++---
++# Allow Prometheus to scrape postgres_exporter metrics on :9187
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: authelia-postgres-v17-allow-prometheus-scrape
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: authelia-postgres-v17
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: monitoring
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: prometheus
++      ports:
++        - port: 9187
++          protocol: TCP
+diff --git a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/cilium-network-policy.yaml b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/cilium-network-policy.yaml
+new file mode 100644
+index 000000000..bf63b9939
+--- /dev/null
++++ b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/cilium-network-policy.yaml
+@@ -0,0 +1,21 @@
++---
++# CiliumNetworkPolicy: allow cloudnative-pg operator egress to the K8s API server.
++#
++# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
++# kubeProxyReplacement=true because the k3s API server runs in the host network
++# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
++# than a pod identity or IP. The companion ipBlock NetworkPolicy is still kept
++# for defence-in-depth, but this CiliumNetworkPolicy is what actually enforces
++# the allow in practice. See #2829 (external-dns fix-forward) for context.
++apiVersion: cilium.io/v2
++kind: CiliumNetworkPolicy
++metadata:
++  name: cloudnative-pg-allow-kube-apiserver
++  namespace: databases
++spec:
++  endpointSelector:
++    matchLabels:
++      app.kubernetes.io/name: cloudnative-pg
++  egress:
++    - toEntities:
++        - kube-apiserver
+diff --git a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml
+index 3c6547c33..b454690ea 100644
+--- a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml
++++ b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/kustomization.yaml
+@@ -4,3 +4,5 @@ kind: Kustomization
+ resources:
+   - ./helm-release.yaml
+   - ./secret.yaml
++  - ./network-policy.yaml
++  - ./cilium-network-policy.yaml
+diff --git a/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/network-policy.yaml b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/network-policy.yaml
+new file mode 100644
+index 000000000..0eaf90b6d
+--- /dev/null
++++ b/kubernetes/cluster0/apps/databases/cloudnative-pg/chart/network-policy.yaml
+@@ -0,0 +1,112 @@
++---
++# Default deny-all for cloudnative-pg operator pod
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: cloudnative-pg-default-deny
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: cloudnative-pg
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: cloudnative-pg-allow-dns
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: cloudnative-pg
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow egress to Kubernetes API server (in-cluster service CIDR + control plane node)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: cloudnative-pg-allow-k8s-api
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: cloudnative-pg
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 443
++          protocol: TCP
++      to:
++        - ipBlock:
++            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
++    - ports:
++        - port: 443
++          protocol: TCP
++        - port: 6443
++          protocol: TCP
++      to:
++        - ipBlock:
++            cidr: 10.87.42.2/32  # control plane node
++---
++# Allow Kubernetes API server to call back to the CNPG admission webhook on :9443
++# (MutatingWebhookConfiguration + ValidatingWebhookConfiguration)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: cloudnative-pg-allow-webhook-ingress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: cloudnative-pg
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - ipBlock:
++            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
++        - ipBlock:
++            cidr: 10.87.42.2/32  # control plane node
++      ports:
++        - port: 9443
++          protocol: TCP
++---
++# Allow Prometheus to scrape cloudnative-pg operator metrics
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: cloudnative-pg-allow-prometheus-scrape
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: cloudnative-pg
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: monitoring
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: prometheus
++      ports:
++        - port: 8080
++          protocol: TCP
+diff --git a/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml b/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml
+index 57d2090a2..9a8992253 100644
+--- a/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml
++++ b/kubernetes/cluster0/apps/home/home-assistant/db/kustomization.yaml
+@@ -5,6 +5,7 @@ resources:
+   - ./secret.sops.yaml
+   - ./scheduled-backup.yaml
+   - ./cluster-v18.yaml
++  - ./network-policy.yaml
+ labels:
+   - pairs:
+       app.kubernetes.io/name: home-assistant
+diff --git a/kubernetes/cluster0/apps/home/home-assistant/db/network-policy.yaml b/kubernetes/cluster0/apps/home/home-assistant/db/network-policy.yaml
+new file mode 100644
+index 000000000..6daaae081
+--- /dev/null
++++ b/kubernetes/cluster0/apps/home/home-assistant/db/network-policy.yaml
+@@ -0,0 +1,145 @@
++---
++# Default deny-all for home-assistant-postgres-v18 CNPG cluster pods
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: home-assistant-postgres-v18-default-deny
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: home-assistant-postgres-v18
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: home-assistant-postgres-v18-allow-dns
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: home-assistant-postgres-v18
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow intra-namespace primary <-> replica replication on :5432
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: home-assistant-postgres-v18-allow-replication
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: home-assistant-postgres-v18
++  policyTypes:
++    - Ingress
++    - Egress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              cnpg.io/cluster: home-assistant-postgres-v18
++      ports:
++        - port: 5432
++          protocol: TCP
++  egress:
++    - ports:
++        - port: 5432
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              cnpg.io/cluster: home-assistant-postgres-v18
++---
++# Allow ingress from home/home-assistant on :5432
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: home-assistant-postgres-v18-allow-home-assistant-ingress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: home-assistant-postgres-v18
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: home
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: home-assistant
++      ports:
++        - port: 5432
++          protocol: TCP
++---
++# Allow egress to seaweedfs-s3 on :8333 (WAL archiving)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: home-assistant-postgres-v18-allow-seaweedfs-s3-egress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: home-assistant-postgres-v18
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 8333
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/component: s3
++---
++# Allow Prometheus to scrape postgres_exporter metrics on :9187
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: home-assistant-postgres-v18-allow-prometheus-scrape
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: home-assistant-postgres-v18
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: monitoring
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: prometheus
++      ports:
++        - port: 9187
++          protocol: TCP
+diff --git a/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml b/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml
+index 35afab4d0..351800498 100644
+--- a/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml
++++ b/kubernetes/cluster0/apps/media/miniflux/db/kustomization.yaml
+@@ -5,3 +5,4 @@ resources:
+   - cluster-v17.yaml
+   - scheduled-backup.yaml
+   - secret.sops.yaml
++  - network-policy.yaml
+diff --git a/kubernetes/cluster0/apps/media/miniflux/db/network-policy.yaml b/kubernetes/cluster0/apps/media/miniflux/db/network-policy.yaml
+new file mode 100644
+index 000000000..01bf39821
+--- /dev/null
++++ b/kubernetes/cluster0/apps/media/miniflux/db/network-policy.yaml
+@@ -0,0 +1,145 @@
++---
++# Default deny-all for miniflux-postgres-v17 CNPG cluster pods
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: miniflux-postgres-v17-default-deny
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: miniflux-postgres-v17
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: miniflux-postgres-v17-allow-dns
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: miniflux-postgres-v17
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow intra-namespace primary <-> replica replication on :5432
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: miniflux-postgres-v17-allow-replication
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: miniflux-postgres-v17
++  policyTypes:
++    - Ingress
++    - Egress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              cnpg.io/cluster: miniflux-postgres-v17
++      ports:
++        - port: 5432
++          protocol: TCP
++  egress:
++    - ports:
++        - port: 5432
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              cnpg.io/cluster: miniflux-postgres-v17
++---
++# Allow ingress from media/miniflux on :5432
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: miniflux-postgres-v17-allow-miniflux-ingress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: miniflux-postgres-v17
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: media
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: miniflux
++      ports:
++        - port: 5432
++          protocol: TCP
++---
++# Allow egress to seaweedfs-s3 on :8333 (WAL archiving)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: miniflux-postgres-v17-allow-seaweedfs-s3-egress
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: miniflux-postgres-v17
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 8333
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/component: s3
++---
++# Allow Prometheus to scrape postgres_exporter metrics on :9187
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: miniflux-postgres-v17-allow-prometheus-scrape
++  namespace: databases
++spec:
++  podSelector:
++    matchLabels:
++      cnpg.io/cluster: miniflux-postgres-v17
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: monitoring
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: prometheus
++      ports:
++        - port: 9187
++          protocol: TCP
+diff --git a/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml
+index 76251b282..855d27b2b 100644
+--- a/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml
++++ b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/kustomization.yaml
+@@ -3,6 +3,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
+ kind: Kustomization
+ resources:
+   - ./helm-release.yaml
++  - ./network-policy.yaml
+ labels:
+   - pairs:
+       app.kubernetes.io/name: prometheus
+diff --git a/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml
+new file mode 100644
+index 000000000..be42a8950
+--- /dev/null
++++ b/kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml
+@@ -0,0 +1,53 @@
++---
++# Prometheus egress allows for databases namespace scraping (Phase 3a)
++# Note: Prometheus default-deny and full egress lockdown land in Phase 3b (#2945).
++# This file adds only the targeted egress allows needed for databases/seaweedfs scraping.
++
++# Allow Prometheus to scrape CNPG cluster pod metrics on :9187
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: prometheus-allow-databases-cnpg-scrape-egress
++  namespace: monitoring
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: prometheus
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 9187
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchExpressions:
++              - key: cnpg.io/cluster
++                operator: Exists
++---
++# Allow Prometheus to scrape cloudnative-pg operator metrics on :8080
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: prometheus-allow-databases-operator-scrape-egress
++  namespace: monitoring
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: prometheus
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 8080
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: cloudnative-pg
+diff --git a/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml
+index 07e65da58..ec149087f 100644
+--- a/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml
++++ b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/kustomization.yaml
+@@ -7,3 +7,4 @@ resources:
+   - httproute.yaml
+   - s3-config.sops.yaml
+   - secret.sops.yaml
++  - network-policy.yaml
+diff --git a/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/network-policy.yaml b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/network-policy.yaml
+new file mode 100644
+index 000000000..48b1ccf9f
+--- /dev/null
++++ b/kubernetes/cluster0/apps/seaweedfs/seaweedfs/app/network-policy.yaml
+@@ -0,0 +1,464 @@
++---
++# =============================================================================
++# seaweedfs-master
++# Ports: :9333 (HTTP), :19333 (gRPC)
++# Receives from: volume (register/heartbeat), filer (metadata), s3 (metadata via filer)
++# Sends to: (responds only; master is essentially a server)
++# =============================================================================
++
++# Default deny-all for seaweedfs-master pod
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-master-default-deny
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: master
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution for seaweedfs-master
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-master-allow-dns
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: master
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow intra-ns ingress from volume/filer/s3 on :9333/:19333
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-master-allow-intra-ingress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: master
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: volume
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: filer
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: s3
++      ports:
++        - port: 9333
++          protocol: TCP
++        - port: 19333
++          protocol: TCP
++---
++# =============================================================================
++# seaweedfs-volume
++# Ports: :8080 (HTTP), :18080 (gRPC)
++# Receives from: filer (data read/write), peer volumes (replication)
++# Sends to: master (register/heartbeat)
++# =============================================================================
++
++# Default deny-all for seaweedfs-volume pods
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-volume-default-deny
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: volume
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution for seaweedfs-volume
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-volume-allow-dns
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: volume
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow intra-ns ingress from filer and peer volume pods
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-volume-allow-intra-ingress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: volume
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: filer
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: volume
++      ports:
++        - port: 8080
++          protocol: TCP
++        - port: 18080
++          protocol: TCP
++---
++# Allow egress from volume to master (register/heartbeat) and peer volumes
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-volume-allow-intra-egress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: volume
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 9333
++          protocol: TCP
++        - port: 19333
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: master
++    - ports:
++        - port: 8080
++          protocol: TCP
++        - port: 18080
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: volume
++---
++# =============================================================================
++# seaweedfs-filer
++# Ports: :8888 (HTTP), :18888 (gRPC), :8333 (S3-proxy)
++# Receives from: s3 (frontend operations)
++# Sends to: master (metadata), volume (data read/write)
++# =============================================================================
++
++# Default deny-all for seaweedfs-filer pod
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-filer-default-deny
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: filer
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution for seaweedfs-filer
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-filer-allow-dns
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: filer
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow intra-ns ingress from s3 pod on :8888/:18888
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-filer-allow-intra-ingress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: filer
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: s3
++      ports:
++        - port: 8888
++          protocol: TCP
++        - port: 18888
++          protocol: TCP
++---
++# Allow egress from filer to master (metadata) and volume (data)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-filer-allow-intra-egress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: filer
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 9333
++          protocol: TCP
++        - port: 19333
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: master
++    - ports:
++        - port: 8080
++          protocol: TCP
++        - port: 18080
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: volume
++---
++# =============================================================================
++# seaweedfs-s3
++# Port: :8333 (S3 endpoint)
++# Receives from: databases CNPG cluster pods (WAL archiving)
++# Sends to: filer (data operations), master (health/metadata)
++# =============================================================================
++
++# Default deny-all for seaweedfs-s3 pod
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-s3-default-deny
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: s3
++  policyTypes:
++    - Ingress
++    - Egress
++---
++# Allow DNS resolution for seaweedfs-s3
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-s3-allow-dns
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: s3
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 53
++          protocol: UDP
++        - port: 53
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: kube-system
++---
++# Allow ingress from databases CNPG cluster pods on :8333 (WAL archiving)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-s3-allow-cnpg-ingress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: s3
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: databases
++          podSelector:
++            matchExpressions:
++              - key: cnpg.io/cluster
++                operator: Exists
++      ports:
++        - port: 8333
++          protocol: TCP
++---
++# Allow ingress from intra-ns master pod (health checks)
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-s3-allow-intra-ingress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: s3
++  policyTypes:
++    - Ingress
++  ingress:
++    - from:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: master
++      ports:
++        - port: 8333
++          protocol: TCP
++---
++# Allow egress from s3 to filer and master
++apiVersion: networking.k8s.io/v1
++kind: NetworkPolicy
++metadata:
++  name: seaweedfs-s3-allow-intra-egress
++  namespace: seaweedfs
++spec:
++  podSelector:
++    matchLabels:
++      app.kubernetes.io/name: seaweedfs
++      app.kubernetes.io/component: s3
++  policyTypes:
++    - Egress
++  egress:
++    - ports:
++        - port: 8888
++          protocol: TCP
++        - port: 18888
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: filer
++    - ports:
++        - port: 9333
++          protocol: TCP
++        - port: 19333
++          protocol: TCP
++      to:
++        - namespaceSelector:
++            matchLabels:
++              kubernetes.io/metadata.name: seaweedfs
++          podSelector:
++            matchLabels:
++              app.kubernetes.io/name: seaweedfs
++              app.kubernetes.io/component: master

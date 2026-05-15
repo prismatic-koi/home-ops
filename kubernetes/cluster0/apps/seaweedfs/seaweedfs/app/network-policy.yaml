@@ -283,6 +283,32 @@ spec:
         - port: 18888
           protocol: TCP
 ---
+# Allow ingress from Traefik (networking ns) for the SeaweedFS console UI
+# httproute.yaml routes seaweedfs.${SECRET_PUBLIC_DOMAIN} → seaweedfs-filer:8888
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-filer-allow-traefik-ingress
+  namespace: seaweedfs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: filer
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8888
+          protocol: TCP
+---
 # Allow egress from filer to master (metadata) and volume (data)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
