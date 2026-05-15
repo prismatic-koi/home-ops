@@ -199,3 +199,36 @@ spec:
           podSelector:
             matchLabels:
               k8s-app: hubble-relay
+---
+# Allow egress from hubble-ui backend container to the K8s API server.
+# The backend image (hubble-ui-backend) is a K8s client that watches
+# Namespaces/Pods/Services to enrich Hubble flow records. Dual-policy pattern
+# per #2829 / #2947 / #2965: ipBlock here, toEntities in the sibling
+# CiliumNetworkPolicy (hubble-ui-allow-kube-apiserver). Cilium kubeProxyReplacement
+# can bypass ipBlock matches against the host-networked API server — both
+# policies are required.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hubble-ui-allow-k8s-api
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)

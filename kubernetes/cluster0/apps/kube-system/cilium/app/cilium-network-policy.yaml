@@ -26,3 +26,22 @@ spec:
         - ports:
             - port: "4244"
               protocol: TCP
+---
+# CiliumNetworkPolicy companion for hubble-ui-allow-k8s-api. Required because
+# Cilium kubeProxyReplacement=true rewrites Service routing to the host-
+# networked API server in a way that bypasses ipBlock NetworkPolicy matches.
+# Pattern parallels every other dual-policy K8s API egress in this cluster
+# (#2829 external-dns, #2947 cnpg, #2965 prometheus, plus the cert-manager/
+# metrics-server/reloader/NFD policies in this same Phase 4b PR).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hubble-ui-allow-kube-apiserver
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s-app: hubble-ui
+  egress:
+    - toEntities:
+        - kube-apiserver
