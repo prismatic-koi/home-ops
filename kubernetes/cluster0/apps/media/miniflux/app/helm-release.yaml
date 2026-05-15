@@ -76,6 +76,75 @@ spec:
               startup:
                 enabled: false
 
+    networkpolicies:
+      default-deny:
+        controller: miniflux
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: miniflux
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: miniflux
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-auth-ingress:
+        controller: miniflux
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: auth
+      allow-postgres-egress:
+        controller: miniflux
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 5432
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: databases
+                  podSelector:
+                    matchLabels:
+                      cnpg.io/cluster: miniflux-postgres-v17
+      allow-external-egress:
+        controller: miniflux
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 80
+                  protocol: TCP
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
     service:
       app:
         ports:

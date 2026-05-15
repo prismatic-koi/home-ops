@@ -62,6 +62,108 @@ spec:
                   group: 'traefik.io'
                   kind: 'Middleware'
                   name: 'forwardauth-authelia'
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-auth-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: auth
+      allow-arr-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: sonarr
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: radarr
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: lidarr
+              ports:
+                - port: 8080
+                  protocol: TCP
+      allow-monitoring-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: prometheus-blackbox-exporter
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: uptime-kuma
+              ports:
+                - port: 8080
+                  protocol: TCP
+      allow-external-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 119
+                  protocol: TCP
+                - port: 563
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
     persistence:
       config:
         existingClaim: pvc-sabnzbd

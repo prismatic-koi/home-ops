@@ -63,6 +63,124 @@ spec:
                   group: 'traefik.io'
                   kind: 'Middleware'
                   name: 'forwardauth-authelia'
+    networkpolicies:
+      default-deny:
+        controller: main
+        policyTypes: [Ingress, Egress]
+        rules: {}
+      allow-dns:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: kube-system
+      allow-traefik-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: networking
+      allow-auth-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: auth
+      allow-monitoring-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: prometheus-blackbox-exporter
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: uptime-kuma
+              ports:
+                - port: 8686
+                  protocol: TCP
+      allow-sabnzbd-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 8080
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: sabnzbd
+      allow-qbittorrent-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 8080
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: qbittorrent
+      allow-prowlarr-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 9696
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: prowlarr
+      allow-external-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 443
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                      - 10.0.0.0/8
+                      - 172.16.0.0/12
+                      - 192.168.0.0/16
     persistence:
       config:
         existingClaim: pvc-lidarr
