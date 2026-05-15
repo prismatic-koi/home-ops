@@ -520,6 +520,38 @@ spec:
         - ipBlock:
             cidr: 10.87.42.0/24  # node CIDR — kubelet/cadvisor on host network
 ---
+# Allow Prometheus egress to host-networked scrape targets on the node CIDR (defence-in-depth).
+# Cilium agent (:9962), Cilium operator (:9963), Cilium envoy (:9964), Hubble (:9965),
+# kubelet/metrics-server (:10250) all run with hostNetwork=true; Cilium assigns them the
+# 'host'/'remote-node' entity identity, so podSelector rules don't match.
+# The CiliumNetworkPolicy prometheus-allow-kube-apiserver (egress block 2) is authoritative;
+# this ipBlock rule is the standard-NetworkPolicy companion for defence-in-depth. See #2962.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-host-network-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9962
+          protocol: TCP
+        - port: 9963
+          protocol: TCP
+        - port: 9964
+          protocol: TCP
+        - port: 9965
+          protocol: TCP
+        - port: 10250
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.0/24  # node CIDR — host-networked targets (Cilium/Hubble/kubelet)
+---
 # Allow Prometheus egress to scrape longhorn-system on :9500
 # ServiceMonitor longhorn-prometheus-servicemonitor targets app=longhorn-manager pods
 apiVersion: networking.k8s.io/v1
