@@ -1,7 +1,7 @@
 ---
 # NetworkPolicy: openldap (LDAP server pod)
-# Allows ingress from intra-ns authelia (LDAP queries :389)
-# and from intra-ns phpldapadmin (LDAP queries :389 — phpLDAPadmin is a separate pod in this chart)
+# Allows ingress from intra-ns authelia (LDAP queries :1389/:1636)
+# and from intra-ns phpldapadmin (LDAP queries :1389/:1636 — phpLDAPadmin is a separate pod in this chart)
 # Default-deny + DNS egress only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -67,12 +67,14 @@ spec:
             matchLabels:
               app: phpldapadmin
       ports:
-        - port: 389
+        - port: 1389
+          protocol: TCP
+        - port: 1636
           protocol: TCP
 ---
 # NetworkPolicy: openldap-phpldapadmin (separate deployment pod)
 # Allows ingress from networking ns (Traefik — web UI access)
-# Default-deny + DNS egress + egress to openldap :389 (phpLDAPadmin needs to query LDAP)
+# Default-deny + DNS egress + egress to openldap :1389/:1636 (phpLDAPadmin needs to query LDAP)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -141,7 +143,9 @@ spec:
     - Egress
   egress:
     - ports:
-        - port: 389
+        - port: 1389
+          protocol: TCP
+        - port: 1636
           protocol: TCP
       to:
         - namespaceSelector:
