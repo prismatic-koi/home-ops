@@ -518,6 +518,33 @@ spec:
             matchLabels:
               app: longhorn-manager
 ---
+# Allow Prometheus egress to blackbox-exporter on :9115 (Probe CRD prober URL)
+# When Prometheus processes a Probe resource it makes an outbound HTTP request to
+# blackbox-exporter's prober endpoint (blackbox-exporter.monitoring.svc:9115).
+# This is a Prometheus-initiated connection (not a scrape-ingress on blackbox-exporter).
+# containerPort 9115 verified from pod spec; covers all 15 Probe CRDs in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-blackbox-exporter-probe-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9115
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-blackbox-exporter
+---
 # Allow Prometheus egress to scrape networking/blocky-primary and blocky-secondary on :4000
 # ServiceMonitors blocky-primary and blocky-secondary target port http -> :4000
 # Pod labels: app.kubernetes.io/name=blocky-primary / blocky-secondary
