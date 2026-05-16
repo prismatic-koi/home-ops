@@ -8,6 +8,7 @@ metadata:
 spec:
   dependsOn:
     - name: cluster-apps-cert-manager
+    - name: cluster-apps-gateway-api
   path: ./kubernetes/cluster0/apps/networking/traefik/app
   prune: true
   sourceRef:
