@@ -34,11 +34,16 @@ spec:
             env:
               TZ: "${TIMEZONE}"
               USE_X_SETTINGS: 1
-              PLAYWRIGHT_DRIVER_URL: ws://changedetection-browser:3000/?stealth=1&--disable-web-security=true
+              # PLAYWRIGHT_DRIVER_URL is injected via envFrom below from
+              # changedetection-io-secret because it embeds the browserless v2
+              # auth TOKEN in the query string.
               # Socket.io configuration for reverse proxy / Cloudflare
               FLASK_SERVER_NAME: "changedetection-io.${SECRET_PUBLIC_DOMAIN}"
               BASE_URL: "https://changedetection-io.${SECRET_PUBLIC_DOMAIN}"
               SOCKETIO_CORS_ORIGINS: "https://changedetection-io.${SECRET_PUBLIC_DOMAIN}"
+            envFrom:
+              - secretRef:
+                  name: changedetection-io-secret
     service:
       app:
         controller: main
