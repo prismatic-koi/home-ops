@@ -53,6 +53,16 @@
       allowedVersions: '!/-(armhf|arm64|armv7|amd64|linux)$/',
     },
     {
+      matchDatasources: [
+        'docker',
+      ],
+      versioning: 'loose',
+      matchPackageNames: [
+        '/searxng\/searxng/',
+      ],
+      allowedVersions: '!/-(armhf|arm64|armv7|amd64|linux)$/',
+    },
+    {
       // Flux manager + OCIRepository hybrid digest shape is broken:
       // Renovate writes `tag: <semver>@sha256:<digest>` instead of populating
       // the separate `ref.digest` field (renovatebot/renovate#42082). flux-local
