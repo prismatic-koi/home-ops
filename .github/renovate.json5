@@ -73,6 +73,16 @@
       pinDigests: false,
     },
     {
+      // Disable digest pinning on grafana/grafana. Renovate's docker datasource
+      // cannot reliably resolve new digests when the image is pinned via the
+      // helm chart's `image.tag` value (see closed #2832 and the unpin in #2985).
+      // Maintainer position from #2804 audit follow-up: image digest pinning
+      // is intentionally not used in this cluster ("up to date is important").
+      matchDatasources: ['docker'],
+      matchPackageNames: ['grafana/grafana'],
+      pinDigests: false,
+    },
+    {
       // Disable digest pinning on the reloader OCIRepository specifically.
       // The flux-manifests OCIRepository keeps digest pinning because it is
       // consumed by a Kustomization (not templated by helm) and is unaffected.
