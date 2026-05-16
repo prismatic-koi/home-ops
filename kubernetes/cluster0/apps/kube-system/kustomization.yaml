@@ -12,9 +12,12 @@ resources:
   # ./coredns/ks.yaml for the rationale.
   - ./coredns/ks.yaml
   - ./intel-device-plugin/ks.yaml
-  # Phase 4b (#2951): re-enabled but pointing at a NetworkPolicy-only path —
-  # the actual local-path-provisioner running in the cluster is the k3s
-  # built-in addon, not the Helm release in ./local-path-provisioner/app/.
+  # The Flux Kustomization at ./local-path-provisioner/ks.yaml points at a
+  # NetworkPolicy-only path (./local-path-provisioner/policy/) — the actual
+  # local-path-provisioner running in the cluster is the k3s built-in addon,
+  # not a Helm release. Phase 4b (#2951) re-enabled the Flux Kustomization
+  # pointing at ./policy/; the dead Helm release at ./local-path-provisioner/app/
+  # and its orphaned GitRepository source were removed in PR #3009.
   - ./local-path-provisioner/ks.yaml
   - ./node-feature-discovery/ks.yaml
   - ./metrics-server/ks.yaml
