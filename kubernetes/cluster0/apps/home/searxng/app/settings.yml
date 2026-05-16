@@ -26,16 +26,28 @@ valkey:
 
 ui:
   default_theme: simple
-  infinite_scroll: false
   query_in_title: true
 
-enabled_plugins:
-  - Basic Calculator
-  - Hash plugin
-  - Open Access DOI rewrite
-  - Self Informations
-  - Tracker URL remover
-  - Unit converter plugin
+# As of SearXNG 2025.10+, plugins are configured via a top-level `plugins:`
+# map keyed by the plugin's fully-qualified class path. The previous
+# `enabled_plugins:` list of friendly names is no longer parsed. Listing a
+# plugin here with `active: true` enables it by default; unlisted plugins are
+# not loaded (matching the old `enabled_plugins` opt-in semantics).
+# Note: `infinite_scroll` is now controlled solely by its plugin (omitted
+# below = not loaded, equivalent to the previous `ui.infinite_scroll: false`).
+plugins:
+  searx.plugins.calculator.SXNGPlugin:
+    active: true
+  searx.plugins.hash_plugin.SXNGPlugin:
+    active: true
+  searx.plugins.oa_doi_rewrite.SXNGPlugin:
+    active: true
+  searx.plugins.self_info.SXNGPlugin:
+    active: true
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: true
+  searx.plugins.unit_converter.SXNGPlugin:
+    active: true
 
 categories_as_tabs:
   general:
