@@ -1,0 +1,28 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Traefik CRDs bundled by traefik-helm-chart v40.0.0 (CRD bundle 1.18.0).
+#
+# Source: https://github.com/traefik/traefik-helm-chart/tree/v40.0.0/traefik/crds
+#
+# Excludes:
+#   - gateway-standard-install.yaml — covered by ../../gateway-api/app
+#   - hub.traefik.io_*.yaml — Traefik Hub not deployed in this cluster
+#
+# All ten traefik.io_* CRDs are kept (matching the bundle), even those without
+# resources today (ingressroute*, middlewaretcps, serverstransport*, traefikservices),
+# to stay aligned with what the chart installs and to avoid CRD deletion churn
+# during the chart v40 bump (#2986). Resources currently in use:
+#   middlewares (8), tlsoptions (1), tlsstores (1).
+resources:
+  - ./traefik.io_ingressroutes.yaml
+  - ./traefik.io_ingressroutetcps.yaml
+  - ./traefik.io_ingressrouteudps.yaml
+  - ./traefik.io_middlewares.yaml
+  - ./traefik.io_middlewaretcps.yaml
+  - ./traefik.io_serverstransports.yaml
+  - ./traefik.io_serverstransporttcps.yaml
+  - ./traefik.io_tlsoptions.yaml
+  - ./traefik.io_tlsstores.yaml
+  - ./traefik.io_traefikservices.yaml

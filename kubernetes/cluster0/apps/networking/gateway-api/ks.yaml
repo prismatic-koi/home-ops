@@ -1,0 +1,22 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cluster-apps-gateway-api
+  namespace: flux-system
+spec:
+  # Gateway API CRDs are a cluster-wide dependency of both Cilium (kube-system)
+  # and Traefik (networking). No dependsOn — these are foundational and must
+  # reconcile before any consumer asserts ownership of a Gateway / HTTPRoute.
+  # cluster-apps-traefik dependsOn this Kustomization to enforce ordering on
+  # the Traefik side; Cilium has no equivalent gate because its chart neither
+  # ships nor requires these CRDs at install time (they are expected present).
+  path: ./kubernetes/cluster0/apps/networking/gateway-api/app
+  prune: false # never delete — losing these CRDs deletes every Gateway / HTTPRoute
+  sourceRef:
+    kind: GitRepository
+    name: home-ops-cluster0
+  interval: 30m
+  retryInterval: 1m
+  timeout: 3m

@@ -6,6 +6,7 @@ resources:
   # Pre Flux-Kustomizations
   - ./namespace.yaml
   # Flux-Kustomizations
+  - ./gateway-api/ks.yaml
   - ./blocky/ks.yaml
   - ./external-dns/ks.yaml
   - ./traefik/ks.yaml

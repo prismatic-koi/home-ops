@@ -3,11 +3,38 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: cluster-apps-traefik-crds
+  namespace: flux-system
+spec:
+  # traefik.io_* CRDs (from traefik-helm-chart v40.0.0). Managed out-of-band
+  # from the HelmRelease so that future chart bumps (notably #2986) do not
+  # depend on Helm-CRD-upgrade semantics (Helm 3 never upgrades CRDs under
+  # the chart's `crds/` directory after first install).
+  path: ./kubernetes/cluster0/apps/networking/traefik/crds
+  prune: false # never delete — losing these CRDs would delete in-cluster Middlewares / TLSOptions / TLSStores
+  sourceRef:
+    kind: GitRepository
+    name: home-ops-cluster0
+  interval: 30m
+  retryInterval: 1m
+  timeout: 3m
+
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
   name: cluster-apps-traefik
   namespace: flux-system
 spec:
   dependsOn:
     - name: cluster-apps-cert-manager
+    # Gateway API CRDs must exist before Traefik claims the traefik-gateway
+    # listener and HTTPRoute attachments are processed.
+    - name: cluster-apps-gateway-api
+    # traefik.io_* CRDs must exist before the HelmRelease attempts to render
+    # the tlsOptions.default / tlsStore.default custom resources.
+    - name: cluster-apps-traefik-crds
   path: ./kubernetes/cluster0/apps/networking/traefik/app
   prune: true
   sourceRef:

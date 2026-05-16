@@ -1,0 +1,23 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Upstream Gateway API standard channel CRDs (v1.5.1).
+#
+# Source:
+#   curl -sSL -o standard-install.yaml \
+#     https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+#
+# This bundle declares:
+#   - 8 CustomResourceDefinitions (gateways, gatewayclasses, httproutes,
+#     grpcroutes, referencegrants, backendtlspolicies, listenersets, tlsroutes)
+#   - 1 ValidatingAdmissionPolicy + Binding (safe-upgrades.gateway.networking.k8s.io)
+#     which blocks accidental downgrade below v1.5.0 and accidental experimental
+#     reinstall on top of standard. Remove it before rolling back to v1.4.0 if
+#     ever necessary (see PR notes).
+#
+# Consumers in this cluster:
+#   - Cilium 1.19.x (gatewayAPI.enabled: true in apps/kube-system/cilium)
+#   - Traefik 3.6.15 (chart v39.0.9) — proxy treats unknown fields as no-ops
+resources:
+  - ./standard-install.yaml
