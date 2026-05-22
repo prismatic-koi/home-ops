@@ -54,11 +54,22 @@ spec:
                 custom: true
                 spec:
                   httpGet:
-                    # v1 used /pressure (unauthenticated). In v2 /pressure requires
-                    # the auth token, which a k8s httpGet probe cannot supply, so we
-                    # probe the unauthenticated static root instead — it returns 200
-                    # once the HTTP server is listening.
-                    path: /
+                    # v1 used /pressure (unauthenticated). In v2 most useful health
+                    # endpoints (/pressure, /metrics, /json/version) require the TOKEN
+                    # auth header, which a k8s httpGet probe cannot supply — and we
+                    # will not bake the token into a probe Exec because that risks
+                    # leaking it into kubelet event logs.
+                    #
+                    # GET / returns 404 on v2 ("No route or file found for resource
+                    # GET: /") — see issue #3037 for the restart-loop this caused.
+                    #
+                    # /docs/ is served by the built-in Swagger UI, requires no auth,
+                    # and returns 200 as soon as the HTTP server is listening (it is
+                    # static and does not depend on browser-subsystem warm-up, so it
+                    # stays 200 on an idle pod). Verified against v2.49.0 via
+                    # apiserver pods/proxy — see PR #3037 description for evidence.
+                    # Trailing slash matters: /docs returns 301 to /docs/.
+                    path: /docs/
                     port: 3000
                   initialDelaySeconds: 30
                   periodSeconds: 60
