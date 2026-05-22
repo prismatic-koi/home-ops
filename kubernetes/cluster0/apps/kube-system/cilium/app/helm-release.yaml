@@ -46,7 +46,7 @@ spec:
          serviceMonitor:
            enabled: true
     gatewayAPI:
-      enabled: true
+      enabled: false
     hubble:
       enabled: true
       metrics:
