@@ -82,9 +82,8 @@ spec:
         # Node recording rules (no alerts)
         node: true
         # Node exporter alerts (disk, memory, CPU, filesystem) - requires node-exporter
-        # node-exporter is disabled below; re-enable both together if you want host-level alerts
-        nodeExporterAlerting: false
-        nodeExporterRecording: false
+        nodeExporterAlerting: true
+        nodeExporterRecording: true
         # Prometheus self-monitoring
         prometheus: true
         # Prometheus Operator health
@@ -228,13 +227,27 @@ spec:
           - new-service-discovery-manager
         retention: 2d
         retentionSize: 15GB
+        # Pin each replica to a distinct node. With local-path storage the soft
+        # default anti-affinity is not enough: two replicas on the same node
+        # would lose the HA property entirely on node failure. "hard" makes the
+        # chart render a requiredDuringSchedulingIgnoredDuringExecution rule
+        # keyed on kubernetes.io/hostname with a selector matching both replicas
+        # (app.kubernetes.io/name=prometheus AND
+        #  app.kubernetes.io/instance=prometheus-kube-prometheus).
+        podAntiAffinity: hard
         storageSpec:
           volumeClaimTemplate:
             spec:
-              storageClassName: longhorn
+              storageClassName: local-path
               resources:
                 requests:
                   storage: 20Gi
+      # PDB for the Prometheus StatefulSet - keep at least one replica up during
+      # voluntary disruptions (node drains, etc.).
+      podDisruptionBudget:
+        enabled: true
+        maxUnavailable: 1
+        minAvailable: null
     grafana:
       enabled: false
       forceDeployDashboards: true
@@ -248,7 +261,5 @@ spec:
     kubeStateMetrics:
       enabled: true
     # node-exporter: exposes host-level metrics (CPU, memory, disk, filesystem).
-    # Disabled for now - re-enable alongside nodeExporterAlerting/nodeExporterRecording
-    # above if you want host-level alerting.
     nodeExporter:
-      enabled: false
+      enabled: true
