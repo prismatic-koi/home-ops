@@ -17,10 +17,12 @@ spec:
         namespace: seaweedfs
       interval: 5m
   install:
+    disableWait: true
     timeout: 15m
     remediation:
       retries: 3
   upgrade:
+    disableWait: true
     timeout: 15m
     cleanupOnFail: true
     remediation:
@@ -61,6 +63,7 @@ spec:
       s3:
         enabled: true
         enableAuth: true
+        existingConfigSecret: seaweedfs-s3-config
 
     s3:
       enabled: true
