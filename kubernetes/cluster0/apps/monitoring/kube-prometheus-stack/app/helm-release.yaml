@@ -119,10 +119,19 @@ spec:
         storage:
           volumeClaimTemplate:
             spec:
-              storageClassName: longhorn
+              storageClassName: local-path
               resources:
                 requests:
                   storage: 1Gi
+      # PDB for the Alertmanager StatefulSet - keep at least one replica up
+      # during voluntary disruptions (node drains, etc.). Mirrors the
+      # Prometheus PDB added in #3046. Chart-native selector matches
+      # app.kubernetes.io/name=alertmanager AND alertmanager=prometheus-kube-prometheus,
+      # both of which are present on both replica pods.
+      podDisruptionBudget:
+        enabled: true
+        maxUnavailable: 1
+        minAvailable: null
       config:
         global:
           resolve_timeout: 5m
