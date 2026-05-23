@@ -578,6 +578,54 @@ spec:
             matchLabels:
               app: longhorn-manager
 ---
+# Allow Prometheus egress to scrape seaweedfs master/volume/filer/s3 on :9327
+# Chart-native ServiceMonitors (global.seaweedfs.monitoring.enabled=true) target
+# the "metrics" port on each component Service. Pod labels:
+# app.kubernetes.io/name=seaweedfs + app.kubernetes.io/component={master,volume,filer,s3}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-seaweedfs-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9327
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: filer
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: s3
+---
 # Allow Prometheus egress to blackbox-exporter on :9115 (Probe CRD prober URL)
 # When Prometheus processes a Probe resource it makes an outbound HTTP request to
 # blackbox-exporter's prober endpoint (blackbox-exporter.monitoring.svc:9115).
