@@ -100,3 +100,20 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
+---
+# Recurring-job pods (#3060) — see the matching NetworkPolicy
+# `longhorn-recurring-job-allow-k8s-api` in ./network-policy.yaml for the
+# full rationale and selector justification.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-recurring-job-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: recurring-job.longhorn.io
+        operator: Exists
+  egress:
+    - toEntities:
+        - kube-apiserver

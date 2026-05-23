@@ -44,17 +44,28 @@
 #   - engine-image-ei-*    (DaemonSet)    — longhorn.io/component=engine-image
 #   - friday-backup-*      (Job pods from a CronJob; weekly backup) —
 #                                           recurring-job.longhorn.io=friday-backup
-#                                           This is the "longhorn-friday" pod
-#                                           investigated in #2952 — it's a
-#                                           short-lived backup job that only
-#                                           talks intra-ns to longhorn-backend
-#                                           :9500; folded into the wide
-#                                           intra-ns allow.
+#                                           Short-lived pod spawned by the
+#                                           Longhorn recurring-job controller.
+#                                           Despite being a "job" pod, it
+#                                           runs the longhorn-manager binary
+#                                           in `-d recurring-job` mode, which
+#                                           does an initial K8s API call to
+#                                           fetch the RecurringJob CR before
+#                                           talking to longhorn-backend:9500
+#                                           intra-ns. The intra-ns leg is
+#                                           covered by the wide intra-ns
+#                                           allow; the K8s API leg is covered
+#                                           by the dedicated
+#                                           `longhorn-recurring-job-allow-k8s-api`
+#                                           rule below (added in #3060 after
+#                                           the original #2952 classification
+#                                           missed this egress).
 #
 # External flows (NOT covered by the wide intra-ns allow):
 #   - DNS: every pod → CoreDNS :53 in kube-system
-#   - K8s API egress: longhorn-manager, longhorn-csi-plugin, csi-*, and
-#     longhorn-driver-deployer reconcile CRDs and watch resources
+#   - K8s API egress: longhorn-manager, longhorn-csi-plugin, csi-*,
+#     longhorn-driver-deployer, and recurring-job pods reconcile CRDs and
+#     watch resources
 #   - Traefik ingress: longhorn-ui :8000 from networking ns
 #   - Prometheus scrape ingress: longhorn-manager :9500 (ServiceMonitor
 #     `longhorn-prometheus-servicemonitor` selects app=longhorn-manager,
@@ -427,6 +438,57 @@ spec:
       to:
         - ipBlock:
             cidr: 10.87.42.2/32
+---
+# -----------------------------------------------------------------------------
+# K8s API egress — recurring-job pods (#3060).
+#
+# Longhorn's recurring-job controller spawns a short-lived pod (e.g.
+# friday-backup-*) that runs the longhorn-manager binary in
+# `-d recurring-job` mode. Before it talks to longhorn-backend:9500
+# intra-ns, it does an initial K8s API call to fetch the RecurringJob CR
+# (GET /apis/longhorn.io/v1beta2/namespaces/longhorn-system/recurringjobs/<name>).
+# Without this rule that call hits the default-deny, times out after ~30s,
+# the controller exits 0 without bubbling up the error, and the job
+# silently produces no backups — exactly the regression #3060 fixes.
+#
+# Selector: `recurring-job.longhorn.io` with the Exists operator. This is
+# scoped precisely to recurring-job pods only. The simpler
+# `longhorn.io/managed-by: longhorn-manager` label is too broad — it also
+# matches every instance-manager pod, which already has its own scoped NFS
+# egress and does not need K8s API access. Using Exists (rather than the
+# exact value `friday-backup`) also covers any future recurring-job tasks
+# (snapshot, filesystem-trim, etc.) without further netpol changes.
+#
+# Dual-policy pattern: standard NetworkPolicy ipBlock (defence-in-depth) +
+# sibling CiliumNetworkPolicy `toEntities: [kube-apiserver]` (authoritative
+# under Cilium kubeProxyReplacement=true — see #2829 / #2947).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-recurring-job-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: recurring-job.longhorn.io
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
 ---
 # -----------------------------------------------------------------------------
 # NFS backup egress — longhorn-manager + instance-manager pods write the
