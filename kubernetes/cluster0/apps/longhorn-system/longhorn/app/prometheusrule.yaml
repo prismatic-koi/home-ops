@@ -77,3 +77,23 @@ spec:
           annotations:
             summary: "Longhorn backup {{ $labels.backup }} failed"
             description: "Backup {{ $labels.backup }} for volume {{ $labels.volume }} is in a failed state."
+
+        - alert: LonghornBackupMissed
+          expr: |
+            time() - max by (volume) (longhorn_volume_last_backup_at) > (9 * 24 * 3600)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} has not been backed up in over 9 days"
+            description: "Most recent successful backup for {{ $labels.volume }} is {{ $value | humanizeDuration }} old. The weekly Friday backup may have skipped."
+
+        - alert: LonghornBackupCritical
+          expr: |
+            time() - max by (volume) (longhorn_volume_last_backup_at) > (14 * 24 * 3600)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} has not been backed up in over 14 days"
+            description: "Most recent successful backup for {{ $labels.volume }} is {{ $value | humanizeDuration }} old. At least two consecutive weekly backups have been missed."

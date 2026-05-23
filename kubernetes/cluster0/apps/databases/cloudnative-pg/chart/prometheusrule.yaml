@@ -1,0 +1,30 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudnative-pg
+  namespace: databases
+spec:
+  groups:
+    - name: cnpg.backups
+      rules:
+        - alert: CNPGBackupMissed
+          expr: |
+            time() - min by (job) (cnpg_collector_last_available_backup_timestamp > 0) > (36 * 3600)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CNPG cluster {{ $labels.job }} has no recent successful backup"
+            description: "Most recent successful base backup for {{ $labels.job }} is {{ $value | humanizeDuration }} old. Daily scheduled backup may have failed."
+
+        - alert: CNPGBackupCritical
+          expr: |
+            time() - min by (job) (cnpg_collector_last_available_backup_timestamp > 0) > (72 * 3600)
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG cluster {{ $labels.job }} has no successful backup in over 72 hours"
+            description: "Most recent successful base backup for {{ $labels.job }} is {{ $value | humanizeDuration }} old. At least three consecutive daily backups have been missed."
