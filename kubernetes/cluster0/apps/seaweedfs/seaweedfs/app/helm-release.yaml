@@ -31,6 +31,10 @@ spec:
     global:
       seaweedfs:
         enableSecurity: false
+        # Render chart-native ServiceMonitors for master/volume/filer/s3 so
+        # kube-prometheus-stack scrapes the :9327 /metrics endpoints. See #3051.
+        monitoring:
+          enabled: true
 
     master:
       replicas: 1
