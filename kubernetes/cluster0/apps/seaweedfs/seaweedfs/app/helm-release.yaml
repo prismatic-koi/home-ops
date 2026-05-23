@@ -31,6 +31,16 @@ spec:
     global:
       seaweedfs:
         enableSecurity: false
+        # Enable volume-server replication at the SW layer. `enableReplication`
+        # gates whether `replicationPlacement` is applied; at chart v4.28.0 the
+        # master/filer statefulset templates only pass -defaultReplication=<...>
+        # from the global value when this flag is true (otherwise they fall back
+        # to master.defaultReplication, which defaults to "000"). See #3052.
+        # `001` = one extra copy on a different volume server (same DC, same
+        # rack — we have no DC/rack topology). Satisfiable with the existing
+        # 2 volume servers.
+        enableReplication: true
+        replicationPlacement: "001"
         # Render chart-native ServiceMonitors for master/volume/filer/s3 so
         # kube-prometheus-stack scrapes the :9327 /metrics endpoints. See #3051.
         monitoring:
