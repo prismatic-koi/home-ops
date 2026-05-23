@@ -45,6 +45,31 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
 ---
+# Allow Prometheus to scrape master metrics on :9327
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-master-allow-prometheus-scrape
+  namespace: seaweedfs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: master
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9327
+          protocol: TCP
+---
 # Allow intra-ns ingress from volume/filer/s3/master on :9333/:19333
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -146,6 +171,31 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
+---
+# Allow Prometheus to scrape volume metrics on :9327
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-volume-allow-prometheus-scrape
+  namespace: seaweedfs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: volume
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9327
+          protocol: TCP
 ---
 # Allow intra-ns ingress from master/filer/s3/volume pods on :8080/:18080
 apiVersion: networking.k8s.io/v1
@@ -339,6 +389,31 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
 ---
+# Allow Prometheus to scrape filer metrics on :9327
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-filer-allow-prometheus-scrape
+  namespace: seaweedfs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: filer
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9327
+          protocol: TCP
+---
 # Allow intra-ns ingress from master/volume/s3/filer on :8888/:18888
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -521,6 +596,31 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
+---
+# Allow Prometheus to scrape s3 metrics on :9327
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seaweedfs-s3-allow-prometheus-scrape
+  namespace: seaweedfs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: s3
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9327
+          protocol: TCP
 ---
 # Allow ingress from databases CNPG cluster pods on :8333 (WAL archiving)
 apiVersion: networking.k8s.io/v1

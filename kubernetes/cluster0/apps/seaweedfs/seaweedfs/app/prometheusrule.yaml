@@ -1,0 +1,56 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: seaweedfs
+  namespace: seaweedfs
+spec:
+  groups:
+    - name: seaweedfs.components
+      rules:
+        - alert: SeaweedFSComponentDown
+          expr: up{namespace="seaweedfs"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "SeaweedFS component {{ $labels.job }} is down"
+            description: "SeaweedFS target {{ $labels.job }} ({{ $labels.pod }}) has been unreachable for more than 5 minutes. CNPG backups via SeaweedFS S3 may be affected."
+
+    - name: seaweedfs.volume
+      rules:
+        # Triggers when a volume server's currently-allocated volumes consume
+        # more than 90% of its configured max_volume_count.
+        - alert: SeaweedFSVolumeServerSpaceCritical
+          expr: |
+            (
+              SeaweedFS_volumeServer_volumes
+              /
+              SeaweedFS_volumeServer_max_volume_count
+            ) > 0.90
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "SeaweedFS volume server {{ $labels.instance }} is over 90% full"
+            description: "Volume server {{ $labels.instance }} is using {{ $value | humanizePercentage }} of its max_volume_count. New writes will start failing once it reaches 1.0."
+
+    - name: seaweedfs.s3
+      rules:
+        # Triggers when more than 5% of S3 requests over a 15m window return a
+        # non-2xx status code (4xx/5xx). Metric is a counter of
+        # request_count partitioned by status code.
+        - alert: SeaweedFSS3RequestErrorsHigh
+          expr: |
+            (
+              sum(rate(SeaweedFS_s3_request_count{code!~"2.."}[15m]))
+              /
+              sum(rate(SeaweedFS_s3_request_count[15m]))
+            ) > 0.05
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "SeaweedFS S3 non-2xx response rate above 5%"
+            description: "{{ $value | humanizePercentage }} of S3 requests over the last 15 minutes returned a non-2xx status. CNPG backup uploads may be failing."

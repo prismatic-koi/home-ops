@@ -8,3 +8,4 @@ resources:
   - s3-config.sops.yaml
   - secret.sops.yaml
   - network-policy.yaml
+  - prometheusrule.yaml
