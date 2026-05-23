@@ -20,6 +20,19 @@ spec:
   interval: 30m
   retryInterval: 1m
   timeout: 5m
+  # postBuild.substituteFrom is also injected by the parent `cluster-apps`
+  # Kustomization's patch (see kubernetes/cluster0/flux/apps.yaml). Declaring it
+  # explicitly here is a no-op at runtime (strategic-merge of identical content)
+  # but lets `flux-local test` discover the substitution: flux-local enumerates
+  # ks.yaml files directly via `kustomize cfg grep` and does not apply the
+  # parent's patches, so without this block ${CLUSTER_NAME} is left as a literal
+  # and the cilium chart's name validator fails locally. See issue #3053.
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-settings
+      - kind: Secret
+        name: cluster-secrets
 ---
 # yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
 apiVersion: kustomize.toolkit.fluxcd.io/v1
