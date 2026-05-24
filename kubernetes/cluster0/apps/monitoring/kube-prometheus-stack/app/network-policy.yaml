@@ -522,8 +522,8 @@ spec:
 ---
 # Allow Prometheus egress to host-networked scrape targets on the node CIDR (defence-in-depth).
 # Cilium agent (:9962), Cilium operator (:9963), Cilium envoy (:9964), Hubble (:9965),
-# kubelet/metrics-server (:10250) all run with hostNetwork=true; Cilium assigns them the
-# 'host'/'remote-node' entity identity, so podSelector rules don't match.
+# kubelet/metrics-server (:10250), node-exporter (:9100) all run with hostNetwork=true;
+# Cilium assigns them the 'host'/'remote-node' entity identity, so podSelector rules don't match.
 # The CiliumNetworkPolicy prometheus-allow-kube-apiserver (egress block 2) is authoritative;
 # this ipBlock rule is the standard-NetworkPolicy companion for defence-in-depth. See #2962.
 apiVersion: networking.k8s.io/v1
@@ -538,6 +538,8 @@ spec:
   policyTypes: [Egress]
   egress:
     - ports:
+        - port: 9100
+          protocol: TCP
         - port: 9962
           protocol: TCP
         - port: 9963
@@ -550,7 +552,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.87.42.0/24  # node CIDR — host-networked targets (Cilium/Hubble/kubelet)
+            cidr: 10.87.42.0/24  # node CIDR — host-networked targets (Cilium/Hubble/kubelet/node-exporter)
 ---
 # Allow Prometheus egress to scrape longhorn-system on :9500
 # ServiceMonitor longhorn-prometheus-servicemonitor targets app=longhorn-manager pods
@@ -575,6 +577,54 @@ spec:
           podSelector:
             matchLabels:
               app: longhorn-manager
+---
+# Allow Prometheus egress to scrape seaweedfs master/volume/filer/s3 on :9327
+# Chart-native ServiceMonitors (global.seaweedfs.monitoring.enabled=true) target
+# the "metrics" port on each component Service. Pod labels:
+# app.kubernetes.io/name=seaweedfs + app.kubernetes.io/component={master,volume,filer,s3}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-seaweedfs-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9327
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: master
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: volume
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: filer
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: s3
 ---
 # Allow Prometheus egress to blackbox-exporter on :9115 (Probe CRD prober URL)
 # When Prometheus processes a Probe resource it makes an outbound HTTP request to

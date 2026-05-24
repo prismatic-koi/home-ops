@@ -20,11 +20,13 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
-    - toEntities:           # host-networked scrape targets (Cilium agent/envoy/Hubble/operator/kubelet)
+    - toEntities:           # host-networked scrape targets (Cilium agent/envoy/Hubble/operator/kubelet/node-exporter)
         - host
         - remote-node
       toPorts:
         - ports:
+            - port: "9100"
+              protocol: TCP
             - port: "9962"
               protocol: TCP
             - port: "9963"

@@ -6,3 +6,4 @@ resources:
   - ./secret.yaml
   - ./network-policy.yaml
   - ./cilium-network-policy.yaml
+  - ./prometheusrule.yaml
