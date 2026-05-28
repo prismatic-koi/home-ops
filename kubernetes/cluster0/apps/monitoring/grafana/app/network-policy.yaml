@@ -5,8 +5,18 @@
 # Listens on: :3000 (HTTP UI)
 # Ingress from: networking/traefik (via HTTPRoute)
 # Ingress from: monitoring/blackbox-exporter (probe, see blackbox-exporter policy)
-# Egress to: intra-ns prometheus :9090, external :443 (plugins/avatars)
+# Egress to: intra-ns prometheus :9090, external :443 (plugins/avatars, gnetId
+#            dashboard fetches from grafana.com), K8s API (sidecar list/watch)
 # =============================================================================
+#
+# K8s API egress was added when the dashboard/datasource sidecars were enabled
+# (see helm-release.yaml `sidecar:` block). The kiwigrid/k8s-sidecar containers
+# LIST/WATCH ConfigMaps cluster-wide via kubernetes.default.svc; without an
+# allow rule they silently fail and declarative provisioning never happens.
+# Companion CiliumNetworkPolicy in cilium-network-policy.yaml is authoritative
+# under kubeProxyReplacement=true; the ipBlock rule below is defence-in-depth.
+# See #2829, #2947, #3062 (eb8440baf) for prior precedent of the silent-failure
+# mode this guards against.
 
 # Default deny-all for grafana
 apiVersion: networking.k8s.io/v1
@@ -160,3 +170,34 @@ spec:
               - 10.0.0.0/8
               - 172.16.0.0/12
               - 192.168.0.0/16
+---
+# Allow egress to K8s API server (dashboard/datasource sidecars LIST/WATCH ConfigMaps)
+# ipBlock covers the cluster service CIDR (kubernetes.default.svc) and control-plane nodes.
+# The companion CiliumNetworkPolicy (grafana-allow-kube-apiserver) is what Cilium actually
+# enforces when kubeProxyReplacement=true — the ipBlock rule is defence-in-depth.
+# Mirrors the prometheus-allow-k8s-api / kube-state-metrics-allow-k8s-api pattern.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-allow-k8s-api
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth; CiliumNP is authoritative)
