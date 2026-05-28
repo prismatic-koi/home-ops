@@ -41,11 +41,71 @@ spec:
               kind: 'Middleware'
               name: 'forwardauth-authelia'
     persistence:
+      # NOTE: persistence is intentionally left enabled for now. A follow-up PR
+      # will flip this to false once declarative provisioning of datasources +
+      # dashboards has been verified to survive a fresh PVC.
       enabled: true
       storageClass: longhorn
       existingClaim: pvc-grafana
       retain: true
-    admin: 
+    admin:
       existingSecret: grafana-secrets
       userKey: admin-user
       passwordKey: admin-password
+    # Sidecar: auto-discover ConfigMaps in any namespace carrying the
+    # grafana_dashboard / grafana_datasource labels (kube-prometheus-stack
+    # already emits many dashboard ConfigMaps with grafana_dashboard=1).
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: ALL
+        folderAnnotation: grafana_folder
+        provider:
+          foldersFromFilesStructure: true
+      datasources:
+        enabled: true
+        label: grafana_datasource
+        labelValue: "1"
+        searchNamespace: ALL
+    # Canonical datasource list lives in Git alongside the HelmRelease.
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+            isDefault: true
+            jsonData:
+              timeInterval: 30s
+    # Provider that the chart drops gnetId-fetched dashboards into.
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: default
+            orgId: 1
+            folder: ''
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/default
+    # Community dashboards pulled by gnetId at chart-render time.
+    # Revisions verified against grafana.com on 2026-05-28.
+    # NOTE: a Cilium dashboard was considered (spec suggested id 13770) but
+    # that id resolves to an unrelated dashboard on grafana.com; dropped
+    # rather than guess at the correct id. Add in a follow-up if desired.
+    dashboards:
+      default:
+        node-exporter-full:
+          gnetId: 1860
+          revision: 45
+          datasource: Prometheus
+        kubernetes-views-pods:
+          gnetId: 15760
+          revision: 39
+          datasource: Prometheus
