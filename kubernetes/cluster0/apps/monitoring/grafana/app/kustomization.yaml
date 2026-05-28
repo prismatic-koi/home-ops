@@ -6,6 +6,7 @@ resources:
   - ./secret.sops.yaml
   - ./probe.yaml
   - ./network-policy.yaml
+  - ./cilium-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: grafana

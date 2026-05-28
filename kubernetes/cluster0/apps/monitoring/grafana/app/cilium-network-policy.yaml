@@ -1,0 +1,25 @@
+---
+# CiliumNetworkPolicy: allow Grafana egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy
+# (grafana-allow-k8s-api in network-policy.yaml) is kept for defence-in-depth,
+# but this CiliumNetworkPolicy is what actually enforces the allow in practice.
+#
+# Required by the dashboard/datasource sidecars (kiwigrid/k8s-sidecar) that
+# LIST/WATCH ConfigMaps cluster-wide. See #2829 (external-dns), #2947 (cnpg),
+# #3062 / eb8440baf (longhorn-recurring-job) for the same pattern.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: grafana-allow-kube-apiserver
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  egress:
+    - toEntities:
+        - kube-apiserver
