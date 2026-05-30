@@ -28,6 +28,14 @@ spec:
     remediation:
       retries: 3
   values:
+    # Pin the container image tag explicitly. The chart derives the image tag
+    # from .Chart.AppVersion when image.tag is unset (see seaweedfs.image helper),
+    # and chart 4.29.0's appVersion resolves to "4.30" — but chrislusf/seaweedfs
+    # publishes no plain "4.30" image tag, so the pods hit ImagePullBackOff.
+    # Owning the tag here decouples it from appVersion. See #3073.
+    image:
+      # renovate: datasource=docker depName=chrislusf/seaweedfs
+      tag: "3.98"
     global:
       seaweedfs:
         enableSecurity: false
