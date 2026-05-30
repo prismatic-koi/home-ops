@@ -27,6 +27,18 @@
       "automergeType": "pr",
       "ignoreTests": false
     },
+    // Never auto-merge the seaweedfs Helm chart. The chart's appVersion has
+    // shipped image refs that don't exist on Docker Hub twice now (4.29→4.30
+    // via #3093 was the most recent; image tag `chrislusf/seaweedfs:4.30`
+    // doesn't exist, only variant tags do). Until upstream stops doing this,
+    // every seaweedfs chart bump needs human eyes before it lands.
+    {
+      "description": "Never auto-merge seaweedfs Helm chart (broken appVersion/image-tag bumps)",
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["seaweedfs"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": false
+    },
     // Enable automerge for GitHub Actions
     {
       "description": "Auto-merge GitHub Actions updates",
