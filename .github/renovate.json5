@@ -64,16 +64,17 @@
     },
     {
       // Hold seaweedfs Helm chart bumps for 3 days — chart appVersion has
-      // shipped ahead of the matching chrislusf/seaweedfs Docker image twice
-      // now (see #3094, #3095). The delay gives upstream time to either
-      // publish the image or yank the chart before we see the PR.
+      // shipped ahead of the matching chrislusf/seaweedfs Docker image
+      // (most recently #3093, reverted in #3095). The delay gives upstream
+      // time to either publish the image or yank the chart before we see
+      // the PR.
       //
       // `internalChecksFilter: 'strict'` is required: without it Renovate
       // would still open the PR and merely attach a pending status check.
       // Strict mode defers PR creation entirely until the age threshold is
       // met. The no-automerge carve-out in .github/renovate/automerge.json5
       // stays in place as defence-in-depth.
-      description: "Hold seaweedfs Helm chart bumps for 3 days — chart appVersion has shipped ahead of the matching chrislusf/seaweedfs Docker image twice now (see #3094, #3095). The delay gives upstream time to either publish the image or yank the chart before we see the PR.",
+      description: "Hold seaweedfs Helm chart bumps for 3 days — chart appVersion has shipped ahead of the matching chrislusf/seaweedfs Docker image (most recently #3093, reverted in #3095). The delay gives upstream time to either publish the image or yank the chart before we see the PR.",
       matchDatasources: ['helm'],
       matchPackageNames: ['seaweedfs'],
       minimumReleaseAge: '3 days',
