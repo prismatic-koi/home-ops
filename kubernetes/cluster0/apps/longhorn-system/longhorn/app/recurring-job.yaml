@@ -1,0 +1,15 @@
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: friday-backup
+  namespace: longhorn-system
+spec:
+  name: friday-backup
+  task: backup
+  cron: 0 3 ? * FRI
+  groups:
+    - default
+  retain: 4
+  concurrency: 2
+  labels: {}
+  parameters: {}
