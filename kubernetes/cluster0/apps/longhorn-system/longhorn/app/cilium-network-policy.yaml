@@ -23,6 +23,30 @@ spec:
     - toEntities:
         - kube-apiserver
 ---
+# Admission-webhook ingress (#2976 follow-up) — see the matching
+# NetworkPolicy `longhorn-admission-webhook-allow-apiserver` in
+# ./network-policy.yaml for the full diagnosis. Authoritative half of the
+# dual-policy pattern under Cilium kubeProxyReplacement=true: when the
+# apiserver calls the validating/mutating webhooks on :9502 the source IP
+# is on the host-network apiserver and standard NetworkPolicy ipBlock
+# matches are bypassed (same identity quirk as #2829 / #2947).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-admission-webhook-allow-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      longhorn.io/admission-webhook: longhorn-admission-webhook
+  ingress:
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "9502"
+              protocol: TCP
+---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
