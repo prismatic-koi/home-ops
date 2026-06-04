@@ -70,6 +70,13 @@
 #   - Prometheus scrape ingress: longhorn-manager :9500 (ServiceMonitor
 #     `longhorn-prometheus-servicemonitor` selects app=longhorn-manager,
 #     port name=manager → containerPort 9500)
+#   - Admission-webhook ingress: longhorn-manager pods labelled
+#     `longhorn.io/admission-webhook=longhorn-admission-webhook` serve the
+#     validating + mutating admission webhooks on :9502; the apiserver
+#     calls these for every Longhorn CRD write. Symmetric ingress
+#     counterpart to the K8s API egress allows below — needs the same
+#     dual-policy (NetworkPolicy + CiliumNetworkPolicy) treatment under
+#     Cilium kubeProxyReplacement=true. Missed by #2976, added in this PR.
 #   - Backup target NFS: instance-manager + longhorn-manager pods write the
 #     Friday backup to nfs://${NAS0_IP}:/volume1/longhorn-backups
 #     (NAS0 = 10.87.42.200 — same /24 as the nodes but NOT a node)
@@ -220,6 +227,59 @@ spec:
               app.kubernetes.io/name: prometheus
       ports:
         - port: 9500
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# longhorn admission webhook — apiserver ingress on :9502.
+#
+# This is the INGRESS counterpart to the K8s API egress allows below: when
+# the apiserver invokes Longhorn's validating/mutating admission webhooks
+# (Service `longhorn-admission-webhook`, port 9502, served by every
+# longhorn-manager pod) the connection originates AT the apiserver, so it
+# needs the same dual-policy treatment as the egress side under Cilium
+# kubeProxyReplacement=true (#2829 / #2947).
+#
+# PR #2976 added the egress half (longhorn-manager → kube-apiserver) but
+# missed this symmetric ingress. With default-deny in effect, apiserver →
+# webhook calls fail on some nodes (per-agent BPF state asymmetry — failures
+# were concentrated on the manager pods that re-attached to a particular
+# subset of nodes after the 2026-05-22 rolling restart), which manifested
+# as:
+#   - ~100% timeouts on the BackupStoreTimer 5-min reconcile loop on
+#     longhorn-manager pods on node1 (272/24h) and node2 (268/24h);
+#     ~0 on node0/node3.
+#   - 4 volumes failing admission on the 2026-06-04 weekly backup run with
+#     `failed calling webhook "validator.longhorn.io": context deadline
+#     exceeded` (10s timeout).
+#   - 2 LonghornBackupMissed alerts firing in Prometheus
+#     (pvc-zigbee2mqtt, pvc-jellyfin) — these clear naturally after the
+#     next successful backup of those volumes once the webhook path is
+#     healthy.
+#
+# Pod selector matches the live `longhorn-admission-webhook` Service
+# selector (`longhorn.io/admission-webhook=longhorn-admission-webhook`),
+# so the policy scope is exactly the webhook backends.
+#
+# Dual-policy pattern: standard NetworkPolicy ipBlock (defence-in-depth) +
+# sibling CiliumNetworkPolicy `fromEntities: [kube-apiserver]`
+# (authoritative under Cilium kubeProxyReplacement=true).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-admission-webhook-allow-apiserver
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      longhorn.io/admission-webhook: longhorn-admission-webhook
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth; CiliumNP is authoritative)
+      ports:
+        - port: 9502
           protocol: TCP
 ---
 # -----------------------------------------------------------------------------
