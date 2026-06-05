@@ -10,7 +10,6 @@ resources:
   - helm-openldap-charts.yaml
   - intel.yaml
   - jetstack-charts.yaml
-  - kubernetes-dashboard-charts.yaml
   - longhorn-charts.yaml
   - metrics-server.yaml
   - node-feature-discovery.yaml
