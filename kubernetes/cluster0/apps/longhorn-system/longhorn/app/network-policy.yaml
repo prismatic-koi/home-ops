@@ -551,6 +551,77 @@ spec:
             cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
 ---
 # -----------------------------------------------------------------------------
+# K8s API egress — Helm hook Jobs (pre-upgrade, post-upgrade, uninstall)
+# (#3124).
+#
+# The Longhorn chart ships three Helm hook Jobs — `longhorn-pre-upgrade`,
+# `longhorn-post-upgrade`, and `longhorn-uninstall` — each of which spawns a
+# one-shot pod that runs the longhorn-manager binary in upgrade/uninstall
+# mode. Before doing any in-namespace work the pods query the kube-apiserver
+# for the current Longhorn version setting:
+#
+#   GET /apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/current-longhorn-version
+#
+# Without K8s API egress that call hits the default-deny and times out
+# (`dial tcp 10.43.0.1:443: connect: connection timed out`), the hook
+# fails, Helm fails the release, and Flux rolls the chart upgrade back.
+# This was the root cause of the 1.11.2 → 1.12.0 attempt in PR #3106
+# failing and being reverted in PR #3122 — until this rule lands every
+# Longhorn chart upgrade will fail the same way.
+#
+# Hook pods carry these labels (and notably NOT `app: longhorn-manager`,
+# which is why the existing per-component allow rules above don't match
+# them):
+#   app.kubernetes.io/name: longhorn
+#   job-name: longhorn-pre-upgrade  # or -post-upgrade / -uninstall
+#   helm.sh/chart: longhorn-1.12.0
+#
+# Selector uses `matchExpressions` with `In` over the three exact
+# `job-name` values (rather than the `Exists` operator the recurring-job
+# rule above uses) so the rule does not unintentionally widen apiserver
+# egress to every Job-spawned pod in the namespace.
+#
+# Same shape of regression as #3060 (recurring-job pods missed by the
+# original #2952 classification because they only exist briefly during
+# specific control-plane operations rather than steady-state) — see that
+# issue for the precedent.
+#
+# Dual-policy pattern: standard NetworkPolicy ipBlock (defence-in-depth) +
+# sibling CiliumNetworkPolicy `toEntities: [kube-apiserver]` (authoritative
+# under Cilium kubeProxyReplacement=true — see #2829 / #2947).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-helm-hook-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: job-name
+        operator: In
+        values:
+          - longhorn-pre-upgrade
+          - longhorn-post-upgrade
+          - longhorn-uninstall
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+---
+# -----------------------------------------------------------------------------
 # NFS backup egress — longhorn-manager + instance-manager pods write the
 # weekly backup to nfs://${NAS0_IP}:/volume1/longhorn-backups (NAS0 =
 # 10.87.42.200, sits in the node /24 but is NOT a node and so not covered by
