@@ -188,7 +188,7 @@ spec:
 
     persistence:
       config:
-        existingClaim: pvc-plex0
+        existingClaim: pvc-plex
         advancedMounts:
           main:
             app:
