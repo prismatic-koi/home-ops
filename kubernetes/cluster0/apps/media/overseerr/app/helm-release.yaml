@@ -24,16 +24,31 @@ spec:
     remediation:
       retries: 5
   values:
+    defaultPodOptions:
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
     controllers:
       main:
         containers:
           app:
             image:
-              repository: ghcr.io/sct/overseerr
-              tag: 1.35.0@sha256:6197516c9d7b58ccf113455e32aafb94df5d91995fe50e8c2cae6ba6c7c7b7de
+              repository: ghcr.io/seerr-team/seerr
+              tag: v3.3.0@sha256:c92d2dc117f62185e7bcb88cd56efd374ea79210eaf433275449e8d5988eb5a8
             env:
               TZ: "${TIMEZONE}"
               LOG_LEVEL: "info"
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1000
+              runAsGroup: 1000
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              privileged: false
+              capabilities:
+                drop: ["ALL"]
+              seccompProfile:
+                type: RuntimeDefault
             resources:
               requests:
                 cpu: 100m
