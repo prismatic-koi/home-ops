@@ -46,7 +46,7 @@ spec:
           dnsdist:
             image:
               repository: docker.io/powerdns/dnsdist-20
-              tag: 2.0.6@sha256:32c8e57f039eade099dbca374f80c199213218751b6f94b1b34c6825b9b4daaf
+              tag: 2.0.7@sha256:cb8186790513a7f49cda0c48fc86ad652a6430fb070047e9fb87274ca66db9f4
           # do the vpn thing
           gluetun:
             image:
