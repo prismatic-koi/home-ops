@@ -110,33 +110,55 @@ Always check all instances when reviewing updates.
 This repository uses `gh` for PR management:
 
 ```bash
-# List PRs
-gh pr list --state open --author "renovate[bot]"
+# List PRs (Renovate's app handle in this repo)
+gh pr list --state open --author "app/prismatic-bot"
 
 # View PR details
 gh pr view <number> --json title,body,files
 
-# Merge PR (without auto-merge as branch protection isn't configured)
+# Merge PR (do not use --auto; branch protection isn't configured, so --auto
+# would just sit waiting forever)
 gh pr merge <number> --squash
 
-# View issue
-gh issue view <number>
+# Find the Renovate Dashboard issue dynamically (number is not stable)
+gh issue list --search "Renovate Dashboard" --author "app/prismatic-bot" \
+  --state open --json number --jq '.[0].number'
 
-# Edit issue (for Renovate triggers)
+# View / edit an issue (e.g. to tick Renovate dashboard checkboxes)
+gh issue view <number>
 gh issue edit <number>
 ```
 
 ## Renovate Configuration
 
-- **Dependency Dashboard**: Issue #1 tracks all detected dependencies
-- **Rate Limited PRs**: Major updates are rate-limited and must be manually triggered
-- **Auto-merge**: Disabled - all PRs require manual review
-- **Schedule**: Runs weekly on weekends (Pacific/Auckland timezone)
-- **Labels**: PRs are labeled with `dep/patch`, `dep/minor`, `dep/major`, and package type
+- **Dependency Dashboard**: An issue titled "Renovate Dashboard" authored by
+  `app/prismatic-bot` tracks all detected dependencies. The issue number is
+  not stable — look it up dynamically (see the `gh issue list --search` snippet
+  in "Working with GitHub CLI" above).
+- **Rate-Limited PRs**: Renovate can hold PRs back when many are open at once.
+  The dashboard surfaces them under a "Rate-Limited" section with a checkbox
+  to release them all.
+- **Auto-merge**: Enabled for most low-risk updates via
+  `.github/renovate/automerge.json5`. Patches auto-merge across all packages;
+  minor updates auto-merge for Docker images and Helm charts; all GitHub
+  Actions updates auto-merge. Carve-outs that always require a human:
+  Tier 1 infrastructure (k3s, system-upgrade-controller, rancher/k3s-upgrade,
+  cilium, coredns, traefik) on any update type; Tier 2 infrastructure
+  (cert-manager, trust-manager, cloudnative-pg, external-dns,
+  kube-prometheus-stack, longhorn, plus the Tier 1 list) on major/minor;
+  databases (postgres*, valkey, redis) on major/minor; home-assistant
+  (calendar versioning); seaweedfs (phantom appVersions upstream); and all
+  major updates. Treat `.github/renovate/automerge.json5` as the source of
+  truth if this list drifts.
+- **Schedule**: Runs on the schedule configured by Renovate (Pacific/Auckland
+  timezone). The routine-patching task is run by Ben occasionally, not on a
+  fixed cadence.
+- **Labels**: PRs are labelled with `dep/patch`, `dep/minor`, `dep/major`, and
+  package type.
 
 ### Renovate Special Checkboxes
 
-Issue #1 contains checkboxes that trigger Renovate actions:
+The Renovate Dashboard issue contains checkboxes that trigger Renovate actions:
 - Creating all rate-limited PRs at once
 - Forcing Renovate to run again
 
