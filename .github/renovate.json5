@@ -43,6 +43,28 @@
       pinDigests: true,
     },
     {
+      // Defence-in-depth against the phantom-tag failure class: hold all
+      // docker + helm updates for 24h so upstream has time to either push
+      // the image their tag/appVersion points at, or yank a broken release
+      // before we ever see the PR. We've been bitten by this four times —
+      // seaweedfs #2862 + #3093, rancher/system-upgrade-controller #3178
+      // (broke CI for 2 days), and grafana 13.0.0 (retroactive Docker Hub
+      // delete after the bump merged).
+      //
+      // `internalChecksFilter: 'strict'` is required: without it Renovate
+      // would still open the PR and merely attach a pending status check.
+      // Strict mode defers PR creation entirely until the age threshold is
+      // met.
+      //
+      // The seaweedfs-specific 3-day hold below stays in place — Renovate
+      // takes the longer of multiple `minimumReleaseAge` values, so
+      // seaweedfs continues to wait 3 days while everything else waits 24h.
+      description: 'Hold all docker + helm updates for 24h (phantom-tag defence)',
+      matchDatasources: ['docker', 'helm'],
+      minimumReleaseAge: '24h',
+      internalChecksFilter: 'strict',
+    },
+    {
       matchDatasources: [
         'docker',
       ],

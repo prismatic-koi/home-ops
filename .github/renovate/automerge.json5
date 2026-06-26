@@ -59,7 +59,7 @@
       "description": "Never auto-merge Tier 1 critical infrastructure",
       "matchPackageNames": [
         "k3s-io/k3s",
-        "system-upgrade-controller",
+        "rancher/system-upgrade-controller",
         "rancher/k3s-upgrade",
         "cilium",
         "coredns",
@@ -94,7 +94,7 @@
         "valkey",
         "redis"
       ],
-      "matchUpdateTypes": ["major", "minor"],
+      "matchUpdateTypes": ["major", "minor", "digest"],
       "automerge": false
     },
     // Special handling for home-assistant (calendar versioning)
