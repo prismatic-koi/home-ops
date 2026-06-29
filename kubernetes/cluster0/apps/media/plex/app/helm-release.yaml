@@ -138,6 +138,24 @@ spec:
               ports:
                 - port: 32400
                   protocol: TCP
+      # Allow overseerr → plex API calls (library lookups, request submission).
+      # Same Cilium endpoint-identity reason as allow-monitoring-ingress above:
+      # the 0.0.0.0/0 CIDR rule below doesn't match cluster-local senders.
+      allow-overseerr-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: overseerr
+              ports:
+                - port: 32400
+                  protocol: TCP
       # Intentionally open to all sources: Plex clients stream directly via the
       # LoadBalancer IP (LAN and Plex relay traffic from the internet both arrive here)
       allow-32400-ingress:
