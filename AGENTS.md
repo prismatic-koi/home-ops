@@ -143,7 +143,7 @@ gh issue edit <number>
   minor updates auto-merge for Docker images and Helm charts; all GitHub
   Actions updates auto-merge. Carve-outs that always require a human:
   Tier 1 infrastructure (k3s, system-upgrade-controller, rancher/k3s-upgrade,
-  cilium, coredns, traefik) on any update type; Tier 2 infrastructure
+  cilium, coredns, traefik, flux) on any update type; Tier 2 infrastructure
   (cert-manager, trust-manager, cloudnative-pg, external-dns,
   kube-prometheus-stack, longhorn, plus the Tier 1 list) on major/minor;
   databases (postgres*, valkey, redis) on major/minor; home-assistant
