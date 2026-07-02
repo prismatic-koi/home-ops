@@ -63,7 +63,9 @@
         "rancher/k3s-upgrade",
         "cilium",
         "coredns",
-        "traefik"
+        "traefik",
+        "fluxcd/flux2",
+        "ghcr.io/fluxcd/flux-manifests"
       ],
       "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
       "automerge": false

@@ -103,6 +103,31 @@
       internalChecksFilter: 'strict',
     },
     {
+      // Group both Flux dependencies into a single PR. The Flux version is
+      // carried in two places that Renovate tracks independently:
+      //   - `kubernetes/cluster0/bootstrap/flux/kustomization.yaml` — Kustomize
+      //     `?ref=vX.Y.Z` on `github.com/fluxcd/flux2/manifests/install`
+      //     (datasource: github-tags, manager: kustomize, package: fluxcd/flux2).
+      //   - `kubernetes/cluster0/flux/config/flux.yaml` — OCIRepository with
+      //     `ref.tag: "vX.Y.Z"` on `oci://ghcr.io/fluxcd/flux-manifests`
+      //     (datasource: docker, manager: flux, package:
+      //     ghcr.io/fluxcd/flux-manifests).
+      //
+      // These must always move in lockstep — one is what a fresh cluster
+      // installs on bootstrap, the other is what the running cluster
+      // reconciles against. Drift between them means a rebuild would install
+      // a different Flux version than what's running. Without this group,
+      // Renovate opens two separate PRs and rate-limiting can land one
+      // without the other (as happened around PR #3228).
+      description: 'Group Flux (bootstrap kustomize + OCIRepository) into one PR',
+      matchPackageNames: [
+        'fluxcd/flux2',
+        'ghcr.io/fluxcd/flux-manifests',
+      ],
+      groupName: 'flux',
+      groupSlug: 'flux',
+    },
+    {
       // Flux manager + OCIRepository hybrid digest shape is broken:
       // Renovate writes `tag: <semver>@sha256:<digest>` instead of populating
       // the separate `ref.digest` field (renovatebot/renovate#42082). flux-local
