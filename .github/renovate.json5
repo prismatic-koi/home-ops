@@ -65,6 +65,38 @@
       internalChecksFilter: 'strict',
     },
     {
+      // Exempt ghcr.io/fluxcd/flux-manifests from the 24h phantom-tag hold.
+      //
+      // Why this is safe / necessary:
+      //   (a) The OCI artifact publishes no release timestamp. Renovate
+      //       runs with the default `minimumReleaseAgeBehaviour=timestamp-required`,
+      //       so a missing timestamp is treated as "gate not yet cleared"
+      //       — the release is marked pending forever and no PR is ever
+      //       opened. Evidence from workflow run 28684588597:
+      //           DEBUG: Marking 1 release(s) as pending, as they do not
+      //             have a releaseTimestamp and we're running with
+      //             minimumReleaseAgeBehaviour=timestamp-required
+      //             "depName": "ghcr.io/fluxcd/flux-manifests"
+      //             "check": "minimumReleaseAge"
+      //   (b) The 24h phantom-tag defence exists to protect auto-merged
+      //       updates. flux is listed in Tier 1 of
+      //       .github/renovate/automerge.json5, which disables auto-merge
+      //       for `ghcr.io/fluxcd/flux-manifests` on every update type —
+      //       so a human always eyeballs the PR before it lands, and the
+      //       age gate adds nothing here.
+      //   (c) Without this exemption the Flux lockstep group rule below
+      //       is broken in practice: the bootstrap-kustomize half
+      //       (fluxcd/flux2, github-tags datasource — not gated) opens
+      //       alone while the OCIRepository half stays permanently
+      //       pending, so the two halves can never bundle into a single
+      //       PR. Observed on PR #3235 (branch prismatic-bot/flux), which
+      //       contains only the v2.8.8 → v2.9.0 kustomize bump.
+      description: 'Exempt ghcr.io/fluxcd/flux-manifests from the 24h phantom-tag hold (no releaseTimestamp; Tier 1 never auto-merges; unblocks the flux lockstep group)',
+      matchDatasources: ['docker'],
+      matchPackageNames: ['ghcr.io/fluxcd/flux-manifests'],
+      minimumReleaseAge: null,
+    },
+    {
       matchDatasources: [
         'docker',
       ],
