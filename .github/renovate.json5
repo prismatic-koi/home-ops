@@ -44,12 +44,12 @@
     },
     {
       // Defence-in-depth against the phantom-tag failure class: hold all
-      // docker + helm updates for 24h so upstream has time to either push
-      // the image their tag/appVersion points at, or yank a broken release
-      // before we ever see the PR. We've been bitten by this four times —
-      // seaweedfs #2862 + #3093, rancher/system-upgrade-controller #3178
-      // (broke CI for 2 days), and grafana 13.0.0 (retroactive Docker Hub
-      // delete after the bump merged).
+      // helm chart updates for 24h so upstream has time to either publish
+      // the image the chart's appVersion points at, or yank a broken
+      // release before we ever see the PR. Chart repo indexes publish a
+      // releaseTimestamp for every version, so this gate works correctly
+      // for helm (see the sibling docker rule below for why the docker
+      // half is scoped differently).
       //
       // `internalChecksFilter: 'strict'` is required: without it Renovate
       // would still open the PR and merely attach a pending status check.
@@ -59,42 +59,73 @@
       // The seaweedfs-specific 3-day hold below stays in place — Renovate
       // takes the longer of multiple `minimumReleaseAge` values, so
       // seaweedfs continues to wait 3 days while everything else waits 24h.
-      description: 'Hold all docker + helm updates for 24h (phantom-tag defence)',
-      matchDatasources: ['docker', 'helm'],
+      description: 'Hold all helm chart updates for 24h (phantom-tag defence)',
+      matchDatasources: ['helm'],
       minimumReleaseAge: '24h',
       internalChecksFilter: 'strict',
     },
     {
-      // Exempt ghcr.io/fluxcd/flux-manifests from the 24h phantom-tag hold.
+      // Same 24h phantom-tag defence, scoped to Docker Hub images only.
       //
-      // Why this is safe / necessary:
-      //   (a) The OCI artifact publishes no release timestamp. Renovate
-      //       runs with the default `minimumReleaseAgeBehaviour=timestamp-required`,
-      //       so a missing timestamp is treated as "gate not yet cleared"
-      //       — the release is marked pending forever and no PR is ever
-      //       opened. Evidence from workflow run 28684588597:
-      //           DEBUG: Marking 1 release(s) as pending, as they do not
-      //             have a releaseTimestamp and we're running with
-      //             minimumReleaseAgeBehaviour=timestamp-required
-      //             "depName": "ghcr.io/fluxcd/flux-manifests"
-      //             "check": "minimumReleaseAge"
-      //   (b) The 24h phantom-tag defence exists to protect auto-merged
-      //       updates. flux is listed in Tier 1 of
-      //       .github/renovate/automerge.json5, which disables auto-merge
-      //       for `ghcr.io/fluxcd/flux-manifests` on every update type —
-      //       so a human always eyeballs the PR before it lands, and the
-      //       age gate adds nothing here.
-      //   (c) Without this exemption the Flux lockstep group rule below
-      //       is broken in practice: the bootstrap-kustomize half
-      //       (fluxcd/flux2, github-tags datasource — not gated) opens
-      //       alone while the OCIRepository half stays permanently
-      //       pending, so the two halves can never bundle into a single
-      //       PR. Observed on PR #3235 (branch prismatic-bot/flux), which
-      //       contains only the v2.8.8 → v2.9.0 kustomize bump.
-      description: 'Exempt ghcr.io/fluxcd/flux-manifests from the 24h phantom-tag hold (no releaseTimestamp; Tier 1 never auto-merges; unblocks the flux lockstep group)',
+      // Why the scope: non-Hub registries (ghcr.io, quay.io, lscr.io,
+      // registry.k8s.io, …) publish NO releaseTimestamp for image
+      // manifests. Renovate runs with the default
+      // `minimumReleaseAgeBehaviour=timestamp-required`, which treats a
+      // missing timestamp as "gate not yet cleared" — so any non-Hub
+      // image gets marked pending FOREVER, the `renovate/stability-days`
+      // status check never passes, and automerge never fires.
+      //
+      // Evidence from Renovate workflow runs 28684588597 and 28686932952:
+      //     DEBUG: Marking 1 release(s) as pending, as they do not have a
+      //       releaseTimestamp and we're running with
+      //       minimumReleaseAgeBehaviour=timestamp-required
+      //       "depName": "ghcr.io/browserless/chromium"
+      //       "check": "minimumReleaseAge"
+      // Same log line appeared for ghcr.io/allenporter/flux-local,
+      // ghcr.io/searxng/searxng, ghcr.io/stakater/charts/reloader,
+      // ghcr.io/koenkk/zigbee2mqtt, ghcr.io/miniflux/miniflux,
+      // ghcr.io/0xerr0r/blocky, and ghcr.io/fluxcd/flux-manifests. PRs
+      // #3237–#3242 and #3244 all had to be merged manually because of
+      // this.
+      //
+      // Docker Hub publishes releaseTimestamp on tag pushes, so the gate
+      // works correctly there — and all three incidents that motivated
+      // the 24h hold in the first place were Docker Hub: seaweedfs #2862
+      // + #3093, rancher/system-upgrade-controller #3178 (broke CI for 2
+      // days), and grafana 13.0.0 (retroactive Docker Hub tag delete
+      // after the bump merged). The defence stays exactly where the
+      // incidents happened.
+      //
+      // The regex matches Docker Hub packageName shapes structurally —
+      // this is a general rule, not a per-registry allowlist to
+      // maintain:
+      //   - bare official image (no slash):        `eclipse-mosquitto`
+      //   - namespace/image whose first segment contains no `.` and no
+      //     `:` (i.e. is not a hostname):          `grafana/grafana`
+      //   - explicit Docker Hub prefix:            `docker.io/plexinc/pms-docker`
+      // Anything else — first segment contains `.` or `:` and is not
+      // exactly `docker.io` — is a non-Hub registry and falls outside
+      // this rule (so `minimumReleaseAge` is unset for it and it is not
+      // gated).
+      //
+      // This general rule supersedes the previous per-package exemption
+      // for `ghcr.io/fluxcd/flux-manifests` (PR #3245), which was added
+      // to unblock the flux lockstep group — the bootstrap-kustomize half
+      // (fluxcd/flux2, github-tags datasource — never gated) opens alone
+      // while the OCIRepository half stayed permanently pending, so the
+      // two halves could never bundle into a single PR (observed on
+      // #3235). That symptom is now the general symptom for every ghcr /
+      // quay / lscr / registry.k8s.io image in the repo, and the fix is
+      // general with it.
+      //
+      // Tier 1/2 auto-merge carve-outs in .github/renovate/automerge.json5
+      // are the enforcement point for "a human always eyeballs this before
+      // it lands" and are unaffected by this change.
+      description: 'Hold Docker Hub docker updates for 24h (phantom-tag defence). Non-Hub registries (ghcr.io, quay.io, lscr.io, registry.k8s.io, …) are excluded because they publish no releaseTimestamp and minimumReleaseAgeBehaviour=timestamp-required would pend them forever.',
       matchDatasources: ['docker'],
-      matchPackageNames: ['ghcr.io/fluxcd/flux-manifests'],
-      minimumReleaseAge: null,
+      matchPackageNames: ['/^([^/]+$|[^./:]+/|docker\\.io/)/'],
+      minimumReleaseAge: '24h',
+      internalChecksFilter: 'strict',
     },
     {
       matchDatasources: [
