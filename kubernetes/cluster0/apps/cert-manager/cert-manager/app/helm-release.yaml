@@ -23,14 +23,14 @@ spec:
       retries: 3
   values:
     installCRDs: true
+    # --dns01-recursive-nameservers* pins the DNS-01 *self-check* to the two
+    # public resolvers (avoiding split-horizon / stale internal views for
+    # `_acme-challenge` TXT propagation). Pod-level DNS is intentionally left
+    # at the cluster default (CoreDNS) so ACME directory + Cloudflare API
+    # lookups resolve normally. See #3291.
     extraArgs:
       - --dns01-recursive-nameservers=1.1.1.1:53,9.9.9.9:53
       - --dns01-recursive-nameservers-only
-    podDnsPolicy: "None"
-    podDnsConfig:
-      nameservers:
-        - "1.1.1.1"
-        - "9.9.9.9"
     prometheus:
       enabled: true
       servicemonitor:
