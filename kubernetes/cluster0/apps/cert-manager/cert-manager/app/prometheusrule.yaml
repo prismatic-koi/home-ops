@@ -1,0 +1,49 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+spec:
+  groups:
+    - name: cert-manager.certificates
+      rules:
+        # Fires when any cert-manager-managed Certificate has <=7 days remaining
+        # before its notAfter date. Let's Encrypt renews 30 days out, so a
+        # 7-day alert gives ~23 days of runway before anything is at risk.
+        #
+        # The expression is `expiration_timestamp - time() < 7d`; once the cert
+        # has actually expired the delta is negative (still < 7d), so the alert
+        # keeps firing rather than silently resolving on expiry.
+        - alert: CertManagerCertificateExpiringSoon
+          expr: |
+            certmanager_certificate_expiration_timestamp_seconds - time() < 7 * 24 * 3600
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 7 days"
+            description: |
+              Certificate {{ $labels.namespace }}/{{ $labels.name }} (issuer {{ $labels.issuer_name }})
+              expires at {{ $value | humanizeTimestamp }}. cert-manager should have renewed
+              this 30 days before expiry -- investigate why renewal has not completed.
+
+        # Fires when a Certificate has been Ready=False for more than an hour.
+        # cert-manager exposes ready_status as a gauge per (namespace, name,
+        # condition) triple; the "True" condition series equals 1 when Ready
+        # and 0 otherwise, so `{condition="True"} == 0` selects certs that are
+        # currently not-Ready. `for: 1h` filters out transient flips during
+        # normal issuance/renewal.
+        - alert: CertManagerCertificateNotReady
+          expr: |
+            certmanager_certificate_ready_status{condition="True"} == 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} has not been Ready for more than 1 hour"
+            description: |
+              Certificate {{ $labels.namespace }}/{{ $labels.name }} has been in Ready=False
+              state for more than 1 hour. Check the Certificate status and cert-manager logs
+              for issuance errors.
