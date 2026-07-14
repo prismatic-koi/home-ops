@@ -7,6 +7,7 @@ resources:
   - ./helm-release.yaml
   - ./network-policy.yaml
   - ./cilium-network-policy.yaml
+  - ./prometheusrule.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: cert-manager
