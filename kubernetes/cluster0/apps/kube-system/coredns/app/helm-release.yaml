@@ -10,7 +10,10 @@ spec:
   chart:
     spec:
       chart: coredns
-      version: 1.46.2
+      # Pinned to 1.32.0 (matches the live k3s-managed release) for Flux
+      # adoption; bump to 1.46.2 in a follow-up PR once adoption is verified
+      # green.
+      version: 1.32.0
       sourceRef:
         kind: HelmRepository
         name: coredns
@@ -31,7 +34,7 @@ spec:
     k8sAppLabelOverride: kube-dns
     service:
       name: kube-dns
-      clusterIP: 10.42.0.10
+      clusterIP: 10.43.0.10
     serviceAccount:
       create: true
     servers:
