@@ -191,6 +191,47 @@
       groupSlug: 'flux',
     },
     {
+      // Group + lockstep-gate rancher/system-upgrade-controller into one PR.
+      // The controller version is carried in two places Renovate tracks
+      // independently, both in
+      // kubernetes/cluster0/apps/system-upgrade/system-upgrade-controller/app/kustomization.yaml:
+      //   - `resources:` — two GitHub URLs (a `crd.yaml` release asset and a
+      //     `?ref=vX.Y.Z` repo ref), both tagged
+      //     `# renovate: datasource=github-releases depName=rancher/system-upgrade-controller`
+      //     (datasource: github-releases, package: rancher/system-upgrade-controller).
+      //   - `images:` — `newTag: vX.Y.Z@sha256:...` (datasource: docker,
+      //     package: rancher/system-upgrade-controller). This is a bare Docker
+      //     Hub `namespace/image`, so it also matches the "Hold Docker Hub
+      //     docker updates for 24h" rule above and is embargoed 24h.
+      //
+      // These must move in lockstep — the URLs are the manifests/CRD applied
+      // to the cluster, the image tag is what the controller actually runs.
+      // Grouping alone is not enough: the github-releases half is NOT gated
+      // by any minimumReleaseAge, so without an explicit gate here it opens
+      // its PR immediately while the docker half sits behind the 24h Docker
+      // Hub hold — the group would still bundle late, but only after the
+      // ungated half's PR already existed unbundled for up to 24h. Observed
+      // on PR #3316: the URL half opened ~1.5h after v0.20.1 hit Docker Hub,
+      // bumping the manifests/CRD to v0.20.1 while `images.newTag` stayed at
+      // v0.19.2 — the cluster ran the old controller image against the new
+      // manifests until a follow-up PR landed.
+      //
+      // The fix: apply the SAME 24h `minimumReleaseAge` +
+      // `internalChecksFilter: 'strict'` to both halves, keyed on
+      // `matchPackageNames` alone (no `matchDatasources`) so one rule catches
+      // both the docker image entry and the github-releases URL entries,
+      // which share the same depName. The github-releases datasource DOES
+      // publish release timestamps (unlike the non-Hub docker registries
+      // that motivated the timestamp caveat above), so a release-age gate
+      // resolves correctly here and will not pend forever.
+      description: 'Group rancher/system-upgrade-controller (CRD/manifest URLs + image tag) into one PR, gated 24h on both halves so neither opens ahead of the other',
+      matchPackageNames: ['rancher/system-upgrade-controller'],
+      groupName: 'system-upgrade-controller',
+      groupSlug: 'system-upgrade-controller',
+      minimumReleaseAge: '24h',
+      internalChecksFilter: 'strict',
+    },
+    {
       // Flux manager + OCIRepository hybrid digest shape is broken:
       // Renovate writes `tag: <semver>@sha256:<digest>` instead of populating
       // the separate `ref.digest` field (renovatebot/renovate#42082). flux-local
