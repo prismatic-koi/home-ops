@@ -6,10 +6,11 @@ resources:
   - ./namespace.yaml
   # Flux-Kustomizations
   - ./cilium/ks.yaml
-  # The CoreDNS HelmRelease in ./coredns/app/ remains intentionally disabled
-  # (live CoreDNS predates Flux management of the chart). Phase 4c (#2952)
-  # re-enables this Flux Kustomization pointing at ./coredns/policy/ — see
-  # ./coredns/ks.yaml for the rationale.
+  # ./coredns/ks.yaml defines TWO sibling Flux Kustomizations: the
+  # NetworkPolicy set (cluster-apps-coredns, ./coredns/policy) and the
+  # CoreDNS HelmRelease itself (cluster-apps-coredns-app, ./coredns/app).
+  # See the per-Kustomization comments in that file for the adoption story
+  # and the two-outage post-mortem that shaped the guards.
   - ./coredns/ks.yaml
   - ./intel-device-plugin/ks.yaml
   # The Flux Kustomization at ./local-path-provisioner/ks.yaml points at a
