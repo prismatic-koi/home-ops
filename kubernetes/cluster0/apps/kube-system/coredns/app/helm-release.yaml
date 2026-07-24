@@ -10,10 +10,14 @@ spec:
   chart:
     spec:
       chart: coredns
-      # Pinned to 1.32.0 (matches the live k3s-managed release) for Flux
-      # adoption; bump to 1.46.2 in a follow-up PR once adoption is verified
-      # green.
-      version: 1.32.0
+      # 1.46.2 is the first post-adoption bump (adoption landed at 1.32.0 in
+      # #3327). appVersion goes 1.11.3 -> 1.13.1. Somewhere between chart
+      # 1.33.0 and 1.40.0 the default readinessProbe was tightened
+      # (periodSeconds 10 -> 5, failureThreshold 5 -> 1) and every chart
+      # from 1.40.0 onward carries the tighter values. We pin the loose
+      # 1.32.0-era values below so rollout slack under maxUnavailable:1 on
+      # the sole DNS provider is preserved across this and future bumps.
+      version: 1.46.2
       sourceRef:
         kind: HelmRepository
         name: coredns
@@ -68,6 +72,23 @@ spec:
       clusterIP: 10.43.0.10
       selector:
         k8s-app: kube-dns
+    # Explicit readinessProbe override. The chart tightened its defaults
+    # (periodSeconds 10 -> 5, failureThreshold 5 -> 1) somewhere between
+    # chart 1.33.0 and 1.40.0 — every chart from 1.40.0 onward already
+    # carries the tighter values, so we would inherit them silently on this
+    # bump and on every future bump. CoreDNS is our sole DNS provider on a
+    # 2-replica deployment with maxUnavailable:1, so we pin to the loose
+    # 1.32.0-era values that match the live install (validated during the
+    # adoption in #3327) to preserve rollout slack. The probe path (/ready)
+    # and port (8181) are hard-coded in the chart's deployment template and
+    # cannot be overridden from values.
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 5
+      successThreshold: 1
     serviceAccount:
       create: true
     servers:
