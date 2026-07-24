@@ -23,18 +23,51 @@ spec:
     remediation:
       retries: 3
   upgrade:
-    cleanupOnFail: true
+    # cleanupOnFail:false + keepHistory:true is a hard guard against the
+    # exact failure mode that caused the two outages on 2026-07-23: an
+    # upgrade that hits an immutable-field error would previously cause
+    # Helm to uninstall the release and take down cluster DNS. See the
+    # post-mortem on #3323.
+    cleanupOnFail: false
     remediation:
       retries: 3
   uninstall:
-    keepHistory: false
+    keepHistory: true
   values:
     fullnameOverride: coredns
     replicaCount: 2
     k8sAppLabelOverride: kube-dns
+    # Preserved from the pre-adoption manual manifests so the adopted pods
+    # keep the eviction protection every cluster DNS provider needs.
+    priorityClassName: system-cluster-critical
+    # Chart default omits `drop: [ALL]` and `readOnlyRootFilesystem`. The
+    # pre-adoption manual pod spec had both — preserving them here so
+    # adoption does not regress security posture.
+    securityContext:
+      capabilities:
+        add:
+          - NET_BIND_SERVICE
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+    # deployment.selector + service.selector are pinned to the single-label
+    # selector that the manually-applied live objects use (`k8s-app:
+    # kube-dns`). Deployment.spec.selector is IMMUTABLE, so leaving the
+    # chart default (three labels) would break the first `helm upgrade` and
+    # is precisely the class of failure the upgrade guards above defend
+    # against — but avoiding it entirely is safer. Keeping the Service
+    # selector single-label also means no window with zero Endpoints while
+    # pod labels roll forward. See the coredns chart README, section
+    # "Adopting existing CoreDNS resources".
+    deployment:
+      selector:
+        matchLabels:
+          k8s-app: kube-dns
     service:
       name: kube-dns
       clusterIP: 10.43.0.10
+      selector:
+        k8s-app: kube-dns
     serviceAccount:
       create: true
     servers:
