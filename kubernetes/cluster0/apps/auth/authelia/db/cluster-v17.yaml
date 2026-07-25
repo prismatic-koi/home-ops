@@ -53,12 +53,30 @@ spec:
           name: cloudnative-pg-secret
           key: S3_SECRET_KEY
 
-  # bootstrap:
+  # Declare initdb.owner/database/secret so CNPG's app-user reconciler targets
+  # the real "authelia" role and the user-managed secret (authelia-db-secrets)
+  # whose password already matches the role in PG. Without this block CNPG
+  # defaults owner=app/database=app, but the cluster was originally bootstrapped
+  # with owner=authelia (see commit 1b7f392fd, later commented out in 4a869d26c),
+  # so the operator's -app secret (username=authelia) mismatched the defaulted
+  # owner and the reconciler errored every loop with:
+  #   "wrong username 'authelia' in secret, expected 'app'"
+  # Pointing at a user-managed secret also stops CNPG from re-managing the
+  # stale -app secret (ShouldCreateApplicationSecret becomes false), matching
+  # the pattern used by miniflux/home-assistant in this repo.
+  bootstrap:
+    initdb:
+      database: authelia
+      owner: authelia
+      secret:
+        name: authelia-db-secrets
+
   # use this to recover a net-new cluster from a backup
+  # bootstrap:
   #   recovery:
   #     source: authelia-db-backup-v17
 
-    # # use this to 'migrate' from an existing cnpg cluster (e.g. "postgres-v15") to the new cluster
+  # use this to 'migrate' from an existing cnpg cluster (e.g. "postgres-v15") to the new cluster
   # bootstrap:
   #   initdb:
   #     database: authelia

@@ -4,5 +4,6 @@ kind: Kustomization
 resources:
   - cluster-v17.yaml
   - scheduled-backup.yaml
+  - secret.sops.yaml
   - network-policy.yaml
   - cilium-network-policy.yaml
