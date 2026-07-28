@@ -35,9 +35,6 @@ spec:
             namespace: networking
             sectionName: websecure
     persistence:
-      # NOTE: persistence is intentionally left enabled for now. A follow-up PR
-      # will flip this to false once declarative provisioning of datasources +
-      # dashboards has been verified to survive a fresh PVC.
       enabled: true
       storageClass: longhorn
       existingClaim: pvc-grafana
