@@ -684,6 +684,33 @@ spec:
             matchLabels:
               app.kubernetes.io/name: blocky-secondary
 ---
+# Allow Prometheus egress to scrape networking/headscale on :9091 (metrics via ServiceMonitor)
+# Pod label: app.kubernetes.io/name=headscale; ServiceMonitor endpoint port `metrics` -> :9091.
+# Added alongside #3361 after the bidirectional-scrape lint surfaced the missing egress half
+# (target-side headscale-allow-prometheus-scrape ingress was landed with #3355 but the
+# reciprocal egress rule was omitted, so `up{...headscale...}=0` in the current cluster).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-networking-headscale-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9091
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: headscale
+---
 # Allow Prometheus egress to scrape intra-ns Loki on :3100 (metrics via ServiceMonitor)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

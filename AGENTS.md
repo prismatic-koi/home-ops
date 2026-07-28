@@ -188,6 +188,50 @@ Priority updates that should be merged quickly:
 - Prometheus operator (monitoring)
 - Cilium (networking)
 
+## Adding a new monitored app (Prometheus scrape targets)
+
+Prometheus runs with a full default-deny NetworkPolicy (`prometheus-default-deny` in
+`monitoring`, blocking both Ingress and Egress). Because of that, **every scrape target
+needs TWO NetworkPolicies, not one** — an ingress rule on the target namespace *and*
+a reciprocal egress rule on the Prometheus pod. If only the ingress half exists, the
+scrape silently times out: `up=0` with a healthy pod, a correct-looking ServiceMonitor,
+and a correct-looking ingress rule. This bit us during the Loki/Alloy rollout and was
+fixed in #3359; see #3361 for the guardrail that now catches it at PR time.
+
+### The two rules
+
+1. **Ingress on the target**, in the app's own `network-policy.yaml`:
+   - Name: `<app>-allow-prometheus-scrape`
+   - Selects the target pod, allows ingress from `app.kubernetes.io/name: prometheus`
+     in namespace `monitoring`, on the metrics port.
+2. **Egress on Prometheus**, in
+   `kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml`:
+   - Name: `prometheus-allow-<app>-scrape-egress`
+   - Selects `app.kubernetes.io/name: prometheus`, allows egress to the target
+     namespace + pod selector, on the same metrics port.
+
+Both rules must reference the **same port**. Common gotcha: the ingress rule uses the
+container port name (e.g. `metrics`) resolved via the Service; the egress rule must
+use the numeric port (NetworkPolicy `to.ports` does not resolve named ports across
+namespaces).
+
+### Checklist when adding a new monitored app
+
+- [ ] App enables its ServiceMonitor (or a raw `ServiceMonitor` YAML is added).
+- [ ] Target-side ingress rule `<app>-allow-prometheus-scrape` exists in the app's
+      `network-policy.yaml`, allowing `monitoring/prometheus` on the metrics port.
+- [ ] **Reciprocal** egress rule `prometheus-allow-<app>-scrape-egress` is added to
+      `kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml`,
+      targeting the app's namespace + pod selector + numeric metrics port.
+- [ ] After deploy, verify `up{job=~".*<app>.*"} == 1` in Prometheus. `up=0` with a
+      healthy pod almost always means the egress half is missing.
+
+The CI job `Prometheus scrape NetworkPolicy lint`
+(`.github/workflows/prometheus-scrape-netpol-lint.yaml`, script at
+`scripts/lint-prometheus-scrape-netpol.py`) enforces this at PR time. If it fails on a
+new app, the fix is almost always "add the missing `prometheus-allow-<app>-scrape-egress`
+rule".
+
 ## Init Containers
 
 Some applications use init containers that must complete before the main container starts:
