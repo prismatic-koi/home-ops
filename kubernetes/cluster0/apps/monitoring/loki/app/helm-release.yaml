@@ -121,9 +121,16 @@ spec:
           env:
             - name: MC_HOST_URL
               value: http://seaweedfs-s3.seaweedfs.svc:8333
+            - name: HOME
+              value: /tmp
           envFrom:
             - secretRef:
                 name: loki-s3-credentials
+          # Mount the chart's built-in tmp emptyDir so mc can write config to /tmp/.mc
+          # (chart v6.55.0 defines tmp as an emptyDir in the StatefulSet spec.volumes)
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       persistence:
         enabled: true
         size: 10Gi
