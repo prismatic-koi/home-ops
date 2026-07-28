@@ -178,19 +178,53 @@ spec:
             }
 
             // Canonicalise to lowercase {info, warn, error, debug}. Anchored
-            // so partial matches don't collide.
-            stage.replace { source = "level" expression = "^(?i)I(nfo)?$"           replace = "info"  }
-            stage.replace { source = "level" expression = "^(?i)W(arn(ing)?)?$"     replace = "warn"  }
-            stage.replace { source = "level" expression = "^(?i)E(rr(or)?)?$"       replace = "error" }
-            stage.replace { source = "level" expression = "^(?i)D(ebug)?$"          replace = "debug" }
-            stage.replace { source = "level" expression = "^(?i)(fatal|critical|panic)$" replace = "error" }
-            stage.replace { source = "level" expression = "^(?i)trace$"             replace = "debug" }
+            // so partial matches don't collide. River requires each attribute
+            // on its own line (or comma-separated) inside a block.
+            stage.replace {
+              source     = "level"
+              expression = "^(?i)I(nfo)?$"
+              replace    = "info"
+            }
+            stage.replace {
+              source     = "level"
+              expression = "^(?i)W(arn(ing)?)?$"
+              replace    = "warn"
+            }
+            stage.replace {
+              source     = "level"
+              expression = "^(?i)E(rr(or)?)?$"
+              replace    = "error"
+            }
+            stage.replace {
+              source     = "level"
+              expression = "^(?i)D(ebug)?$"
+              replace    = "debug"
+            }
+            stage.replace {
+              source     = "level"
+              expression = "^(?i)(fatal|critical|panic)$"
+              replace    = "error"
+            }
+            stage.replace {
+              source     = "level"
+              expression = "^(?i)trace$"
+              replace    = "debug"
+            }
 
             // Soft-enforce required fields: missing/empty -> "unknown" so the
             // line is still ingested and queryable, per the edge-case AC.
-            stage.template { source = "level"     template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}" }
-            stage.template { source = "namespace" template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}" }
-            stage.template { source = "app"       template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}" }
+            stage.template {
+              source   = "level"
+              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
+            }
+            stage.template {
+              source   = "namespace"
+              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
+            }
+            stage.template {
+              source   = "app"
+              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
+            }
 
             // Promote the four approved keys to stream labels.
             stage.labels {
