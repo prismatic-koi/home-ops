@@ -1,0 +1,115 @@
+---
+# =============================================================================
+# tailscale-router
+#
+# In-cluster Tailscale subnet router advertising the k3s service CIDR
+# (10.43.0.0/16) into the headscale-hosted tailnet, so tag:nixos peers can
+# reach in-cluster Services by their ClusterIPs. See design doc #3352.
+#
+# hostNetwork: true is a REQUIREMENT, not a preference:
+#   Cilium runs with kubeProxyReplacement=true. Its socket-LB DNATs
+#   ClusterIP -> pod IP at the *origin socket*, not on the wire. Packets
+#   the router receives on its tun interface from a tailnet peer and then
+#   *forwards* to a ClusterIP arrive as routed traffic, so socket-LB never
+#   sees the origin socket and the ClusterIP is not translated. Running
+#   the router in the node netns (hostNetwork) puts the destination lookup
+#   in the host's routing stack where Cilium *does* apply ClusterIP DNAT
+#   for routed packets. This is the same mitigation the upstream Tailscale
+#   Kubernetes operator uses. Full rationale + fallbacks in #3352.
+#
+# TS_USERSPACE=false so we get the kernel tun device (userspace mode does
+# NAT in-process and would defeat the point of putting us in host netns).
+# That requires /dev/net/tun access, hence the hostPath device mount and
+# NET_ADMIN.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-router
+  namespace: networking
+spec:
+  replicas: 1
+  strategy:
+    # Recreate rather than RollingUpdate: two subnet routers advertising
+    # the same prefix simultaneously would confuse peer route tables.
+    # A brief gap on redeploy is acceptable for the observability use case.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale-router
+    spec:
+      serviceAccountName: tailscale-router
+      hostNetwork: true
+      # ClusterFirstWithHostNet so the router still resolves cluster DNS
+      # (blocky -> upstream) for the login-server URL; the pod's own
+      # /etc/resolv.conf points at CoreDNS rather than the node resolver.
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.98.9@sha256:f15d5d3f4a68773a853180b72496f70ba614b64de0878c43fe3da39fe0afba47
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Not privileged: tailscaled just needs NET_ADMIN + /dev/net/tun
+            # for the kernel-mode subnet router. NET_RAW is required for
+            # tailscale's netfilter/nftables programming.
+            capabilities:
+              add: [NET_ADMIN, NET_RAW]
+              drop: [ALL]
+            allowPrivilegeEscalation: true
+          env:
+            # Persist tailnet node state (machine key, node key, ...) into
+            # this Secret. The RBAC in tailscale-router-rbac.yaml pins
+            # get/update/patch to exactly this name.
+            - name: TS_KUBE_SECRET
+              value: tailscale-state
+            - name: TS_USERSPACE
+              value: "false"
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-router-auth
+                  key: TS_AUTHKEY
+            # k3s default service CIDR (verified: every existing
+            # network-policy.yaml in this cluster references 10.43.0.0/16
+            # as "Service CIDR", and kubectl -n monitoring get svc confirms
+            # allocated ClusterIPs live in 10.43.x.x).
+            - name: TS_ROUTES
+              value: "10.43.0.0/16"
+            - name: TS_EXTRA_ARGS
+              value: >-
+                --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
+                --advertise-tags=tag:k8s-router
+                --hostname=k8s-router
+            # We publish routes, not DNS; don't let the router try to
+            # rewrite the node's resolv.conf.
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        # tailscaled with TS_USERSPACE=false opens /dev/net/tun to create
+        # the tun interface. Kubelet doesn't expose /dev/net/tun to a
+        # non-privileged container by default, even on hostNetwork.
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

@@ -9,6 +9,10 @@ resources:
   - ./httproute.yaml
   - ./servicemonitor.yaml
   - ./network-policy.yaml
+  - ./tailscale-router-rbac.yaml
+  - ./tailscale-router-secret.sops.yaml
+  - ./tailscale-router-deployment.yaml
+  - ./tailscale-router-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: headscale

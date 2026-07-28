@@ -1,0 +1,214 @@
+---
+# =============================================================================
+# tailscale-router network policy
+#
+# CAVEAT — hostNetwork enforcement:
+#   The tailscale-router pod runs with hostNetwork: true. Cilium treats
+#   traffic from hostNetwork pods as originating from the `reserved:host`
+#   identity, not the pod's endpoint identity. Standard K8s NetworkPolicy
+#   podSelector rules (this file) and CiliumNetworkPolicy endpointSelector
+#   rules matching the pod's labels are therefore NOT enforced against the
+#   router's forwarded traffic — that would require enabling Cilium's
+#   host-firewall feature cluster-wide (invasive).
+#
+#   This policy is retained for two reasons:
+#     1. Documentation — the ONLY egress the router should ever need.
+#     2. Defence-in-depth if host-firewall is later enabled.
+#
+#   The router's *actual* runtime blast radius is bounded elsewhere:
+#     - the tailnet ACL in policy.yaml (only tag:nixos -> prom/loki:9090/3100)
+#     - node-level firewall / kernel routing (host has its own posture)
+#
+#   The peer-side ACL enforcement is where the security guarantee lives.
+# =============================================================================
+---
+# Default deny-all on the router pod. Documents intent; not enforced against
+# host-netns traffic (see caveat above).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-router-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  policyTypes: [Ingress, Egress]
+---
+# DNS resolution to cluster CoreDNS. Router uses ClusterFirstWithHostNet
+# to resolve the login-server URL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-router-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Internet egress on :443 (TCP) - the headscale control endpoint at
+# hs.${SECRET_PUBLIC_DOMAIN} and Tailscale's public DERP relay pool.
+# DERP uses TCP 443; tailscaled falls back to it when direct WireGuard
+# NAT-traversal fails. Private ranges excluded so the router can't
+# accidentally scan the internal network on 443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-router-allow-internet-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Direct WireGuard: tailscaled binds a random UDP port and sends/receives
+# WireGuard datagrams peer-to-peer. Destination ports are peer-chosen,
+# so we allow the full high-port UDP range to any public IP. This is
+# defence-in-depth documentation only (see file header caveat).
+#
+# Also covers STUN (UDP 3478) for NAT discovery.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-router-allow-wireguard-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - protocol: UDP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Egress to prometheus (monitoring ns) on :9090.
+#
+# This rule is what makes the "grant tag:nixos access to prometheus" story
+# actually work at the packet layer: a tailnet peer's scrape request lands
+# on the router's tun interface and gets *forwarded* to the prometheus
+# ClusterIP. From the pod-network policy engine's perspective, that
+# forwarded traffic originates at the router pod, hits Cilium's host-netns
+# routing (because hostNetwork), then reaches the prometheus pod. If
+# host-firewall is enabled later, this is the rule that keeps the router
+# reachable to its ACL-approved destinations.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-router-allow-prometheus-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9090
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+---
+# Egress to loki (monitoring ns) on :3100.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-router-allow-loki-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-router
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 3100
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+---
+# Cilium companion: since the router runs in the host netns, its forwarded
+# traffic is identified as `reserved:host` at policy time. Allow prometheus
+# and loki ingress from `host` and `remote-node` so the peer-forwarded
+# packets aren't dropped by their respective default-deny policies.
+# Mirrors the pattern from kube-system/cilium/app/cilium-network-policy.yaml
+# (hubble-relay -> host-networked cilium-agent) and Prometheus's
+# host-networked scrape targets.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prometheus-allow-tailscale-router-ingress
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: loki-allow-tailscale-router-ingress
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP

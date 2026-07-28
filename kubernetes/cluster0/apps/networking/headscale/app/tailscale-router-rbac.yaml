@@ -1,0 +1,48 @@
+---
+# ServiceAccount for the tailscale-router pod. The pod stores its tailnet
+# node state (machine key, node key, etc.) into the `tailscale-state` Secret
+# via the kube-secret mode of tailscaled (TS_KUBE_SECRET=tailscale-state).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tailscale-router
+  namespace: networking
+---
+# RBAC scoped to the single Secret the router persists into
+# (`tailscale-state`). The `create` verb has to be granted on the
+# whole `secrets` resource because Kubernetes RBAC does not allow
+# resourceNames on create - the resource does not exist yet at
+# create time, so no name to match. Get/update/patch are pinned
+# to the single resource name.
+#
+# This exactly matches the tailscale.com/v1.98/docs/k8s/role.yaml
+# reference minus the `events` verbs, which the operator only needs
+# when publishing operator-managed events for its CRDs. A bare
+# subnet router does not.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tailscale-router
+  namespace: networking
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["tailscale-state"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tailscale-router
+  namespace: networking
+subjects:
+  - kind: ServiceAccount
+    name: tailscale-router
+    namespace: networking
+roleRef:
+  kind: Role
+  name: tailscale-router
+  apiGroup: rbac.authorization.k8s.io
