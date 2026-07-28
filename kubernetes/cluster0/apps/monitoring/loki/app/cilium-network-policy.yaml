@@ -1,0 +1,27 @@
+---
+# CiliumNetworkPolicy: allow Loki egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy
+# (loki-allow-k8s-api in network-policy.yaml) is kept for defence-in-depth,
+# but this CiliumNetworkPolicy is what actually enforces the allow in practice.
+#
+# Required by the loki-sc-rules sidecar (kiwigrid/k8s-sidecar) which the loki
+# chart runs by default to LIST/WATCH ConfigMaps and Secrets labelled
+# `loki_rule` cluster-wide. Without this rule the sidecar silently fails and
+# any rule discovery breaks. Mirrors the grafana-allow-kube-apiserver pattern;
+# see #2829, #2947, #3062 for prior precedent of the silent-failure mode.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: loki-allow-kube-apiserver
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  egress:
+    - toEntities:
+        - kube-apiserver
