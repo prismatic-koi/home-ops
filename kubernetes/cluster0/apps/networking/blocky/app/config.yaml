@@ -36,6 +36,17 @@ data:
         search.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
 
     blocking:
+      loading:
+        # "fast": serve DNS immediately on startup; blocklists load in the
+        # background and blocking enables once ready. See issue #3342.
+        strategy: fast
+        # Tolerate a slow/dead source instead of blocking/crashing startup.
+        downloads:
+          timeout: 30s
+          attempts: 3
+          cooldown: 10s
+        # Don't fail a whole source over a handful of bad lines.
+        maxErrorsPerSource: 5
       denylists:
         suspicious:
           - https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt
