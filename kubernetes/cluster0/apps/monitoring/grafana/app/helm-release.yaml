@@ -34,12 +34,6 @@ spec:
           - name: traefik-gateway
             namespace: networking
             sectionName: websecure
-        filters:
-          - type: 'ExtensionRef'
-            extensionRef:
-              group: 'traefik.io'
-              kind: 'Middleware'
-              name: 'forwardauth-authelia'
     persistence:
       # NOTE: persistence is intentionally left enabled for now. A follow-up PR
       # will flip this to false once declarative provisioning of datasources +
@@ -88,7 +82,7 @@ spec:
         providers:
           - name: default
             orgId: 1
-            folder: ''
+            folder: ""
             type: file
             disableDeletion: false
             editable: true
