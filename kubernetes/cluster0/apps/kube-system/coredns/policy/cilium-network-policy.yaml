@@ -14,3 +14,32 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
+---
+# hostNetwork/reserved:host caveat (see #3367): the tailscale-router pod runs
+# with hostNetwork: true, so its DNS queries to CoreDNS carry the Cilium
+# identity `reserved:host` (same node) or `remote-node` (different node),
+# not the pod's endpoint identity. Standard NetworkPolicy pod/namespace
+# selectors -- including the wildcard `coredns-allow-dns-ingress` in
+# network-policy.yaml -- do not match host-entity traffic, so it was being
+# dropped by coredns-default-deny. Mirrors the fromEntities pattern used for
+# prometheus/loki ingress from the router in
+# networking/headscale/app/tailscale-router-network-policy.yaml (#3365).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: coredns-allow-hostnetwork-dns-ingress
+  namespace: kube-system
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
