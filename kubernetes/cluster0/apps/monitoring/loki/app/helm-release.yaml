@@ -82,7 +82,7 @@ spec:
         delete_request_store: s3
 
       limits_config:
-        # Bounded retention — 7 days (168h). Phase 3 will tighten limits further.
+        # Bounded retention -- 7 days (168h).
         retention_period: 168h
         reject_old_samples: true
         reject_old_samples_max_age: 168h
@@ -90,6 +90,42 @@ spec:
         split_queries_by_interval: 15m
         query_timeout: 300s
         volume_enabled: true
+
+        # --- Phase 3 guardrails (#3347) ---
+        # Bound per-stream and total ingestion so a single misbehaving
+        # stream (e.g. a chatty pod with an unstable label, or a log-line
+        # loop) cannot exhaust the SeaweedFS bucket before anyone notices.
+        # These are deliberately generous for a single homelab node running
+        # Alloy on ~a dozen namespaces, not defaults copied from a
+        # multi-tenant SaaS deployment -- the point is a ceiling, not a
+        # tight budget.
+        #
+        # ingestion_rate_mb / ingestion_burst_size_mb: sustained/burst
+        # ingest rate across the whole tenant. 8 MB/s sustained, 16 MB/s
+        # burst is generous headroom over current usage (~477MB received
+        # total since deploy) while still capping a runaway logger well
+        # below "fill the disk".
+        ingestion_rate_mb: 8
+        ingestion_burst_size_mb: 16
+
+        # per_stream_rate_limit(_burst): caps a single stream (unique
+        # label set) so one noisy pod can't monopolise the tenant-wide
+        # budget above. 4 MB/s per stream is half the tenant budget --
+        # generous for any one workload's normal log volume, but low
+        # enough that a single crash-looping pod hits discards (visible in
+        # loki_discarded_bytes_total) instead of silently consuming all
+        # ingestion headroom.
+        per_stream_rate_limit: 4MB
+        per_stream_rate_limit_burst: 8MB
+
+        # max_global_streams_per_user: with the curated Alloy label set
+        # (namespace/app/pod/container/level), stream count is roughly
+        # (running pods) x (containers) x (log levels seen) -- low
+        # hundreds for this cluster. 5000 gives headroom for redeploys /
+        # rolling restarts (old + new pod streams coexist briefly) without
+        # allowing unbounded label-cardinality blowup to create endless
+        # new streams.
+        max_global_streams_per_user: 5000
 
     singleBinary:
       replicas: 1
@@ -135,6 +171,16 @@ spec:
         enabled: true
         size: 10Gi
         storageClass: longhorn
+      # Phase 3 (#3347): bounded envelope for a single-binary Loki on
+      # homelab log volume. Requests are sized for steady-state (WAL
+      # flush + TSDB index writes + occasional Explore queries); the
+      # memory limit gives headroom above steady-state for query bursts
+      # and compactor runs without leaving so much slack that a genuine
+      # leak/runaway goes unnoticed. No CPU limit -- CPU is throttled
+      # (compressible), so limiting it only slows query/compaction bursts
+      # for no OOM-prevention benefit; the memory limit is the guardrail
+      # that matters here. Coordinator validates via a 24h soak (no
+      # OOMKills) post-merge.
       resources:
         requests:
           cpu: 100m
