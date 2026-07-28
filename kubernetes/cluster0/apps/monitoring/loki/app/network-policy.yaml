@@ -1,0 +1,150 @@
+---
+# =============================================================================
+# Loki NetworkPolicy — Phase 1 (#3347)
+# Pod label: app.kubernetes.io/name=loki, app.kubernetes.io/component=single-binary
+# Listens on:
+#   :3100 (HTTP push/query API — Grafana + Alloy in Phase 2)
+#   :9095 (gRPC — memberlist / compactor grpc; intra-pod at replicas=1 but
+#          left permissive for future singleBinary HA)
+#   :7946 (memberlist)
+# Egress to:
+#   seaweedfs/seaweedfs-s3 :8333 (chunk + index + delete-request store)
+#   kube-apiserver         :443/:6443 (kiwigrid/k8s-sidecar LIST/WATCH ConfigMaps
+#                           for loki_rule discovery — mirrors grafana pattern)
+# =============================================================================
+
+# Default deny-all for loki
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow ingress from Grafana (query API) on :3100
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-grafana-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - port: 3100
+          protocol: TCP
+---
+# Allow ingress from Prometheus (metrics scrape via ServiceMonitor) on :3100
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-prometheus-scrape
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 3100
+          protocol: TCP
+---
+# Allow egress to SeaweedFS S3 gateway on :8333 (chunk/index/delete store)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-seaweedfs-s3-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 8333
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: seaweedfs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: seaweedfs
+              app.kubernetes.io/component: s3
+---
+# Allow egress to K8s API server — the kiwigrid/k8s-sidecar (loki-sc-rules)
+# container in the loki StatefulSet LISTs/WATCHes ConfigMaps and Secrets
+# cluster-wide via kubernetes.default.svc. Without this rule the sidecar
+# silently fails and any loki_rule-labelled rule discovery breaks.
+# Mirrors the grafana-allow-k8s-api pattern; ipBlock covers the service
+# CIDR and the control-plane node.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-k8s-api
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node
