@@ -4,13 +4,85 @@ metadata:
   name: headscale-policy
   namespace: networking
 data:
-  # Minimal policy for this PR: only declares tag ownership so nodes can be
-  # tagged at registration time. The actual grants/autoApprovers land with
-  # the subnet router (child issue, see #3352).
+  # Headscale v0.29 policy manager (policy v2). Uses the modern `grants`
+  # form (headscale supports both `acls` and `grants`; grants is Tailscale's
+  # newer shape and what we standardise on going forward).
+  #
+  # Access story:
+  #   tag:nixos    - remote NixOS observability consumers
+  #                  ONLY reach prometheus:9090 and loki:3100
+  #   tag:k8s-router - the in-cluster tailscale-router pod
+  #                    auto-approves its own 10.43.0.0/16 route advertisement
+  #                    so an operator doesn't have to run
+  #                    `headscale nodes approve-routes` on every redeploy
+  #
+  # Hosts are pinned to current ClusterIPs (as /32). Tradeoff: if the
+  # prometheus or loki Service is deleted and recreated, its ClusterIP may
+  # change and this file has to be updated. Alternatives considered:
+  #   - broad CIDR (10.43.0.0/16) - defeats the ACL: peers could reach
+  #     any Service, not just prom/loki.
+  #   - pod-IP CIDR (10.42.0.0/16) - would need TS_ROUTES adjusted too,
+  #     and pod IPs churn faster than ClusterIPs.
+  #   ClusterIP /32 wins: services must be reconstituted deliberately
+  #   (rare), and the policy update is a one-line change.
   policy.hujson: |-
     {
       "tagOwners": {
         "tag:k8s-router": ["homeops@"],
-        "tag:nixos": ["homeops@"],
+        "tag:nixos":      ["homeops@"],
       },
+
+      // Named hosts referenced from `grants` and `tests`. /32s pin to the
+      // current in-cluster Service ClusterIPs; update if the Service is
+      // recreated.
+      "hosts": {
+        "prometheus": "10.43.180.44/32", // prometheus-kube-prometheus-prometheus.monitoring
+        "loki":       "10.43.108.90/32", // loki.monitoring
+      },
+
+      // The in-cluster router advertises the k3s service CIDR. Without
+      // autoApprovers, an operator would have to run
+      // `headscale nodes approve-routes ...` after every re-registration.
+      "autoApprovers": {
+        "routes": {
+          "10.43.0.0/16": ["tag:k8s-router"],
+        },
+      },
+
+      // Least-privilege access: tag:nixos peers may reach ONLY
+      //   prometheus tcp/9090 and loki tcp/3100.
+      // Everything else (SSH, other ports on the same hosts, the router
+      // itself, other cluster services) is denied by the default-deny
+      // posture of the tailnet: absence of a grant is a deny.
+      "grants": [
+        {
+          "src": ["tag:nixos"],
+          "dst": ["prometheus"],
+          "ip":  ["tcp:9090"],
+        },
+        {
+          "src": ["tag:nixos"],
+          "dst": ["loki"],
+          "ip":  ["tcp:3100"],
+        },
+      ],
+
+      // Static assertions that get evaluated on every `headscale policy set`
+      // / file-mode reload. If any accept fails or any deny succeeds, the
+      // policy write is rejected and the previous good policy stays live.
+      // See hscontrol/policy/v2/test.go in juanfont/headscale.
+      "tests": [
+        {
+          "src": "tag:nixos",
+          "accept": [
+            "prometheus:9090",
+            "loki:3100",
+          ],
+          "deny": [
+            "prometheus:22",         // no SSH to prometheus
+            "loki:9095",             // no gRPC to loki
+            "tag:k8s-router:22",     // no SSH to the router pod
+          ],
+        },
+      ],
     }
