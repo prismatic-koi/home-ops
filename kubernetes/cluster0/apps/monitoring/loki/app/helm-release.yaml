@@ -126,6 +126,8 @@ spec:
           envFrom:
             - secretRef:
                 name: loki-s3-credentials
+          # Mount the chart's built-in tmp emptyDir so mc can write config to /tmp/.mc
+          # (chart v6.55.0 defines tmp as an emptyDir in the StatefulSet spec.volumes)
           volumeMounts:
             - name: tmp
               mountPath: /tmp
