@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: headscale
+  namespace: networking
+  labels:
+    app.kubernetes.io/name: headscale
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: headscale
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
