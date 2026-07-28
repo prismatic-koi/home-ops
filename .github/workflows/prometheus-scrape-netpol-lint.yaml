@@ -1,0 +1,56 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Prometheus scrape NetworkPolicy lint
+
+# Enforces the bidirectional NetworkPolicy convention for Prometheus scrape
+# targets: every `<app>-allow-prometheus-scrape` ingress rule must have a
+# matching `prometheus-allow-<...>-scrape-egress` (or `-probe-egress`) rule
+# in kubernetes/cluster0/apps/monitoring/kube-prometheus-stack/app/network-policy.yaml.
+#
+# Guards against the failure mode documented in AGENTS.md
+# ("Adding a new monitored app (Prometheus scrape targets)") — the same class
+# of gap that caused up=0 for Loki/Alloy in #3347 / #3359. See issue #3361.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-prometheus-scrape-netpol.py"
+      - ".github/workflows/prometheus-scrape-netpol-lint.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-prometheus-scrape-netpol.py"
+      - ".github/workflows/prometheus-scrape-netpol-lint.yaml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint bidirectional scrape NetworkPolicies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python3 -m pip install --disable-pip-version-check "pyyaml==6.0.2"
+
+      - name: Run lint
+        run: python3 scripts/lint-prometheus-scrape-netpol.py --verbose
