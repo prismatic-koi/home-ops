@@ -69,6 +69,14 @@ spec:
 
     - name: longhorn.backups
       rules:
+        # Loki is SingleBinary on SeaweedFS S3; storage-loki-0 is local cache/WAL,
+        # intentionally not backed up. Excluded here (rather than per-alert) so every
+        # backup alert below inherits the exclusion consistently.
+        - record: longhorn:volume_last_backup_at:alertable
+          expr: |
+            longhorn_volume_last_backup_at
+            unless on (pvc, pvc_namespace) longhorn_volume_last_backup_at{pvc="storage-loki-0", pvc_namespace="monitoring"}
+
         - alert: LonghornBackupFailed
           expr: longhorn_backup_state == 4
           for: 1m
@@ -78,9 +86,15 @@ spec:
             summary: "Longhorn backup {{ $labels.backup }} failed"
             description: "Backup {{ $labels.backup }} for volume {{ $labels.volume }} is in a failed state."
 
+        # Guarded with `> 0` so a volume that has NEVER been backed up (last_backup_at == 0,
+        # epoch) does not instantly compute as a ~56 year staleness and trip these. Genuinely
+        # never-backed-up volumes are instead covered by LonghornVolumeNeverBackedUp below,
+        # which has its own grace period. Volumes that WERE backed up and then went stale are
+        # unaffected by this guard and still fire as before.
         - alert: LonghornBackupMissed
           expr: |
-            time() - max by (volume) (longhorn_volume_last_backup_at) > (9 * 24 * 3600)
+            time() - max by (volume) (longhorn:volume_last_backup_at:alertable) > (9 * 24 * 3600)
+            and max by (volume) (longhorn:volume_last_backup_at:alertable) > 0
           for: 1h
           labels:
             severity: warning
@@ -90,10 +104,35 @@ spec:
 
         - alert: LonghornBackupCritical
           expr: |
-            time() - max by (volume) (longhorn_volume_last_backup_at) > (14 * 24 * 3600)
+            time() - max by (volume) (longhorn:volume_last_backup_at:alertable) > (14 * 24 * 3600)
+            and max by (volume) (longhorn:volume_last_backup_at:alertable) > 0
           for: 1h
           labels:
             severity: critical
           annotations:
             summary: "Longhorn volume {{ $labels.volume }} has not been backed up in over 14 days"
             description: "Most recent successful backup for {{ $labels.volume }} is {{ $value | humanizeDuration }} old. At least two consecutive weekly backups have been missed."
+
+        # Catches volumes that have NEVER been backed up (last_backup_at == 0) once they
+        # are older than the weekly backup interval, so a volume created minutes ago (e.g.
+        # a fresh data-headscale-0 or storage-loki-0 before it existed) doesn't instantly
+        # fire, but a genuinely unprotected volume is still surfaced rather than hidden
+        # forever. Age is derived by joining to kube_persistentvolumeclaim_created (PVC
+        # creation timestamp, confirmed present via kube-state-metrics) on the matching
+        # pvc/pvc_namespace labels, since longhorn_volume_last_backup_at has no volume-age
+        # signal of its own when it is still 0.
+        - alert: LonghornVolumeNeverBackedUp
+          expr: |
+            max by (volume, pvc, pvc_namespace) (longhorn:volume_last_backup_at:alertable) == 0
+            and on (pvc, pvc_namespace) (
+              time() - label_replace(
+                label_replace(kube_persistentvolumeclaim_created, "pvc", "$1", "persistentvolumeclaim", "(.+)"),
+                "pvc_namespace", "$1", "namespace", "(.+)"
+              ) > (9 * 24 * 3600)
+            )
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} has never been backed up"
+            description: "PVC {{ $labels.pvc }} in {{ $labels.pvc_namespace }} is older than the weekly backup interval but has no successful backup on record."
