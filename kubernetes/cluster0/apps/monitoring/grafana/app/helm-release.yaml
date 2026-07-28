@@ -18,6 +18,9 @@ spec:
   install:
     createNamespace: true
   values:
+    grafana.ini:
+      users:
+        default_timezone: Pacific/Auckland
     rbac:
       pspEnabled: false # disable psp, deprecatd in k8s 1.25
     replicas: 1
