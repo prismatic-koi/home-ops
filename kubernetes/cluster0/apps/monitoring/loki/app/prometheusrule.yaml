@@ -1,0 +1,60 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  groups:
+    - name: loki.guardrails
+      rules:
+        # Phase 3 guardrail (#3347): the previous loki-stack failure mode was
+        # unbounded growth going unnoticed until a Longhorn PVC filled up.
+        # Loki now lives on SeaweedFS S3 with retention_period: 168h enforced
+        # by the compactor, so the bucket should plateau -- steady growth
+        # past that point means either retention/the compactor stopped
+        # working, or ingestion has outgrown the 7-day retention budget.
+        # Threshold is a soft early-warning, not a hard cluster capacity
+        # limit; adjust as the SeaweedFS cluster's total capacity is known.
+        - alert: LokiS3BucketUsageHigh
+          expr: |
+            SeaweedFS_s3_bucket_size_bytes{bucket="loki"} > 20 * 1024 * 1024 * 1024
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki S3 bucket usage is above 20GiB"
+            description: "The 'loki' SeaweedFS S3 bucket has held more than 20GiB for over 30 minutes ({{ $value | humanize1024 }}B). With a 168h (7d) retention_period this should plateau -- sustained growth past this point suggests the compactor has stopped deleting old chunks, or ingestion volume has outgrown the retention budget."
+
+        # Guards the same failure mode from the ingestion side: a
+        # misbehaving stream sustaining high ingest for an extended period
+        # will fill the bucket well before the 20GiB alert above fires.
+        # 6 MB/s sustained for 15m sits below the tenant-wide
+        # ingestion_rate_mb: 8 ceiling in limits_config, so it fires before
+        # Loki starts discarding samples -- an early warning, not a
+        # duplicate of the discard-driven alert below.
+        - alert: LokiIngestionRateHigh
+          expr: |
+            sum(rate(loki_distributor_bytes_received_total[15m])) > 6 * 1024 * 1024
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki ingestion rate is unusually high"
+            description: "Loki has received log data at over 6MB/s for 15 minutes ({{ $value | humanize1024 }}B/s), approaching the tenant-wide ingestion_rate_mb: 8 limit. Check for a misbehaving/log-looping pod before Loki starts discarding samples."
+
+        # Direct signal that limits_config guardrails are actively rejecting
+        # data -- i.e. a stream or the tenant has hit the caps configured
+        # above. This is expected occasionally under a genuine burst, but
+        # sustained discards for 15m mean something is stuck emitting logs
+        # far above normal volume.
+        - alert: LokiIngestionDiscardsHigh
+          expr: |
+            sum(rate(loki_discarded_samples_total[15m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki is discarding ingested log samples"
+            description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). This means a stream or the tenant has hit the per_stream_rate_limit / ingestion_rate_mb guardrails in limits_config -- investigate the source pod/namespace before increasing limits."
