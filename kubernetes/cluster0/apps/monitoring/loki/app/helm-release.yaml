@@ -110,7 +110,7 @@ spec:
       # loki-s3-credentials secret -- no new credentials introduced.
       initContainers:
         - name: bootstrap-s3-bucket
-          image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+          image: minio/mc:RELEASE.2024-11-21T17-21-54Z@sha256:993e8c454a7ec632923f7e3e61adf1d473261da6354cefd641aedd33a2cfe112
           command:
             - sh
             - -c
