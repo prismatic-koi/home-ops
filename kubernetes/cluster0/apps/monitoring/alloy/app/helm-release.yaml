@@ -150,6 +150,15 @@ spec:
             forward_to = [loki.process.normalise.receiver]
           }
 
+          // NOTE: loki.process copies incoming stream labels (set by
+          // discovery.relabel above) into the per-entry extracted map at
+          // pipeline entry, so the stage.template soft-enforcement,
+          // stage.labels promotion, and stage.structured_metadata stages
+          // below can all read namespace/app/container/pod/node. Ref:
+          // grafana/alloy internal/component/loki/process/stages/pipeline.go
+          // (extracted-map seeding from e.Labels) + the loki.process docs
+          // ("stages have access to ... a shared map of extracted values").
+          //
           // Normalise the level field and enforce the approved label set.
           // See #3347 comment ("label cardinality strategy") for the rules:
           //   * stream/index labels: namespace, app, container, level
