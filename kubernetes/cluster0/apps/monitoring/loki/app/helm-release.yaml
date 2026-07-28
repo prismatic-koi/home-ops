@@ -99,6 +99,31 @@ spec:
       extraEnvFrom:
         - secretRef:
             name: loki-s3-credentials
+      # Hotfix (#3347 Phase 1 follow-up): the "loki" S3 bucket does not
+      # exist in SeaweedFS. Loki's startup/readiness GETs/lists the bucket
+      # before it ever writes, so it hits 404 NoSuchBucket and never becomes
+      # Ready -- which means it never issues the PUT that would otherwise
+      # let SeaweedFS auto-create the bucket. This initContainer breaks that
+      # deadlock by idempotently creating the bucket first. `mc mb
+      # --ignore-existing` is a no-op when the bucket already exists, so
+      # restarts/reschedules never crash-loop on it. Reuses the existing
+      # loki-s3-credentials secret -- no new credentials introduced.
+      initContainers:
+        - name: bootstrap-s3-bucket
+          image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mc alias set seaweedfs "$MC_HOST_URL" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
+              mc mb --ignore-existing seaweedfs/loki
+          env:
+            - name: MC_HOST_URL
+              value: http://seaweedfs-s3.seaweedfs.svc:8333
+          envFrom:
+            - secretRef:
+                name: loki-s3-credentials
       persistence:
         enabled: true
         size: 10Gi
