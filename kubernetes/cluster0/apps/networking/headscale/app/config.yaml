@@ -8,6 +8,7 @@ data:
     ---
     server_url: https://hs.${SECRET_PUBLIC_DOMAIN}
     listen_addr: 0.0.0.0:8080
+    unix_socket: /var/lib/headscale/headscale.sock
     metrics_listen_addr: 0.0.0.0:9091
 
     noise:
