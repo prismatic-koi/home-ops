@@ -13,6 +13,12 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: headscale
+      annotations:
+        # headscale-config / headscale-policy are mounted via subPath, which
+        # Kubernetes never updates in place -- without Reloader, edits to
+        # either ConfigMap silently no-op until someone manually restarts
+        # the pod. See #3370.
+        reloader.stakater.com/auto: "true"
     spec:
       securityContext:
         fsGroup: 1000

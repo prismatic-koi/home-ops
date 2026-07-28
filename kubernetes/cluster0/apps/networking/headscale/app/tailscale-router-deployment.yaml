@@ -48,6 +48,31 @@ spec:
       # (blocky -> upstream) for the login-server URL; the pod's own
       # /etc/resolv.conf points at CoreDNS rather than the node resolver.
       dnsPolicy: ClusterFirstWithHostNet
+      # Because this pod is hostNetwork, a crash (as opposed to a graceful
+      # termination) leaves the tailscale0 tun interface behind in the node
+      # netns -- preStop never runs on a crash, so cleanup has to happen on
+      # the way *up*, not the way down. Delete any stale tailscale0 before
+      # tailscaled starts. `|| true` makes this a no-op when there is no
+      # stale interface (e.g. first-ever start, or a clean prior exit).
+      initContainers:
+        - name: cleanup-stale-tun
+          image: ghcr.io/tailscale/tailscale:v1.98.9@sha256:f15d5d3f4a68773a853180b72496f70ba614b64de0878c43fe3da39fe0afba47
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - ip link delete tailscale0 || true
+          securityContext:
+            capabilities:
+              add: [NET_ADMIN]
+              drop: [ALL]
+            allowPrivilegeEscalation: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
       containers:
         - name: tailscale
           image: ghcr.io/tailscale/tailscale:v1.98.9@sha256:f15d5d3f4a68773a853180b72496f70ba614b64de0878c43fe3da39fe0afba47
@@ -79,10 +104,18 @@ spec:
             # allocated ClusterIPs live in 10.43.x.x).
             - name: TS_ROUTES
               value: "10.43.0.0/16"
+            # NOTE: do NOT add --advertise-tags here. The preauth key used
+            # for TS_AUTHKEY is already tagged tag:k8s-router, and headscale
+            # 0.28+ hard-rejects registration when a PreAuthKey-authenticated
+            # node ALSO passes --advertise-tags (hscontrol/state/state.go:
+            # 1820-1829; CHANGELOG 0.28.0, juanfont/headscale#2931). Tags
+            # must come from the tagged key OR --advertise-tags, never both.
+            # The tag already rides on the key -- re-adding this flag will
+            # break registration with a misleading "requested tags ... invalid
+            # or not permitted" error. See #3370.
             - name: TS_EXTRA_ARGS
               value: >-
                 --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
-                --advertise-tags=tag:k8s-router
                 --hostname=k8s-router
             # We publish routes, not DNS; don't let the router try to
             # rewrite the node's resolv.conf.

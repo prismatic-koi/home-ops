@@ -67,22 +67,13 @@ data:
         },
       ],
 
-      // Static assertions that get evaluated on every `headscale policy set`
-      // / file-mode reload. If any accept fails or any deny succeeds, the
-      // policy write is rejected and the previous good policy stays live.
-      // See hscontrol/policy/v2/test.go in juanfont/headscale.
-      "tests": [
-        {
-          "src": "tag:nixos",
-          "accept": [
-            "prometheus:9090",
-            "loki:3100",
-          ],
-          "deny": [
-            "prometheus:22",         // no SSH to prometheus
-            "loki:9095",             // no gRPC to loki
-            "tag:k8s-router:22",     // no SSH to the router pod
-          ],
-        },
-      ],
+      // NOTE: no `tests` block here on purpose. headscale evaluates `tests`
+      // by resolving each `src` tag to actual registered node IPs -- with
+      // zero tag:nixos nodes currently registered, "tag:nixos" resolves to
+      // no IP addresses and the assertion fails at every policy load/boot
+      // ("policy tests failed at boot ... resolved to no IP addresses").
+      // It's only a warning (the policy still applies), but it actively
+      // misled a live investigation (#3370). Re-add a tests block once at
+      // least one tag:nixos node is actually registered, so the accept/deny
+      // assertions have real IPs to resolve against.
     }
