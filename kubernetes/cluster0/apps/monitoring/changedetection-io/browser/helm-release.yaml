@@ -23,6 +23,9 @@ spec:
     controllers:
       main:
         replicas: 3
+        strategy: RollingUpdate
+        rollingUpdate:
+          unavailable: 1
         containers:
           app:
             image:
@@ -73,6 +76,20 @@ spec:
                     port: 3000
                   initialDelaySeconds: 30
                   periodSeconds: 60
+                  timeoutSeconds: 10
+                  failureThreshold: 3
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  # Reuses the same unauthenticated /docs/ endpoint as the liveness
+                  # probe above (see the comment there and issue #3037). Only ready
+                  # once the HTTP server is listening. See issue #3342.
+                  httpGet:
+                    path: /docs/
+                    port: 3000
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
                   timeoutSeconds: 10
                   failureThreshold: 3
             resources:

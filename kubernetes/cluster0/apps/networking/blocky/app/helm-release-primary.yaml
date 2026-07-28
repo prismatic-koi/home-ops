@@ -41,6 +41,14 @@ spec:
   values:
     controllers:
       blocky-primary:
+        strategy: RollingUpdate
+        rollingUpdate:
+          # Quoted "0": app-template's chart template uses `with .unavailable`,
+          # and Go templates treat the bare int 0 as falsy, silently dropping
+          # maxUnavailable from the rendered manifest. A quoted string survives
+          # `with`. See issue #3342 (zero-downtime DNS rollout requires this).
+          unavailable: "0"
+          surge: 1
         containers:
           app:
             image:
@@ -59,6 +67,20 @@ spec:
                     port: &port 53
                   initialDelaySeconds: 15
                   periodSeconds: 30
+                  failureThreshold: 3
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  # Unauthenticated HTTP endpoint that is 200 as soon as blocky is
+                  # serving (independent of blocklist loading, which runs in the
+                  # background thanks to blocking.loading.strategy: fast).
+                  httpGet:
+                    path: /metrics
+                    port: 4000
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+                  timeoutSeconds: 3
                   failureThreshold: 3
             securityContext:
               allowPrivilegeEscalation: false
