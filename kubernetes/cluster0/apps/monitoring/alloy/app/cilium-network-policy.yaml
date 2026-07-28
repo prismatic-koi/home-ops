@@ -1,0 +1,27 @@
+---
+# CiliumNetworkPolicy: allow Alloy egress to the K8s API server.
+#
+# Standard K8s NetworkPolicy ipBlock rules are silently bypassed by Cilium when
+# kubeProxyReplacement=true because the k3s API server runs in the host network
+# namespace and Cilium assigns it the 'kube-apiserver' entity identity rather
+# than a pod identity or IP. The companion ipBlock NetworkPolicy
+# (alloy-allow-k8s-api in network-policy.yaml) is kept for defence-in-depth,
+# but this CiliumNetworkPolicy is what actually enforces the allow in practice.
+#
+# Required by both `discovery.kubernetes` (LIST/WATCH pods) and
+# `loki.source.kubernetes` (GET pods/log stream) — without this the DaemonSet
+# starts up, discovers nothing, and silently ships no logs. Mirrors
+# grafana-allow-kube-apiserver / loki-allow-kube-apiserver; see #2829, #2947,
+# #3062 for prior precedent of the silent-failure mode.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: alloy-allow-kube-apiserver
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  egress:
+    - toEntities:
+        - kube-apiserver

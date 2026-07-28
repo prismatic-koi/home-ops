@@ -1,0 +1,227 @@
+---
+# Grafana Alloy — DaemonSet log collector for Loki (Phase 2 of #3347).
+#
+# One pod per node tails container logs under /var/log/pods, normalises the
+# level field, and pushes to the in-cluster Loki SingleBinary
+# (http://loki.monitoring.svc:3100) that landed in Phase 1 (#3348).
+#
+# Label-cardinality strategy (the whole point of Phase 2 — see #3347 comment):
+# stream/index labels are limited to {namespace, app, container, level}.
+# `pod` and `node` are attached as structured metadata (Loki 3.x) so they
+# stay queryable/filterable in Grafana without exploding the stream count.
+# `pod` in particular is unbounded (~300+ values, churns on every restart)
+# and was the classic cardinality killer for the old loki-stack deployment.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy
+  namespace: monitoring
+spec:
+  interval: 15m
+  chart:
+    spec:
+      chart: alloy
+      version: 1.11.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana-charts
+        namespace: flux-system
+      interval: 15m
+  install:
+    remediation:
+      retries: 5
+  upgrade:
+    remediation:
+      retries: 5
+  values:
+    controller:
+      # DaemonSet: one Alloy per node, tailing that node's pod logs only.
+      type: daemonset
+      # Tolerate control-plane taints so system pods on the CP node also ship logs.
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+
+    # Least-privilege RBAC. The chart's default rules grant get/list/watch on
+    # ConfigMaps, Secrets, PrometheusRules, AlertmanagerConfigs, ReplicaSets,
+    # etc. — none of which are needed for pod-log discovery. Override to the
+    # minimum for `discovery.kubernetes` (role=pod) and `loki.source.kubernetes`.
+    rbac:
+      create: true
+      # Rules are split across `rules` and `clusterRules` only to work around a
+      # chart-template quirk: if either list is empty/null the chart emits an
+      # invalid `[]` / `null` token into the ClusterRole `rules:` block
+      # (upstream `templates/rbac.yaml` unconditionally toYaml's both). Both
+      # lists get concatenated into the ClusterRole — verify with
+      # `helm template`. The union is exactly the pod + log discovery set we
+      # need; the default clusterRules (nodes, nodes/pods, nodes/metrics,
+      # /metrics, ConfigMaps, Secrets, PrometheusRules, ...) is dropped.
+      rules:
+        - apiGroups: [""]
+          resources: ["pods", "pods/log"]
+          verbs: ["get", "list", "watch"]
+      clusterRules:
+        - apiGroups: [""]
+          resources: ["namespaces"]
+          verbs: ["get", "list", "watch"]
+
+    # Chart-shipped ServiceMonitor — kube-prometheus-stack runs with nil
+    # selectors so it picks this up cluster-wide (see the repo convention).
+    serviceMonitor:
+      enabled: true
+
+    alloy:
+      # /var/log/pods is a symlink chain into /var/log/containers → the
+      # kubelet-managed container log files. loki.source.kubernetes streams
+      # via the API but we also mount /var/log for the file-tailer path.
+      mounts:
+        varlog: true
+      # Anonymous usage stats — opt out.
+      enableReporting: false
+      configMap:
+        create: true
+        # Alloy config (river/alloy syntax). Pipeline:
+        #   discovery.kubernetes (pods on this node)
+        #     -> discovery.relabel (derive namespace/app/container/pod/node)
+        #     -> loki.source.kubernetes (tail via K8s API)
+        #     -> loki.process (normalise level, enforce label set)
+        #     -> loki.write (push to in-cluster Loki)
+        content: |
+          logging {
+            level  = "info"
+            format = "logfmt"
+          }
+
+          // Discover only pods running on this node — Alloy runs as a
+          // DaemonSet, so each pod scopes discovery via the K8S_NODE_NAME
+          // env var the chart injects (spec.nodeName).
+          discovery.kubernetes "pods" {
+            role = "pod"
+            selectors {
+              role  = "pod"
+              field = "spec.nodeName=" + sys.env("K8S_NODE_NAME")
+            }
+          }
+
+          // Derive our target label set from pod metadata.
+          //   namespace <- __meta_kubernetes_namespace
+          //   app       <- pod label app.kubernetes.io/name (fallback: `app`)
+          //   container <- __meta_kubernetes_pod_container_name
+          //   pod       <- __meta_kubernetes_pod_name  (structured metadata)
+          //   node      <- __meta_kubernetes_pod_node_name (structured metadata)
+          discovery.relabel "pod_logs" {
+            targets = discovery.kubernetes.pods.targets
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+            // Preferred workload label.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+              target_label  = "app"
+            }
+            // Fallback: bare `app` label (older charts / hand-written manifests).
+            rule {
+              source_labels = ["app", "__meta_kubernetes_pod_label_app"]
+              separator     = ";"
+              regex         = "^;(.+)$"
+              target_label  = "app"
+              replacement   = "$1"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              target_label  = "node"
+            }
+          }
+
+          // Tail container logs for the discovered pods via the K8s API.
+          // Requires pods/log RBAC (granted above).
+          loki.source.kubernetes "pods" {
+            targets    = discovery.relabel.pod_logs.output
+            forward_to = [loki.process.normalise.receiver]
+          }
+
+          // Normalise the level field and enforce the approved label set.
+          // See #3347 comment ("label cardinality strategy") for the rules:
+          //   * stream/index labels: namespace, app, container, level
+          //   * structured metadata: pod, node
+          //   * unmatched level -> "unknown" (never drop the line)
+          loki.process "normalise" {
+            // Extract a level token from the log line if present. Best-effort;
+            // structured JSON logs, klog-style prefixes (I0101 ...), and plain
+            // words are all common. Missing/unmatched -> handled below.
+            stage.regex {
+              expression = "(?i)(?:^|[^A-Za-z])(?P<level>trace|debug|info|warn(?:ing)?|err(?:or)?|fatal|critical|panic)(?:[^A-Za-z]|$)"
+            }
+
+            // klog-style single-letter prefixes at line start (I0101 ..., W0101 ...).
+            stage.regex {
+              expression = "^(?P<level>[IWED])[0-9]{4}"
+            }
+
+            // Canonicalise to lowercase {info, warn, error, debug}. Anchored
+            // so partial matches don't collide.
+            stage.replace { source = "level" expression = "^(?i)I(nfo)?$"           replace = "info"  }
+            stage.replace { source = "level" expression = "^(?i)W(arn(ing)?)?$"     replace = "warn"  }
+            stage.replace { source = "level" expression = "^(?i)E(rr(or)?)?$"       replace = "error" }
+            stage.replace { source = "level" expression = "^(?i)D(ebug)?$"          replace = "debug" }
+            stage.replace { source = "level" expression = "^(?i)(fatal|critical|panic)$" replace = "error" }
+            stage.replace { source = "level" expression = "^(?i)trace$"             replace = "debug" }
+
+            // Soft-enforce required fields: missing/empty -> "unknown" so the
+            // line is still ingested and queryable, per the edge-case AC.
+            stage.template { source = "level"     template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}" }
+            stage.template { source = "namespace" template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}" }
+            stage.template { source = "app"       template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}" }
+
+            // Promote the four approved keys to stream labels.
+            stage.labels {
+              values = {
+                namespace = "",
+                app       = "",
+                container = "",
+                level     = "",
+              }
+            }
+
+            // Attach pod + node as structured metadata (Loki 3.x). NOT stream
+            // labels — see the cardinality decision in #3347.
+            stage.structured_metadata {
+              values = {
+                pod  = "",
+                node = "",
+              }
+            }
+
+            // Final gate: drop everything else from the stream index.
+            // Exact list per the Phase 2 spec.
+            stage.label_keep {
+              values = ["app", "container", "level", "namespace"]
+            }
+
+            forward_to = [loki.write.default.receiver]
+          }
+
+          // Push to the in-cluster Loki. auth_enabled=false on the Loki side,
+          // so no tenant header / credential is required for intra-cluster
+          // pushes.
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
+            }
+          }
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
