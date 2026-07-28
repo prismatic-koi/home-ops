@@ -75,6 +75,16 @@ spec:
             isDefault: true
             jsonData:
               timeInterval: 30s
+          # Loki datasource — SingleBinary Loki backed by SeaweedFS S3 (#3347).
+          # Loki auth_enabled is false, so no basicAuth / X-Scope-OrgID needed.
+          - name: Loki
+            type: loki
+            access: proxy
+            url: http://loki.monitoring.svc:3100
+            jsonData:
+              # Cap concurrent line-limit queries; the SingleBinary Loki has
+              # modest resources and we don't need higher parallelism here.
+              maxLines: 1000
     # Provider that the chart drops gnetId-fetched dashboards into.
     dashboardProviders:
       dashboardproviders.yaml:

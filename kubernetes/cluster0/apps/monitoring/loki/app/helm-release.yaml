@@ -1,0 +1,185 @@
+---
+# Grafana Loki — SingleBinary mode, backed by SeaweedFS S3.
+#
+# Retention correctness is the whole point of this deployment (see #3347):
+# the previous loki-stack removed in #2734 set limits_config.retention_period
+# but never enabled the compactor, so retention was silently a no-op. Here
+# the compactor is enabled with retention_enabled: true and delete_request_store
+# set to s3, which is what actually deletes chunks past retention_period.
+#
+# Chunks + index live in the SeaweedFS S3 bucket "loki"; the StatefulSet keeps
+# a small 10Gi Longhorn PVC for /var/loki (WAL, boltdb-shipper cache, ruler
+# WAL). No bulk log data lives on Longhorn.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  interval: 15m
+  chart:
+    spec:
+      chart: loki
+      version: 6.55.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana-charts
+        namespace: flux-system
+      interval: 15m
+  install:
+    remediation:
+      retries: 5
+  upgrade:
+    remediation:
+      retries: 5
+  values:
+    deploymentMode: SingleBinary
+
+    loki:
+      # Homelab single-tenant Loki — no multi-tenant auth.
+      auth_enabled: false
+
+      commonConfig:
+        # SingleBinary with 1 replica cannot satisfy the default RF=3.
+        replication_factor: 1
+
+      # TSDB schema v13 — mandated by the ACs and the current Loki default.
+      schemaConfig:
+        configs:
+          - from: "2024-04-01"
+            store: tsdb
+            object_store: s3
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+
+      storage:
+        type: s3
+        bucketNames:
+          chunks: loki
+          ruler: loki
+        s3:
+          endpoint: http://seaweedfs-s3.seaweedfs.svc:8333
+          region: us-east-1
+          s3ForcePathStyle: true
+          # In-cluster plaintext HTTP to the SeaweedFS S3 gateway; TLS is
+          # not configured on that endpoint. Not "insecure" in the internet
+          # sense — this is intra-cluster traffic.
+          insecure: true
+          # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are injected via
+          # singleBinary.extraEnvFrom below — Loki's S3 client reads them
+          # natively, so no plaintext creds land in the ConfigMap.
+
+      # THE critical block: this is what makes retention actually run.
+      # The previous loki-stack failure mode (#2734, #3347) was configuring
+      # retention_period without ever enabling the compactor.
+      compactor:
+        working_directory: /var/loki/compactor
+        retention_enabled: true
+        retention_delete_delay: 2h
+        retention_delete_worker_count: 150
+        delete_request_store: s3
+
+      limits_config:
+        # Bounded retention — 7 days (168h). Phase 3 will tighten limits further.
+        retention_period: 168h
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+        max_cache_freshness_per_query: 10m
+        split_queries_by_interval: 15m
+        query_timeout: 300s
+        volume_enabled: true
+
+    singleBinary:
+      replicas: 1
+      # Inject SeaweedFS S3 credentials. Loki's S3 client reads
+      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the environment,
+      # keeping creds out of the ConfigMap and out of Git plaintext.
+      extraEnvFrom:
+        - secretRef:
+            name: loki-s3-credentials
+      persistence:
+        enabled: true
+        size: 10Gi
+        storageClass: longhorn
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+
+    # Disable the built-in gateway (nginx in front of Loki). We hit Loki
+    # directly from Grafana on the ClusterIP service.
+    gateway:
+      enabled: false
+
+    # Disable memcached-backed caches; the homelab volume doesn't justify
+    # the extra pods. Revisit if query latency becomes a problem.
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
+
+    # SingleBinary mode — zero out every SSD/distributed component so the
+    # chart doesn't render StatefulSets/Deployments for read/write/backend
+    # or the individual microservice targets.
+    write:
+      replicas: 0
+    read:
+      replicas: 0
+    backend:
+      replicas: 0
+    ingester:
+      replicas: 0
+    distributor:
+      replicas: 0
+    querier:
+      replicas: 0
+    queryFrontend:
+      replicas: 0
+    queryScheduler:
+      replicas: 0
+    indexGateway:
+      replicas: 0
+    compactor:
+      replicas: 0
+    bloomGateway:
+      replicas: 0
+    bloomPlanner:
+      replicas: 0
+    bloomBuilder:
+      replicas: 0
+    patternIngester:
+      replicas: 0
+
+    monitoring:
+      # Enable the chart's own ServiceMonitor — kube-prometheus-stack runs
+      # with nil selectors so it picks this up cluster-wide (see the repo's
+      # existing convention for ServiceMonitor discovery).
+      serviceMonitor:
+        enabled: true
+        metricsInstance:
+          # Deprecated Grafana Agent Operator integration; not used here.
+          enabled: false
+      # Disable the deprecated self-monitoring stack (Grafana Agent Operator,
+      # loki-canary). We use Alloy for log collection (Phase 2) and don't
+      # need the chart's own self-monitoring bundle.
+      selfMonitoring:
+        enabled: false
+        grafanaAgent:
+          installOperator: false
+      lokiCanary:
+        enabled: false
+      # No chart-shipped dashboards or rules — those are handled elsewhere.
+      dashboards:
+        enabled: false
+      rules:
+        enabled: false
+
+    lokiCanary:
+      enabled: false
+
+    test:
+      enabled: false
