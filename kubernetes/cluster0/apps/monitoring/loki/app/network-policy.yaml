@@ -70,6 +70,29 @@ spec:
         - port: 3100
           protocol: TCP
 ---
+# Allow ingress from Alloy (log push) on :3100 — Phase 2 (#3347).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-alloy-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy
+      ports:
+        - port: 3100
+          protocol: TCP
+---
 # Allow ingress from Prometheus (metrics scrape via ServiceMonitor) on :3100
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

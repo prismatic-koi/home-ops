@@ -1,0 +1,124 @@
+---
+# =============================================================================
+# Alloy NetworkPolicy — Phase 2 (#3347)
+# Pod label: app.kubernetes.io/name=alloy
+# Listens on:
+#   :12345 (HTTP — Alloy UI + /metrics for the ServiceMonitor scrape)
+# Egress to:
+#   loki.monitoring.svc :3100          (log push)
+#   kube-apiserver      :443 / :6443   (discovery.kubernetes + loki.source.kubernetes)
+# Note: kube-apiserver egress needs the companion CiliumNetworkPolicy in
+# cilium-network-policy.yaml — the same silent-bypass caveat as loki applies
+# here (kubeProxyReplacement + kube-apiserver entity identity).
+# =============================================================================
+
+# Default deny-all for alloy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  policyTypes: [Ingress, Egress]
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+---
+# Allow egress to Loki :3100 for log push.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-allow-loki-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 3100
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+---
+# Allow ingress from Prometheus (ServiceMonitor scrape) on the metrics port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-allow-prometheus-scrape
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 12345
+          protocol: TCP
+---
+# Allow egress to the K8s API server for pod discovery + log tailing
+# (discovery.kubernetes + loki.source.kubernetes). Mirrors the loki-allow-k8s-api
+# pattern — ipBlock is the enforcement path for non-Cilium fallbacks; the
+# CiliumNetworkPolicy alongside is what actually enforces the allow when
+# kubeProxyReplacement is on (see the CNP file for the full explanation).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-allow-k8s-api
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node

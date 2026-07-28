@@ -6,6 +6,7 @@ resources:
   # Pre Flux-Kustomizations
   - ./namespace.yaml
   # Flux-Kustomizations
+  - ./alloy/ks.yaml
   - ./blackbox-exporter/ks.yaml
   - ./changedetection-io/ks.yaml
   - ./grafana/ks.yaml

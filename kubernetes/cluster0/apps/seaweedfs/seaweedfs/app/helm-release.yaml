@@ -74,6 +74,11 @@ spec:
         storageClass: longhorn
       logs:
         type: emptyDir
+      # Auto-restart the filer StatefulSet on seaweedfs-s3-config secret
+      # rotation — avoids the manual bounce Phase 1 (#3348) needed when the
+      # `loki` S3 identity was added. See Phase 2 note on #3347.
+      podAnnotations:
+        reloader.stakater.com/auto: "true"
       s3:
         enabled: true
         enableAuth: true
@@ -86,3 +91,7 @@ spec:
       replicas: 1
       logs:
         type: emptyDir
+      # Same as filer.podAnnotations above — auto-restart the s3 Deployment
+      # on seaweedfs-s3-config secret rotation.
+      podAnnotations:
+        reloader.stakater.com/auto: "true"
