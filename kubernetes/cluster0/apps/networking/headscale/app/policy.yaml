@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: headscale-policy
+  namespace: networking
+data:
+  # Minimal policy for this PR: only declares tag ownership so nodes can be
+  # tagged at registration time. The actual grants/autoApprovers land with
+  # the subnet router (child issue, see #3352).
+  policy.hujson: |-
+    {
+      "tagOwners": {
+        "tag:k8s-router": ["homeops@"],
+        "tag:nixos": ["homeops@"],
+      },
+    }

@@ -1,0 +1,115 @@
+---
+# -----------------------------------------------------------------------------
+# Default-deny — applies to the headscale pod.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headscale-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headscale
+  policyTypes: [Ingress, Egress]
+---
+# -----------------------------------------------------------------------------
+# Traefik ingress on :8080 - the noise/TS2021 control-plane API that
+# headscale clients talk to via the HTTPRoute (un-proxied, no forward-auth).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headscale-allow-traefik-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headscale
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# Prometheus scrape ingress on :9091.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headscale-allow-prometheus-scrape
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headscale
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9091
+          protocol: TCP
+---
+# -----------------------------------------------------------------------------
+# Internet egress on :443 - headscale fetches the public DERP map from
+# https://controlplane.tailscale.com/derpmap/default (auto_update_enabled).
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headscale-allow-internet-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headscale
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# -----------------------------------------------------------------------------
+# DNS egress to CoreDNS in kube-system.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headscale-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headscale
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns

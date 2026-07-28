@@ -1,0 +1,29 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: headscale
+  namespace: networking
+spec:
+  hostnames:
+    - hs.${SECRET_PUBLIC_DOMAIN}
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecure
+  rules:
+    # NOTE: no forwardauth-authelia filter here - headscale clients
+    # (tailscale/headscale nodes) need to reach the noise/TS2021 protocol
+    # un-proxied by forward-auth. Traefik terminates TLS; the WebSocket
+    # upgrade for the noise protocol passes straight through.
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: headscale
+          namespace: networking
+          port: 8080
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
