@@ -1,0 +1,79 @@
+---
+# =============================================================================
+# fleet-ingest NetworkPolicies (issue #3386)
+#
+# Interaction with the HA pair's policies
+# ---------------------------------------
+# All existing HA Prometheus NetworkPolicies in kube-prometheus-stack/app/
+# use `podSelector: matchLabels: {app.kubernetes.io/name: prometheus}`. That
+# label is stamped on ALL Prometheus operator pods regardless of CR, so
+# those policies already spillover-apply to this ingest pod. In particular:
+#
+#   * `prometheus-default-deny`      — default-deny already applies here.
+#   * `prometheus-allow-dns`         — DNS egress already allowed.
+#   * `prometheus-allow-kube-apiserver` (CiliumNP) — apiserver egress
+#     already allowed. This ingest instance does no k8s SD (see rbac.yaml)
+#     so it will not exercise this allow, but the allow existing is
+#     harmless.
+#   * `prometheus-allow-grafana-ingress` — Grafana can already reach
+#     :9090 on the ingest pod. That is what makes the "fleet ingest as
+#     Grafana datasource" wiring work without a new ingress rule here.
+#
+# Rules ADDED below are only the ones that are strictly new for the
+# ingest — i.e. the tailscale-proxy-metrics-ingest ingress. Deliberately
+# scoped by `app.kubernetes.io/instance: fleet-ingest` so they select
+# only the ingest pod, keeping the "rip out cleanly" property (delete
+# this dir + the proxy dir and nothing lingers on the HA pod).
+# =============================================================================
+---
+# Allow the tailscale-proxy-metrics-ingest proxy (networking namespace) to
+# reach the ingest Prometheus on :9090 — this is the receiver port for both
+# remote_write POSTs (/api/v1/write) and any PromQL queries a tailnet peer
+# runs against the instance directly (e.g. via the tailscale port-forwarded
+# UI on ts-metrics-ingest.tailnet.internal:9090).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fleet-ingest-allow-tailscale-proxy-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+      app.kubernetes.io/instance: fleet-ingest
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tailscale-proxy-metrics-ingest
+      ports:
+        - port: 9090
+          protocol: TCP
+---
+# Cilium companion (defence-in-depth) — mirrors the standard-NP rule above
+# under kubeProxyReplacement=true semantics. The HA pair uses the same
+# NP/CiliumNP pairing pattern for grafana/operator ingress; we mirror it
+# here so the ingest pod's exposure is enforced by both policy engines.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: fleet-ingest-allow-tailscale-proxy-ingress
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+      app.kubernetes.io/instance: fleet-ingest
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: networking
+            app.kubernetes.io/name: tailscale-proxy-metrics-ingest
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP

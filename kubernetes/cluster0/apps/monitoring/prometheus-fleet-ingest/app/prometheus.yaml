@@ -1,0 +1,142 @@
+---
+# =============================================================================
+# fleet-ingest — dedicated single-replica remote_write ingest Prometheus
+# (issue #3386, design context in nixos-config #2458 / #2460)
+#
+# Purpose
+# -------
+# Roaming NixOS/Darwin devices (laptops, phones) push metrics via Alloy
+# `prometheus.remote_write` over the tailnet. Because these devices NAT/roam,
+# scrape is architecturally wrong — push is. The HA kube-prometheus-stack pair
+# is a 2-replica scrape pair; pushing remote_write at its Service round-robins
+# samples across replicas so neither holds the complete series
+# (`__replica__` dedup assumes redundant data, not complementary).
+#
+# THIS CR MUST STAY SEPARATE from the HA pair:
+#   * Distinct CR name (`fleet-ingest`) — the operator stamps
+#     `app.kubernetes.io/instance=fleet-ingest` onto the pod.
+#   * Distinct governing service (`spec.serviceName: fleet-ingest-operated` +
+#     pre-created Service in service.yaml). Two Prometheus CRs in the same
+#     namespace cannot share the default `prometheus-operated` governing
+#     service.
+#   * Distinct ServiceAccount (`fleet-ingest`) — see rbac.yaml.
+#   * Nil scrape-target selectors: this instance MUST NOT scrape. It exists
+#     purely as a remote_write sink.
+#
+# Reversibility
+# -------------
+# This is a deliberately lean, easily-retired exploration ("see what we can
+# do with fleet data"). Everything about the ingest lives under this one dir
+# + a proxy under headscale/ + a datasource entry in Grafana + one ACL grant.
+# To rip out: delete this dir, the proxy files, the datasource entry, and
+# the ACL grant. Nothing else needs to change.
+#
+# Growth bound
+# ------------
+# `retention: 7d` + `retentionSize: 4GB` cap on-disk data (whichever hits
+# first). PVC is 10Gi giving headroom for WAL + head chunks; the size cap
+# stops runaway growth if push volume balloons. TSDB block compaction keeps
+# 7d of typical fleet metrics well below the retentionSize cap.
+#
+# Storage class choice
+# --------------------
+# `local-path` mirrors the HA pair's storage class. Trade-off:
+#   * Node failure loses the pod's data until reschedule (acceptable —
+#     7d retention on exploratory data; roaming devices continue pushing
+#     to the new pod).
+#   * Longhorn would give replicated durability but adds operational load
+#     for an exploratory instance the design says "may be retired".
+# Migration to longhorn (or Mimir) is future work if the exploration
+# proves lasting.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: fleet-ingest
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: fleet-ingest
+    app.kubernetes.io/component: fleet-ingest
+spec:
+  # Pinned to the same version the HA pair currently runs to avoid the
+  # operator's baked-in default drifting under us. Bump alongside the HA
+  # pair when kube-prometheus-stack is upgraded.
+  version: v3.13.1-distroless
+  image: quay.io/prometheus/prometheus:v3.13.1-distroless
+
+  replicas: 1
+
+  # Governing headless Service is pre-created in service.yaml so we don't
+  # collide with the HA pair's `prometheus-operated` (two Prometheus CRs
+  # in one namespace can't share the default governing Service).
+  serviceName: fleet-ingest-operated
+
+  serviceAccountName: fleet-ingest
+
+  # =========================================================================
+  # Remote-write receiver — the whole point of this instance.
+  # Exposes /api/v1/write on the same web port (:9090). Alloy on fleet
+  # devices posts to http://ts-metrics-ingest.tailnet.internal:9090/api/v1/write
+  # via the tailscale-proxy-metrics-ingest proxy.
+  # =========================================================================
+  enableRemoteWriteReceiver: true
+
+  # Admin API stays off — remote_write does not need it and it would expose
+  # /api/v1/admin/tsdb/{delete_series,clean_tombstones,snapshot} to any peer
+  # allowed to reach :9090.
+  enableAdminAPI: false
+
+  # =========================================================================
+  # Scrape targets: NONE.
+  #
+  # Nil selectors (omit the field entirely) cause the operator to select no
+  # resources of that type. Contrast the kube-prometheus-stack chart's
+  # `xxxSelectorNilUsesHelmValues: false` which forces `{}` (select all).
+  # This instance is push-only; setting `{}` here would make it try to
+  # scrape every ServiceMonitor / PodMonitor in the cluster and fight the
+  # HA pair for the same targets. We do NOT want that.
+  # =========================================================================
+  # serviceMonitorSelector, podMonitorSelector, probeSelector,
+  # scrapeConfigSelector: intentionally not set.
+
+  # No alerting: the ingest is a data sink; alert evaluation happens on the
+  # HA pair (which owns all the PrometheusRule resources).
+  # ruleSelector: intentionally not set.
+
+  # =========================================================================
+  # Storage — real PVC, not emptyDir. See file header for storage class
+  # rationale and growth bound.
+  # =========================================================================
+  retention: 7d
+  retentionSize: 4GB
+  walCompression: true
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: local-path
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+
+  # Modest resource ask. Push-only + no scraping keeps CPU/memory well under
+  # what the HA pair uses (2Gi/replica). Bump if remote_write consumers grow.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  # Standard pod hardening. Mirrors the HA pair's securityContext so the
+  # PVC's ownership (fsGroup=2000) matches what Prometheus expects.
+  securityContext:
+    fsGroup: 2000
+    runAsGroup: 2000
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+
+  portName: http-web

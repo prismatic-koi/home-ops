@@ -1,0 +1,66 @@
+---
+# =============================================================================
+# fleet-ingest Services (issue #3386)
+#
+# Two Services are required, both selecting exclusively the ingest pod:
+#
+#   1. `fleet-ingest-operated` — headless governing Service for the
+#      StatefulSet the operator materialises. Pinned via
+#      `spec.serviceName: fleet-ingest-operated` on the Prometheus CR so we
+#      do NOT collide with the HA pair's default `prometheus-operated`
+#      governing Service (the operator would otherwise try to create a
+#      second Service by that name and clash — see the CRD note on
+#      `serviceName` when running multiple Prometheus resources in one
+#      namespace).
+#
+#   2. `fleet-ingest` — regular ClusterIP Service used by:
+#        * the tailscale-proxy-metrics-ingest proxy as its TCPForward target
+#          (by DNS name — no /32 pin, matches the #3378 per-service-proxy
+#          pattern);
+#        * Grafana as the datasource URL.
+#
+# Both Services must select ONLY the ingest pod, not the HA pair. Prometheus
+# pods carry `app.kubernetes.io/name=prometheus` unconditionally, so we
+# disambiguate on `app.kubernetes.io/instance=fleet-ingest` (the operator
+# stamps this label to the Prometheus CR's name).
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-ingest-operated
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: fleet-ingest
+    app.kubernetes.io/component: fleet-ingest
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: fleet-ingest
+  ports:
+    - name: http-web
+      port: 9090
+      protocol: TCP
+      targetPort: http-web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-ingest
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: fleet-ingest
+    app.kubernetes.io/component: fleet-ingest
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: fleet-ingest
+  ports:
+    - name: http-web
+      port: 9090
+      protocol: TCP
+      targetPort: http-web

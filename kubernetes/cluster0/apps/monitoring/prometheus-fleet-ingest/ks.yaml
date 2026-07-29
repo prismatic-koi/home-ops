@@ -1,0 +1,25 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cluster-apps-prometheus-fleet-ingest
+  namespace: flux-system
+spec:
+  # Depends on kube-prometheus-stack because the Prometheus CRD is installed by
+  # that chart. Without the CRD present the Prometheus resource here fails to
+  # apply. The operator itself (also installed by kube-prometheus-stack) is what
+  # reconciles our Prometheus CR into a StatefulSet.
+  dependsOn:
+    - name: cluster-apps-kube-prometheus-stack
+  path: ./kubernetes/cluster0/apps/monitoring/prometheus-fleet-ingest/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: home-ops-cluster0
+  # No healthChecks: this is a bare Prometheus CR (not a HelmRelease). The
+  # operator reconciles it into a StatefulSet; Flux's own reconcile of the
+  # kustomization is sufficient status signal for a lean, exploratory ingest.
+  interval: 30m
+  retryInterval: 1m
+  timeout: 3m

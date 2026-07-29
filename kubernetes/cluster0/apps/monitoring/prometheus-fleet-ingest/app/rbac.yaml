@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# fleet-ingest ServiceAccount
+#
+# Dedicated SA for the push-only ingest Prometheus (issue #3386). Kept
+# deliberately minimal:
+#
+#   * No ClusterRole / ClusterRoleBinding. The ingest instance has no
+#     ServiceMonitor / PodMonitor / Probe / ScrapeConfig selectors set (see
+#     prometheus.yaml — nil selectors = select nothing, contrast the chart's
+#     `{}` "select everything" pattern), so it never performs Kubernetes SD.
+#     Prometheus itself boots fine without cluster-wide list/watch on
+#     nodes/services/endpoints/pods.
+#
+#   * Distinct name from the HA pair's `prometheus-kube-prometheus-prometheus`
+#     SA. Keeps the ingest fully self-contained so the "rip it out cleanly"
+#     property in the issue holds — delete this dir and nothing else changes.
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fleet-ingest
+  namespace: monitoring

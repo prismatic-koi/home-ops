@@ -8,6 +8,11 @@
     // that any cluster admin might need to redeploy.
     "tag:ts-prometheus": ["homeops@"],
     "tag:ts-loki":       ["homeops@"],
+    // Fleet-metrics remote_write ingest proxy (issue #3386). Same rationale
+    // as ts-prometheus / ts-loki: cluster-managed workload, no human owner
+    // fits; homeops@ owns the machine identity so any cluster admin can
+    // redeploy without needing to re-own the tag.
+    "tag:ts-metrics-ingest": ["homeops@"],
   },
 
   // Named hosts referenced from `grants`. /32s pin to the current
@@ -63,6 +68,17 @@
       "src": ["ben@"],
       "dst": ["tag:ts-loki"],
       "ip":  ["tcp:3100"],
+    },
+    // Fleet-metrics remote_write ingest (issue #3386). ONLY tcp:9090 -
+    // the fleet-ingest Prometheus's web port also serves the receiver
+    // (/api/v1/write) when enableRemoteWriteReceiver is true. No other
+    // ports, no other destinations. Deliberately scoped so ben@ devices
+    // (which push their own device metrics via Alloy remote_write) get
+    // the minimum surface needed to POST samples and query them back.
+    {
+      "src": ["ben@"],
+      "dst": ["tag:ts-metrics-ingest"],
+      "ip":  ["tcp:9090"],
     },
     // Legacy router path (kept until #3379).
     {
