@@ -2,10 +2,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ./config.yaml
-  - ./policy.yaml
-  - ./statefulset.yaml
-  - ./service.yaml
+  - ./helm-release.yaml
   - ./httproute.yaml
   - ./servicemonitor.yaml
   - ./network-policy.yaml
@@ -27,3 +24,14 @@ labels:
   - pairs:
       app.kubernetes.io/name: headscale
       app.kubernetes.io/instance: headscale
+configMapGenerator:
+  - name: headscale-config
+    namespace: networking
+    files:
+      - config.yaml=./config/config.yaml
+  - name: headscale-policy
+    namespace: networking
+    files:
+      - policy.hujson=./config/policy.hujson
+generatorOptions:
+  disableNameSuffixHash: true
