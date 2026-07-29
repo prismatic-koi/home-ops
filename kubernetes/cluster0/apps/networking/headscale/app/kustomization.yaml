@@ -20,6 +20,13 @@ resources:
   - ./tailscale-proxy-loki-secret.sops.yaml
   - ./tailscale-proxy-loki-deployment.yaml
   - ./tailscale-proxy-loki-network-policy.yaml
+  # Fleet-metrics remote_write ingest proxy (issue #3386). Additive:
+  # exposes the dedicated single-replica fleet-ingest Prometheus to the
+  # tailnet as tag:ts-metrics-ingest. Independent of the HA-pair proxy above.
+  - ./tailscale-proxy-metrics-ingest-rbac.yaml
+  - ./tailscale-proxy-metrics-ingest-secret.sops.yaml
+  - ./tailscale-proxy-metrics-ingest-deployment.yaml
+  - ./tailscale-proxy-metrics-ingest-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: headscale

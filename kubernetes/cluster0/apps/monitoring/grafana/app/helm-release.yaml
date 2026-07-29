@@ -75,6 +75,22 @@ spec:
             isDefault: true
             jsonData:
               timeInterval: 30s
+          # Fleet-metrics ingest Prometheus (issue #3386) — separate single-
+          # replica CR that receives remote_write pushes from roaming fleet
+          # devices. Deliberately a distinct datasource from `Prometheus`
+          # above so ad-hoc explore queries can be aimed at push-only data
+          # without touching the HA scrape pair. NOT isDefault. Egress from
+          # Grafana to :9090 in the monitoring namespace is already covered
+          # by grafana-allow-prometheus-egress (podSelector matches this
+          # instance too via app.kubernetes.io/name=prometheus).
+          - name: Prometheus (Fleet Ingest)
+            type: prometheus
+            access: proxy
+            url: http://fleet-ingest.monitoring.svc:9090
+            jsonData:
+              # Fleet Alloy typically pushes on a 15s interval; keep the
+              # query time step aligned.
+              timeInterval: 15s
           # Loki datasource — SingleBinary Loki backed by SeaweedFS S3 (#3347).
           # Loki auth_enabled is false, so no basicAuth / X-Scope-OrgID needed.
           - name: Loki

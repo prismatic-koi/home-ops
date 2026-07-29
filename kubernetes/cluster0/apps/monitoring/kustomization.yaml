@@ -12,4 +12,9 @@ resources:
   - ./grafana/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
   - ./loki/ks.yaml
+  # Push-only fleet-metrics ingest Prometheus (issue #3386).
+  # Dedicated single-replica CR alongside the HA pair; MUST NOT be
+  # merged into kube-prometheus-stack (see prometheus-fleet-ingest/
+  # prometheus.yaml header for why remote_write and HA don't mix).
+  - ./prometheus-fleet-ingest/ks.yaml
   - ./uptime-kuma/ks.yaml
