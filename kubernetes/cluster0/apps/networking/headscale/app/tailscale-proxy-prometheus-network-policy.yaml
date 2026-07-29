@@ -133,6 +133,29 @@ spec:
             matchLabels:
               app.kubernetes.io/name: prometheus
 ---
+# tailscaled runs in Kubernetes state-store mode (TS_KUBE_SECRET) and must
+# reach the kube-apiserver ClusterIP (10.43.0.1:443) to read/write its
+# node-state Secret. Expressed via the Cilium `kube-apiserver` entity rather
+# than a hardcoded ClusterIP, since the entity resolves correctly even if the
+# ClusterIP changes. Mirrors the pattern used for coredns-allow-kube-apiserver
+# in kube-system/coredns/policy/cilium-network-policy.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tailscale-proxy-prometheus-allow-kube-apiserver-egress
+  namespace: networking
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
 # Prometheus-side ingress: allow the proxy pod (regular pod identity,
 # no hostNetwork) to reach prometheus on :9090. Complements the
 # per-app default-deny in monitoring.
