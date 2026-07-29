@@ -86,6 +86,21 @@ data:
           "dst": ["tag:ts-loki"],
           "ip":  ["tcp:3100"],
         },
+        // Grant Ben's personal user-identity devices (headscale user
+        // ben@, e.g. navi, bens-s25) the same least-privilege
+        // observability access as the tag:nixos machines. These devices
+        // register without a tag, so they're granted by user src
+        // ("ben@") rather than a machine tag.
+        {
+          "src": ["ben@"],
+          "dst": ["tag:ts-prometheus"],
+          "ip":  ["tcp:9090"],
+        },
+        {
+          "src": ["ben@"],
+          "dst": ["tag:ts-loki"],
+          "ip":  ["tcp:3100"],
+        },
         // Legacy router path (kept until #3379).
         {
           "src": ["tag:nixos"],
