@@ -9,9 +9,9 @@ data:
   # newer shape and what we standardise on going forward).
   #
   # Access story:
-  #   tag:nixos    - remote NixOS observability consumers
+  #   tag:nixos    - remote NixOS observability consumers (owned by ben@)
   #                  ONLY reach prometheus:9090 and loki:3100
-  #   tag:k8s-router - the in-cluster tailscale-router pod
+  #   tag:k8s-router - the in-cluster tailscale-router pod (owned by homeops@)
   #                    auto-approves its own 10.43.0.0/16 route advertisement
   #                    so an operator doesn't have to run
   #                    `headscale nodes approve-routes` on every redeploy
@@ -29,7 +29,7 @@ data:
     {
       "tagOwners": {
         "tag:k8s-router": ["homeops@"],
-        "tag:nixos":      ["homeops@"],
+        "tag:nixos":      ["ben@"],
       },
 
       // Named hosts referenced from `grants` and `tests`. /32s pin to the
