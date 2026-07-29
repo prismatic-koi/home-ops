@@ -52,7 +52,7 @@ spec:
           app:
             image:
               repository: ghcr.io/juanfont/headscale
-              tag: "0.29.2"
+              tag: "v0.29.3@sha256:0e7f1c6e4ce6c2a2a001103ecd3fa645a045adf30ac8a5234fe037b43000cd72"
             args: ["serve"]
             securityContext:
               allowPrivilegeEscalation: false
