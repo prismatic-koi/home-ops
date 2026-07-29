@@ -232,6 +232,47 @@ The CI job `Prometheus scrape NetworkPolicy lint`
 new app, the fix is almost always "add the missing `prometheus-allow-<app>-scrape-egress`
 rule".
 
+## Pods accessing the Kubernetes API server
+
+Any pod that communicates with the Kubernetes API server from a pod on this cluster
+(e.g. external-dns, cert-manager, tailscale proxies reading/writing node state Secrets)
+needs an **explicit CiliumNetworkPolicy egress allow**, because the cluster enforces
+default-deny egress. On this k3s cluster with Cilium `kubeProxyReplacement=true`, the
+standard `NetworkPolicy` `ipBlock` rules are silently bypassed -- the kube-apiserver
+runs in the host network namespace and Cilium assigns it the `kube-apiserver` entity
+identity, not a pod identity. The correct pattern is a bare `toEntities: [kube-apiserver]`
+rule with **no `toPorts` restriction**. The reason: Cilium socket-LB translates the
+ClusterIP (10.43.0.1:443) to the real apiserver backend (port 6443) **before** egress
+policy evaluation, so a `:443`-only `toPorts` rule silently denies the translated traffic
+and the pod times out.
+
+**Do:**
+```yaml
+# kubernetes/cluster0/apps/<namespace>/<app>/app/cilium-network-policy.yaml
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: <app>-allow-kube-apiserver
+  namespace: <namespace>
+spec:
+  endpointSelector:
+    matchLabels:
+      # Pod selector for the app
+  egress:
+    - toEntities:
+        - kube-apiserver
+```
+
+**Don't:**
+- Use bare `NetworkPolicy` `ipBlock` rules (silently bypassed on kubeProxyReplacement=true).
+- Add `toPorts: [443]` to the `toEntities: [kube-apiserver]` rule (breaks socket-LB translation).
+
+Working in-tree examples: `coredns-allow-kube-apiserver` in
+`kubernetes/cluster0/apps/kube-system/coredns/policy/cilium-network-policy.yaml` and
+`cert-manager-allow-kube-apiserver` in
+`kubernetes/cluster0/apps/cert-manager/cert-manager/app/cilium-network-policy.yaml`.
+Prior occurrences: #2829 (external-dns), #2947 (cnpg), #3381 / #3382 (tailscale).
+
 ## Init Containers
 
 Some applications use init containers that must complete before the main container starts:
