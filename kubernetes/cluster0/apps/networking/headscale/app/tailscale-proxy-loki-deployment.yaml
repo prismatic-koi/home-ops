@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# tailscale-proxy-loki
+#
+# Per-service tailscale proxy exposing the in-cluster loki Service to the
+# headscale tailnet as its own node (tag:ts-loki). Implements step 1 of
+# design #3377 — replaces the broken "subnet router advertises the Service
+# CIDR" approach. See tailscale-proxy-prometheus-deployment.yaml for the
+# full rationale (identical origin-socket / tag-from-key / no-hostNetwork
+# design; only the target Service and port differ).
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-proxy-loki-serve
+  namespace: networking
+data:
+  # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
+  # port 3100 to the loki Service by DNS name. TCPForward does a standard
+  # net.Dial (fresh outbound socket) per accepted connection; it does NOT
+  # proxy packets. Target is the Service DNS name, not a pinned ClusterIP.
+  serve.json: |-
+    {
+      "TCP": {
+        "3100": {
+          "TCPForward": "loki.monitoring.svc.cluster.local:3100"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-proxy-loki
+  namespace: networking
+spec:
+  replicas: 1
+  strategy:
+    # Recreate rather than RollingUpdate: two tailnet nodes with the same
+    # hostname would collide on registration.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-loki
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale-proxy-loki
+    spec:
+      serviceAccountName: tailscale-proxy-loki
+      containers:
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.98.9@sha256:f15d5d3f4a68773a853180b72496f70ba614b64de0878c43fe3da39fe0afba47
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Userspace mode needs no capabilities. Drop everything.
+            capabilities:
+              drop: [ALL]
+            allowPrivilegeEscalation: false
+          env:
+            - name: TS_KUBE_SECRET
+              value: tailscale-proxy-loki-state
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-proxy-loki-auth
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              # No --advertise-tags: tag comes from the preauth key
+              # (headscale 0.28+ rejects both; see #3370).
+              value: >-
+                --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
+                --hostname=ts-loki
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            - name: TS_SERVE_CONFIG
+              value: /etc/tsserve/serve.json
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: serve-config
+              mountPath: /etc/tsserve
+              readOnly: true
+            - name: tailscale-run
+              mountPath: /var/run/tailscale
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: serve-config
+          configMap:
+            name: tailscale-proxy-loki-serve
+        - name: tailscale-run
+          emptyDir:
+            medium: Memory

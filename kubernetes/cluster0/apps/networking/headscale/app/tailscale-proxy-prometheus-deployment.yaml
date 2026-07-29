@@ -1,0 +1,152 @@
+---
+# =============================================================================
+# tailscale-proxy-prometheus
+#
+# Per-service tailscale proxy exposing the in-cluster prometheus Service to
+# the headscale tailnet as its own node (tag:ts-prometheus). Implements
+# step 1 of design #3377 — replaces the broken "subnet router advertises the
+# Service CIDR" approach (see #3377 for the Cilium socket-LB root cause).
+#
+# Why this is not a subnet router:
+#   The router (kept alongside this proxy — retirement is #3379) forwards
+#   packets from a tailnet peer to a ClusterIP. Under Cilium with
+#   kubeProxyReplacement=true, ClusterIP->PodIP translation is done by
+#   socket-LB at the *origin socket* (cgroup eBPF at connect()), not on the
+#   wire. Forwarded packets therefore never get translated and time out.
+#
+# Origin-socket property (this is the whole point):
+#   TS_USERSPACE=true runs tailscaled with the userspace netstack (no tun
+#   device, no packet forwarding is even *possible*). Inbound TCP on the
+#   tailnet interface is terminated inside tailscaled. The TS_SERVE_CONFIG
+#   TCPForward handler then calls a fresh net.Dial from the pod netns to
+#   the target's Service DNS name. That outbound socket originates in the
+#   pod, so Cilium's cgroup-attached socket-LB sees connect() and DNATs
+#   ClusterIP -> PodIP correctly. Empirical verification is in the PR body.
+#
+# Tag from preauth key, NOT --advertise-tags:
+#   headscale 0.28+ hard-rejects registration when a PreAuthKey-authenticated
+#   node ALSO passes --advertise-tags (see the note in
+#   tailscale-router-deployment.yaml and #3370). The preauth key committed
+#   in tailscale-proxy-prometheus-secret.sops.yaml MUST be created with
+#   `headscale preauthkeys create --tags tag:ts-prometheus --reusable`; do
+#   NOT set --advertise-tags in TS_EXTRA_ARGS.
+#
+# No hostNetwork, no NET_ADMIN, no /dev/net/tun:
+#   None of these are required for userspace mode. The security posture is
+#   therefore materially better than the router: standard pod endpoint
+#   identity, standard NetworkPolicy enforcement, no host-namespace escape
+#   surface. See tailscale-proxy-prometheus-network-policy.yaml.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-proxy-prometheus-serve
+  namespace: networking
+data:
+  # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
+  # port 9090 to the prometheus Service by DNS name. TCPForward does a
+  # standard net.Dial (fresh outbound socket) per accepted connection; it
+  # does NOT proxy packets. Target is the Service DNS name, not a pinned
+  # ClusterIP: no /32 pin drift when the Service is reconstituted.
+  serve.json: |-
+    {
+      "TCP": {
+        "9090": {
+          "TCPForward": "prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-proxy-prometheus
+  namespace: networking
+spec:
+  replicas: 1
+  strategy:
+    # Recreate rather than RollingUpdate: two tailnet nodes with the same
+    # hostname would collide on registration. A brief gap on redeploy is
+    # acceptable for the observability use case.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale-proxy-prometheus
+    spec:
+      serviceAccountName: tailscale-proxy-prometheus
+      containers:
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.98.9@sha256:f15d5d3f4a68773a853180b72496f70ba614b64de0878c43fe3da39fe0afba47
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Userspace mode needs no capabilities. Drop everything.
+            capabilities:
+              drop: [ALL]
+            allowPrivilegeEscalation: false
+          env:
+            # Persist tailnet node state (machine key, node key, ...) into
+            # this Secret. The RBAC in tailscale-proxy-prometheus-rbac.yaml
+            # pins get/update/patch to exactly this name. Surviving a pod
+            # delete + reschedule with the tag intact depends on this
+            # Secret being reused across pod lifecycles.
+            - name: TS_KUBE_SECRET
+              value: tailscale-proxy-prometheus-state
+            # Userspace networking — no tun, no packet forwarding. This is
+            # what makes the origin-socket path (see file header) hold.
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-proxy-prometheus-auth
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              # No --advertise-tags: the tag is on the preauth key (see
+              # file header). Hostname becomes the MagicDNS label:
+              # ts-prometheus.tailnet.internal.
+              value: >-
+                --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
+                --hostname=ts-prometheus
+            # We do not want tailscaled rewriting the pod's resolv.conf;
+            # the pod already gets cluster DNS via ClusterFirst.
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            # Serve config: mounted from the ConfigMap above. containerboot
+            # applies this after tailscale up.
+            - name: TS_SERVE_CONFIG
+              value: /etc/tsserve/serve.json
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: serve-config
+              mountPath: /etc/tsserve
+              readOnly: true
+            # tailscaled needs a writable state area even with
+            # TS_KUBE_SECRET (localapi socket, scratch). Backed by memory
+            # rather than the container FS so it survives readOnlyRootFs
+            # tightening if we ever add it.
+            - name: tailscale-run
+              mountPath: /var/run/tailscale
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: serve-config
+          configMap:
+            name: tailscale-proxy-prometheus-serve
+        - name: tailscale-run
+          emptyDir:
+            medium: Memory

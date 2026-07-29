@@ -1,0 +1,133 @@
+---
+# =============================================================================
+# tailscale-proxy-loki NetworkPolicies
+#
+# See tailscale-proxy-prometheus-network-policy.yaml for the shape rationale;
+# only the target and metrics port differ. Enforced at runtime (real pod
+# endpoint identity, not hostNetwork).
+# =============================================================================
+---
+# Default deny-all.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-loki-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-loki
+  policyTypes: [Ingress, Egress]
+---
+# DNS resolution to cluster CoreDNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-loki-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Internet egress on :443/TCP — control plane + DERP.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-loki-allow-internet-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Direct WireGuard + STUN.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-loki-allow-wireguard-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - protocol: UDP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Forward target: TCP :3100 to loki pods in the monitoring namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-loki-allow-target-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-loki
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 3100
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+---
+# Loki-side ingress: allow the proxy pod to reach loki on :3100.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: loki-allow-tailscale-proxy-ingress
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: networking
+            app.kubernetes.io/name: tailscale-proxy-loki
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
