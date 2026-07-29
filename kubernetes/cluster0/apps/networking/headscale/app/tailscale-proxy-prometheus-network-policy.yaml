@@ -1,0 +1,156 @@
+---
+# =============================================================================
+# tailscale-proxy-prometheus NetworkPolicies
+#
+# Unlike the tailscale-router pod (hostNetwork -> reserved:host identity in
+# Cilium -> podSelector policies not enforced), the proxy runs with a real
+# pod identity. These NetworkPolicy resources ARE enforced at runtime.
+#
+# Egress needed:
+#   - DNS to CoreDNS (kube-system): resolve hs.${DOMAIN} + target Service
+#   - HTTPS/DERP to internet: control-plane + DERP relay fallback
+#   - UDP high-ports to internet: direct WireGuard + STUN
+#   - TCP :9090 to monitoring/prometheus pods: the actual forward target
+#
+# No ingress needed: tailnet peers reach the proxy via the WireGuard
+# userspace stack (inside the tailscale process), not via any pod-network
+# ingress path. All external tailnet traffic arrives as outbound
+# WireGuard/DERP replies to sessions the proxy itself established.
+# =============================================================================
+---
+# Default deny-all. All egress must be explicitly permitted below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-prometheus-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  policyTypes: [Ingress, Egress]
+---
+# DNS resolution to cluster CoreDNS. Needed for hs.${SECRET_PUBLIC_DOMAIN}
+# (control plane) and the target Service's DNS name.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-prometheus-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Internet egress on :443/TCP — the headscale control endpoint at
+# hs.${SECRET_PUBLIC_DOMAIN} and Tailscale's public DERP relay pool
+# (DERP falls back to :443/TCP when direct WireGuard fails). Private
+# ranges excluded so the proxy can't accidentally reach the internal
+# network on :443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-prometheus-allow-internet-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Direct WireGuard + STUN (UDP). tailscaled binds a random UDP port and
+# sends/receives WireGuard datagrams peer-to-peer when direct path is
+# available. STUN on UDP 3478 for NAT discovery. Full high-port UDP range
+# to any public IP; private ranges excluded.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-prometheus-allow-wireguard-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - protocol: UDP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# The actual forward target: TCP :9090 to prometheus pods in the
+# monitoring namespace. This is the outbound net.Dial the TCPForward
+# handler makes for each accepted tailnet connection.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-prometheus-allow-target-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-prometheus
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 9090
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+---
+# Prometheus-side ingress: allow the proxy pod (regular pod identity,
+# no hostNetwork) to reach prometheus on :9090. Complements the
+# per-app default-deny in monitoring.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prometheus-allow-tailscale-proxy-ingress
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: networking
+            app.kubernetes.io/name: tailscale-proxy-prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP

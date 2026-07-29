@@ -9,12 +9,21 @@ data:
   # newer shape and what we standardise on going forward).
   #
   # Access story:
-  #   tag:nixos    - remote NixOS observability consumers (owned by ben@)
-  #                  ONLY reach prometheus:9090 and loki:3100
-  #   tag:k8s-router - the in-cluster tailscale-router pod (owned by homeops@)
-  #                    auto-approves its own 10.43.0.0/16 route advertisement
-  #                    so an operator doesn't have to run
-  #                    `headscale nodes approve-routes` on every redeploy
+  #   tag:nixos            - remote NixOS observability consumers (owned by
+  #                          ben@). ONLY reach prometheus:9090 and loki:3100.
+  #   tag:k8s-router       - the in-cluster tailscale-router pod (owned by
+  #                          homeops@; legacy, retirement is #3379). Auto-
+  #                          approves its own 10.43.0.0/16 route advertisement
+  #                          so an operator doesn't have to run
+  #                          `headscale nodes approve-routes` on every redeploy.
+  #   tag:ts-prometheus    - per-service tailscale proxy for prometheus
+  #                          (design #3377 / issue #3378; owned by homeops@).
+  #                          Receives inbound from tag:nixos on tcp/9090 and
+  #                          re-originates to the in-cluster Service.
+  #   tag:ts-loki          - per-service tailscale proxy for loki, tcp/3100
+  #                          (owned by homeops@). Same ownership rationale
+  #                          as tag:k8s-router: cluster-managed workload,
+  #                          no human owner is appropriate.
   #
   # Hosts are pinned to current ClusterIPs (as /32). Tradeoff: if the
   # prometheus or loki Service is deleted and recreated, its ClusterIP may
@@ -28,13 +37,18 @@ data:
   policy.hujson: |-
     {
       "tagOwners": {
-        "tag:k8s-router": ["homeops@"],
-        "tag:nixos":      ["ben@"],
+        "tag:k8s-router":    ["homeops@"],
+        "tag:nixos":         ["ben@"],
+        // Per-service proxies are cluster-managed workloads; homeops@
+        // (the operator identity) owns them for the same reason it owns
+        // tag:k8s-router - no human owner is appropriate for a workload
+        // that any cluster admin might need to redeploy.
+        "tag:ts-prometheus": ["homeops@"],
+        "tag:ts-loki":       ["homeops@"],
       },
 
-      // Named hosts referenced from `grants` and `tests`. /32s pin to the
-      // current in-cluster Service ClusterIPs; update if the Service is
-      // recreated.
+      // Named hosts referenced from `grants`. /32s pin to the current
+      // in-cluster Service ClusterIPs; update if the Service is recreated.
       "hosts": {
         "prometheus": "10.43.180.44/32", // prometheus-kube-prometheus-prometheus.monitoring
         "loki":       "10.43.108.90/32", // loki.monitoring
@@ -51,10 +65,28 @@ data:
 
       // Least-privilege access: tag:nixos peers may reach ONLY
       //   prometheus tcp/9090 and loki tcp/3100.
-      // Everything else (SSH, other ports on the same hosts, the router
-      // itself, other cluster services) is denied by the default-deny
-      // posture of the tailnet: absence of a grant is a deny.
+      // Everything else (SSH, other ports on the same hosts/tags, the
+      // router itself, other cluster services) is denied by the default-
+      // deny posture of the tailnet: absence of a grant is a deny.
+      //
+      // Both the legacy named-host path (via the tailscale-router) and
+      // the new per-service-proxy path are granted here in parallel. The
+      // router-path grants (dst = named hosts pinned to /32) are kept so
+      // this change stays purely additive - retirement of the router
+      // path is scope of #3379.
       "grants": [
+        // New per-service-proxy path (design #3377).
+        {
+          "src": ["tag:nixos"],
+          "dst": ["tag:ts-prometheus"],
+          "ip":  ["tcp:9090"],
+        },
+        {
+          "src": ["tag:nixos"],
+          "dst": ["tag:ts-loki"],
+          "ip":  ["tcp:3100"],
+        },
+        // Legacy router path (kept until #3379).
         {
           "src": ["tag:nixos"],
           "dst": ["prometheus"],
