@@ -139,6 +139,10 @@ spec:
 # than a hardcoded ClusterIP, since the entity resolves correctly even if the
 # ClusterIP changes. Mirrors the pattern used for coredns-allow-kube-apiserver
 # in kube-system/coredns/policy/cilium-network-policy.yaml.
+# Port is intentionally unrestricted: with kubeProxyReplacement=true, Cilium
+# socket-LB translates the kubernetes.default.svc ClusterIP (10.43.0.1:443) to
+# the host apiserver backend port (6443) before egress policy evaluation,
+# so a :443-only toPorts rule would deny the translated traffic. See #2829/#2947.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -151,10 +155,6 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
 ---
 # Prometheus-side ingress: allow the proxy pod (regular pod identity,
 # no hostNetwork) to reach prometheus on :9090. Complements the
