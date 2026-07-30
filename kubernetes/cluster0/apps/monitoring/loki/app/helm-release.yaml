@@ -10,6 +10,17 @@
 # Chunks + index live in the SeaweedFS S3 bucket "loki"; the StatefulSet keeps
 # a small 10Gi Longhorn PVC for /var/loki (WAL, boltdb-shipper cache, ruler
 # WAL). No bulk log data lives on Longhorn.
+#
+# Chart source (#3400): the `loki` chart in grafana/helm-charts went
+# GEL-only from v7.0.0 onward -- as of chart 7.0.0 it's maintained for
+# Grafana Enterprise Logs users only, and OSS installs moved to the
+# community-maintained fork at grafana-community/helm-charts, forked at
+# exactly chart v6.55.0 (see grafana/loki#20705). This HelmRelease sources
+# from the `grafana-community-charts` HelmRepository, NOT `grafana-charts`,
+# and is deliberately held at 6.55.0 -- the last OSS-supported version. Do
+# NOT repoint this back at `grafana-charts` or bump past 6.55.0 without
+# re-reading #3400; the community chart is what's tracked for future
+# upgrades (see the Renovate carve-out in .github/renovate.json5).
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -23,7 +34,7 @@ spec:
       version: 6.55.0
       sourceRef:
         kind: HelmRepository
-        name: grafana-charts
+        name: grafana-community-charts
         namespace: flux-system
       interval: 15m
   install:

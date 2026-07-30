@@ -166,6 +166,23 @@
       internalChecksFilter: 'strict',
     },
     {
+      // Never propose loki chart bumps from the old grafana-charts source.
+      // The `loki` chart in grafana/helm-charts went GEL-only from v7.0.0 --
+      // maintained for Grafana Enterprise Logs users only -- with OSS
+      // installs redirected to grafana-community/helm-charts, forked at
+      // exactly chart v6.55.0 (see #3400, grafana/loki#20705). This cluster's
+      // `loki` HelmRelease now sources from the `grafana-community-charts`
+      // HelmRepository instead, so future bumps should come from that
+      // registry. This rule is a defence-in-depth guard: if the HelmRelease
+      // is ever accidentally repointed back at grafana.github.io/helm-charts,
+      // Renovate must not silently walk it onto the GEL-only 7.x line.
+      description: 'Never propose loki chart v7+ from the GEL-only grafana-charts source; track the OSS community fork instead (#3400)',
+      matchDatasources: ['helm'],
+      matchPackageNames: ['loki'],
+      matchCurrentRegistryUrls: ['https://grafana.github.io/helm-charts'],
+      enabled: false,
+    },
+    {
       // Group both Flux dependencies into a single PR. The Flux version is
       // carried in two places that Renovate tracks independently:
       //   - `kubernetes/cluster0/bootstrap/flux/kustomization.yaml` — Kustomize
