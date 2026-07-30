@@ -196,9 +196,42 @@ spec:
           // back to reading from e.Labels when the extracted key is missing
           // (see stages/structured_metadata.go), which is why pod/node work.
           loki.process "normalise" {
+            // Pre-seed extracted[level] = "unknown" for every entry. The
+            // regex/klog stages below will overwrite this if they extract
+            // a level from the log line; if none match, the seed survives
+            // and satisfies the edge-case AC (line with no recognisable
+            // level still ingests with level="unknown").
+            //
+            // Why a static template value ("unknown") instead of a Go
+            // template that would say "if .Value use it else unknown":
+            // this whole configMap.content string is fed through Helm's
+            // `tpl` function by the alloy chart (templates/configmap.yaml),
+            // which evaluates any Go-template action inside at chart-render
+            // time in Helm's own context (where .Value is nil), collapsing
+            // the Alloy-side Go template into the literal string "unknown"
+            // BEFORE the ConfigMap is even written. Escaping the braces
+            // (backtick-raw-string form, the double-quoted string-brace
+            // idiom, etc.) is either eaten by the outer tpl or unsupported
+            // by its lexer, AND ANY Go-template action sequence inside
+            // this configMap.content string — including ones sitting
+            // harmlessly inside `//` comments — is parsed by tpl, so we
+            // avoid the whole syntax in this file. Pre-seeding sidesteps
+            // the problem: no Go-template syntax inside stage.template,
+            // nothing for Helm to interpret. This latent Helm-tpl
+            // collision was the second half of the #3395 root cause: the
+            // original #3347 pipeline had the same collision for
+            // namespace/app/level, all three rendering as `template =
+            // "unknown"` in the deployed ConfigMap.
+            stage.template {
+              source   = "level"
+              template = "unknown"
+            }
+
             // Extract a level token from the log line if present. Best-effort;
             // structured JSON logs, klog-style prefixes (I0101 ...), and plain
-            // words are all common. Missing/unmatched -> handled below.
+            // words are all common. On no match, stage.regex is a silent
+            // no-op (see stages/regex.go Process) so the "unknown" seed above
+            // survives.
             stage.regex {
               expression = "(?i)(?:^|[^A-Za-z])(?P<level>trace|debug|info|warn(?:ing)?|err(?:or)?|fatal|critical|panic)(?:[^A-Za-z]|$)"
             }
@@ -248,17 +281,6 @@ spec:
               source     = "level"
               expression = "^(?i)(trace)$"
               replace    = "debug"
-            }
-
-            // Soft-enforce level: if the regex/replace stages above didn't
-            // populate extracted[level], default to "unknown" so the line is
-            // still ingested with a valid level label (edge-case AC).
-            // namespace/app are already defaulted in discovery.relabel — see
-            // the block-level comment above for why we don't run template on
-            // them here.
-            stage.template {
-              source   = "level"
-              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
             }
 
             // Promote extracted level -> stream label. namespace/app/container
