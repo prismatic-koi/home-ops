@@ -48,13 +48,47 @@ spec:
         # data -- i.e. a stream or the tenant has hit the caps configured
         # above. This is expected occasionally under a genuine burst, but
         # sustained discards for 15m mean something is stuck emitting logs
-        # far above normal volume.
+        # far above normal volume. Scoped to reasons that indicate a real
+        # limit was hit (as opposed to benign age-based rejects, handled by
+        # LokiIngestionDiscardsAgeBasedHigh below) -- kept at a `> 0` floor
+        # since these reasons should never fire under normal operation.
         - alert: LokiIngestionDiscardsHigh
           expr: |
-            sum(rate(loki_discarded_samples_total[15m])) > 0
+            sum(rate(loki_discarded_samples_total{reason=~"rate_limited|per_stream_rate_limit|stream_limit|line_too_long|max_line_size|per_stream_series_limit"}[15m])) > 0
           for: 15m
           labels:
             severity: warning
           annotations:
-            summary: "Loki is discarding ingested log samples"
-            description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). Common causes by reason: `rate_limited` / `per_stream_rate_limit` -> a stream or tenant hit the ingestion_rate_mb / per_stream_rate_limit guardrails in limits_config; `too_far_behind` / `greater_than_max_sample_age` -> stream collapse from over-aggressive label rewriting (e.g. a bad Alloy pipeline stamping the same value on many pods) is producing out-of-order timestamps that trip the ingester's window -- do NOT just raise limits; check discovered stream label cardinality in Loki first (see #3395 for prior art). Investigate the source pod/namespace before increasing limits."
+            summary: "Loki is discarding ingested log samples (limit hit)"
+            description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). Common causes by reason: `rate_limited` / `per_stream_rate_limit` -> a stream or tenant hit the ingestion_rate_mb / per_stream_rate_limit guardrails in limits_config; `stream_limit` / `per_stream_series_limit` -> too many distinct label combinations for a stream/tenant, check discovered stream label cardinality in Loki first (see #3395 for prior art); `line_too_long` / `max_line_size` -> a source is emitting abnormally large log lines. Investigate the source pod/namespace before increasing limits."
+
+        # #3401: age-based rejects (greater_than_max_sample_age,
+        # too_far_behind, out_of_order) are benign background noise --
+        # Alloy re-shipping a handful of genuinely old log lines from
+        # longhorn-system after a restart (not stream collapse; labels are
+        # correct, see #3401 investigation). A `> 0` floor on
+        # loki_discarded_samples_total flaps on any trickle, however small,
+        # because the 15m rate window keeps re-arming. Alert on the RATIO of
+        # age-based discards to lines received instead, so a few old lines
+        # against a healthy ingest stream stays silent, and only page when
+        # age-based discards become a material fraction (>1%) of ingest --
+        # which would indicate a genuine, large-scale timestamp/ordering
+        # problem rather than a few stale re-shipped lines.
+        # clamp_min(..., 1) guards the denominator so the ratio is 0 (not
+        # firing, not NaN) when ingest is idle, instead of dividing by ~0
+        # and spuriously firing on noise.
+        - alert: LokiIngestionDiscardsAgeBasedHigh
+          expr: |
+            (
+              sum(rate(loki_discarded_samples_total{reason=~"greater_than_max_sample_age|too_far_behind|out_of_order"}[15m]))
+                /
+              clamp_min(sum(rate(loki_distributor_lines_received_total[15m])), 1)
+            ) > 0.01
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki is discarding a material fraction of ingested lines as too old/out-of-order"
+            description: "Loki has discarded more than 1% of received lines over the last 15 minutes due to age/ordering (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}), current ratio {{ $value | humanizePercentage }}. `too_far_behind` / `greater_than_max_sample_age` / `out_of_order` at this scale suggest stream collapse from over-aggressive label rewriting (e.g. a bad Alloy pipeline stamping the same value on many pods) producing out-of-order timestamps that trip the ingester's window -- do NOT just raise limits; check discovered stream label cardinality in Loki first (see #3395 for prior art). A low, steady trickle of old-log replay (e.g. from Alloy re-shipping stale longhorn-system logs after a restart, see #3401) is expected and should not reach this ratio."
+
+
