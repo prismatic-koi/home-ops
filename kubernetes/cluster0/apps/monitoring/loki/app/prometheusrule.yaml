@@ -57,4 +57,4 @@ spec:
             severity: warning
           annotations:
             summary: "Loki is discarding ingested log samples"
-            description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). This means a stream or the tenant has hit the per_stream_rate_limit / ingestion_rate_mb guardrails in limits_config -- investigate the source pod/namespace before increasing limits."
+            description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). Common causes by reason: `rate_limited` / `per_stream_rate_limit` -> a stream or tenant hit the ingestion_rate_mb / per_stream_rate_limit guardrails in limits_config; `too_far_behind` / `greater_than_max_sample_age` -> stream collapse from over-aggressive label rewriting (e.g. a bad Alloy pipeline stamping the same value on many pods) is producing out-of-order timestamps that trip the ingester's window -- do NOT just raise limits; check discovered stream label cardinality in Loki first (see #3395 for prior art). Investigate the source pod/namespace before increasing limits."
