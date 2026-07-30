@@ -1,11 +1,9 @@
 {
   "tagOwners": {
-    "tag:k8s-router":    ["homeops@"],
     "tag:nixos":         ["ben@"],
-    // Per-service proxies are cluster-managed workloads; homeops@
-    // (the operator identity) owns them for the same reason it owns
-    // tag:k8s-router - no human owner is appropriate for a workload
-    // that any cluster admin might need to redeploy.
+    // Per-service proxies are cluster-managed workloads; homeops@ (the
+    // operator identity) owns them because no human owner is appropriate
+    // for a workload that any cluster admin might need to redeploy.
     "tag:ts-prometheus": ["homeops@"],
     "tag:ts-loki":       ["homeops@"],
     // Fleet-metrics remote_write ingest proxy (issue #3386). Same rationale
@@ -15,35 +13,20 @@
     "tag:ts-metrics-ingest": ["homeops@"],
   },
 
-  // Named hosts referenced from `grants`. /32s pin to the current
-  // in-cluster Service ClusterIPs; update if the Service is recreated.
-  "hosts": {
-    "prometheus": "10.43.180.44/32", // prometheus-kube-prometheus-prometheus.monitoring
-    "loki":       "10.43.108.90/32", // loki.monitoring
-  },
-
-  // The in-cluster router advertises the k3s service CIDR. Without
-  // autoApprovers, an operator would have to run
-  // `headscale nodes approve-routes ...` after every re-registration.
-  "autoApprovers": {
-    "routes": {
-      "10.43.0.0/16": ["tag:k8s-router"],
-    },
-  },
-
   // Least-privilege access: tag:nixos peers may reach ONLY
-  //   prometheus tcp/9090 and loki tcp/3100.
-  // Everything else (SSH, other ports on the same hosts/tags, the
-  // router itself, other cluster services) is denied by the default-
-  // deny posture of the tailnet: absence of a grant is a deny.
+  //   tag:ts-prometheus tcp/9090 and tag:ts-loki tcp/3100.
+  // Everything else (SSH, other ports on the same tags, other cluster
+  // services) is denied by the default-deny posture of the tailnet:
+  // absence of a grant is a deny.
   //
-  // Both the legacy named-host path (via the tailscale-router) and
-  // the new per-service-proxy path are granted here in parallel. The
-  // router-path grants (dst = named hosts pinned to /32) are kept so
-  // this change stays purely additive - retirement of the router
-  // path is scope of #3379.
+  // Access to services is via per-service tailscale proxy pods (design
+  // #3377). The former in-cluster subnet router that advertised the k3s
+  // Service CIDR (10.43.0.0/16) was retired in #3379 because forwarded
+  // traffic hitting a ClusterIP is not translated by Cilium socket-LB --
+  // socket-LB only translates locally-originated `connect()` calls, not
+  // routed packets. See #3377 for the full root cause.
   "grants": [
-    // New per-service-proxy path (design #3377).
+    // Per-service-proxy path (design #3377).
     {
       "src": ["tag:nixos"],
       "dst": ["tag:ts-prometheus"],
@@ -80,27 +63,35 @@
       "dst": ["tag:ts-metrics-ingest"],
       "ip":  ["tcp:9090"],
     },
-    // Legacy router path (kept until #3379).
-    {
-      "src": ["tag:nixos"],
-      "dst": ["prometheus"],
-      "ip":  ["tcp:9090"],
-    },
-    {
-      "src": ["tag:nixos"],
-      "dst": ["loki"],
-      "ip":  ["tcp:3100"],
-    },
   ],
 
-  // NOTE: no `tests` block here on purpose. headscale evaluates `tests`
-  // by resolving each `src` tag to actual registered node IPs -- with
-  // zero tag:nixos nodes currently registered, "tag:nixos" resolves to
-  // no IP addresses and the assertion fails at every policy load/boot
-  // ("policy tests failed at boot ... resolved to no IP addresses").
-  // It's only a warning (the policy still applies), but it actively
-  // misled a live investigation (#3370). Re-add a tests block once at
-  // least one tag:nixos node is actually registered, so the accept/deny
-  // assertions have real IPs to resolve against.
+  // Static assertions evaluated on every policy load/boot. If any accept
+  // fails or any deny succeeds, headscale logs "policy tests failed at
+  // boot" and keeps the previous good policy live. See
+  // hscontrol/policy/v2/test.go in juanfont/headscale.
+  //
+  // Was removed in #3371 (issue #3370) because tag:nixos resolved to zero
+  // registered nodes and every assertion tripped the resolver's
+  // "resolved to no IP addresses" warning -- which actively misled a live
+  // investigation. Restored in #3379 now that real tag:nixos nodes are
+  // registered. Only tag:nixos is asserted here: ben@ user-src grants
+  // (ts-prometheus, ts-loki, ts-metrics-ingest) are exercised by the same
+  // proxy pods and would duplicate coverage.
+  "tests": [
+    {
+      "src": "tag:nixos",
+      "accept": [
+        "tag:ts-prometheus:9090",
+        "tag:ts-loki:3100",
+      ],
+      "deny": [
+        "tag:ts-prometheus:22",       // no SSH on the prometheus proxy
+        "tag:ts-loki:22",             // no SSH on the loki proxy
+        "tag:ts-prometheus:3100",     // no cross-tag: loki port on prom
+        "tag:ts-loki:9090",           // no cross-tag: prom port on loki
+        "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is ben@-only
+      ],
+    },
+  ],
 }
 
