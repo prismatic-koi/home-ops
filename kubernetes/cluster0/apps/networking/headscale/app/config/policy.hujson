@@ -73,23 +73,32 @@
   // Was removed in #3371 (issue #3370) because tag:nixos resolved to zero
   // registered nodes and every assertion tripped the resolver's
   // "resolved to no IP addresses" warning -- which actively misled a live
-  // investigation. Restored in #3379 now that real tag:nixos nodes are
-  // registered. Only tag:nixos is asserted here: ben@ user-src grants
-  // (ts-prometheus, ts-loki, ts-metrics-ingest) are exercised by the same
-  // proxy pods and would duplicate coverage.
+  // investigation. Restored in #3379 asserting tag:nixos, but no
+  // registered device actually carries that tag -- the real devices
+  // (m4mac, navi, Ben's S25) register untagged under the ben@ user, so
+  // that assertion also resolved to no IP addresses (issue #3398). Fixed
+  // here by asserting against ben@, the source actually granted access
+  // (#3383). A second test entry sourced from tag:ts-prometheus (a real,
+  // registered proxy node) covers cross-tag / unauthorised-source denies
+  // that ben@ itself can't exercise, since ben@ is legitimately granted
+  // access to tag:ts-metrics-ingest.
   "tests": [
     {
-      "src": "tag:nixos",
+      "src": "ben@",
       "accept": [
         "tag:ts-prometheus:9090",
         "tag:ts-loki:3100",
       ],
       "deny": [
-        "tag:ts-prometheus:22",       // no SSH on the prometheus proxy
-        "tag:ts-loki:22",             // no SSH on the loki proxy
-        "tag:ts-prometheus:3100",     // no cross-tag: loki port on prom
-        "tag:ts-loki:9090",           // no cross-tag: prom port on loki
-        "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is ben@-only
+        "tag:ts-prometheus:22", // no SSH on the prometheus proxy
+        "tag:ts-loki:22",       // no SSH on the loki proxy
+      ],
+    },
+    {
+      "src": "tag:ts-prometheus",
+      "deny": [
+        "tag:ts-loki:3100",           // no cross-tag: loki port from prom node
+        "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
       ],
     },
   ],
