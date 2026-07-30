@@ -6,12 +6,11 @@ resources:
   - ./httproute.yaml
   - ./servicemonitor.yaml
   - ./network-policy.yaml
-  - ./tailscale-router-rbac.yaml
-  - ./tailscale-router-secret.sops.yaml
-  - ./tailscale-router-deployment.yaml
-  - ./tailscale-router-network-policy.yaml
-  # Per-service tailscale proxies (design #3377, issue #3378). Additive:
-  # the router above stays deployed and untouched. Retirement is #3379.
+  # Per-service tailscale proxies (design #3377, issue #3378). Superseded
+  # the retired in-cluster subnet router (removed in #3379); each proxy
+  # terminates the inbound tailnet TCP and re-originates a fresh outbound
+  # socket to its target Service so Cilium socket-LB translates ClusterIP
+  # correctly (root cause: #3377).
   - ./tailscale-proxy-prometheus-rbac.yaml
   - ./tailscale-proxy-prometheus-secret.sops.yaml
   - ./tailscale-proxy-prometheus-deployment.yaml
