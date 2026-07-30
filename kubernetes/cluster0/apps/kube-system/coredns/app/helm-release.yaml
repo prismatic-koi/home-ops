@@ -17,7 +17,7 @@ spec:
       # from 1.40.0 onward carries the tighter values. We pin the loose
       # 1.32.0-era values below so rollout slack under maxUnavailable:1 on
       # the sole DNS provider is preserved across this and future bumps.
-      version: 1.46.2
+      version: 1.47.0
       sourceRef:
         kind: HelmRepository
         name: coredns
