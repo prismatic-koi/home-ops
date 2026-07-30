@@ -109,12 +109,32 @@ spec:
           //   container <- __meta_kubernetes_pod_container_name
           //   pod       <- __meta_kubernetes_pod_name  (structured metadata)
           //   node      <- __meta_kubernetes_pod_node_name (structured metadata)
+          //
+          // Defaulting to "unknown" for missing namespace/app is done HERE
+          // (via an empty-match relabel rule), NOT in loki.process. Reason:
+          // loki.process stages operate on the per-entry `extracted` map,
+          // which starts empty for each log line and is NOT seeded from the
+          // incoming stream labels. If we ran `stage.template { source =
+          // "namespace" ...  else "unknown" }` there, .Value would always be
+          // empty, template would always write "unknown" into extracted, and
+          // the subsequent `stage.labels { namespace = "" }` would promote
+          // that "unknown" back over the good stream label from discovery.
+          // (See labels.go processLabelsConfigs — it reads only from
+          // extracted, never from labels.) This exact mistake was the root
+          // cause of the LokiIngestionDiscardsHigh flapping fixed by #3395.
           discovery.relabel "pod_logs" {
             targets = discovery.kubernetes.pods.targets
 
             rule {
               source_labels = ["__meta_kubernetes_namespace"]
               target_label  = "namespace"
+            }
+            // Default namespace to "unknown" if somehow empty (edge-case AC).
+            rule {
+              source_labels = ["namespace"]
+              regex         = "^$"
+              target_label  = "namespace"
+              replacement   = "unknown"
             }
             // Preferred workload label.
             rule {
@@ -128,6 +148,14 @@ spec:
               regex         = "^;(.+)$"
               target_label  = "app"
               replacement   = "$1"
+            }
+            // Default app to "unknown" if no workload label is set at all
+            // (edge-case AC — never drop the line).
+            rule {
+              source_labels = ["app"]
+              regex         = "^$"
+              target_label  = "app"
+              replacement   = "unknown"
             }
             rule {
               source_labels = ["__meta_kubernetes_pod_container_name"]
@@ -150,24 +178,60 @@ spec:
             forward_to = [loki.process.normalise.receiver]
           }
 
-          // NOTE: loki.process copies incoming stream labels (set by
-          // discovery.relabel above) into the per-entry extracted map at
-          // pipeline entry, so the stage.template soft-enforcement,
-          // stage.labels promotion, and stage.structured_metadata stages
-          // below can all read namespace/app/container/pod/node. Ref:
-          // grafana/alloy internal/component/loki/process/stages/pipeline.go
-          // (extracted-map seeding from e.Labels) + the loki.process docs
-          // ("stages have access to ... a shared map of extracted values").
-          //
           // Normalise the level field and enforce the approved label set.
           // See #3347 comment ("label cardinality strategy") for the rules:
           //   * stream/index labels: namespace, app, container, level
           //   * structured metadata: pod, node
           //   * unmatched level -> "unknown" (never drop the line)
+          //
+          // IMPORTANT: loki.process stages read/write the per-entry
+          // `extracted` map, which starts empty for each log line. It is
+          // NOT seeded from the incoming stream labels. So `stage.template`
+          // + `stage.labels` are only appropriate for values genuinely
+          // extracted from the log content here (i.e. `level`). For values
+          // that already arrive as stream labels (namespace, app, container),
+          // defaulting must happen upstream in discovery.relabel — running
+          // template+labels on them would overwrite the good values with
+          // "unknown". `stage.structured_metadata` is different: it falls
+          // back to reading from e.Labels when the extracted key is missing
+          // (see stages/structured_metadata.go), which is why pod/node work.
           loki.process "normalise" {
+            // Pre-seed extracted[level] = "unknown" for every entry. The
+            // regex/klog stages below will overwrite this if they extract
+            // a level from the log line; if none match, the seed survives
+            // and satisfies the edge-case AC (line with no recognisable
+            // level still ingests with level="unknown").
+            //
+            // Why a static template value ("unknown") instead of a Go
+            // template that would say "if .Value use it else unknown":
+            // this whole configMap.content string is fed through Helm's
+            // `tpl` function by the alloy chart (templates/configmap.yaml),
+            // which evaluates any Go-template action inside at chart-render
+            // time in Helm's own context (where .Value is nil), collapsing
+            // the Alloy-side Go template into the literal string "unknown"
+            // BEFORE the ConfigMap is even written. Escaping the braces
+            // (backtick-raw-string form, the double-quoted string-brace
+            // idiom, etc.) is either eaten by the outer tpl or unsupported
+            // by its lexer, AND ANY Go-template action sequence inside
+            // this configMap.content string — including ones sitting
+            // harmlessly inside `//` comments — is parsed by tpl, so we
+            // avoid the whole syntax in this file. Pre-seeding sidesteps
+            // the problem: no Go-template syntax inside stage.template,
+            // nothing for Helm to interpret. This latent Helm-tpl
+            // collision was the second half of the #3395 root cause: the
+            // original #3347 pipeline had the same collision for
+            // namespace/app/level, all three rendering as `template =
+            // "unknown"` in the deployed ConfigMap.
+            stage.template {
+              source   = "level"
+              template = "unknown"
+            }
+
             // Extract a level token from the log line if present. Best-effort;
             // structured JSON logs, klog-style prefixes (I0101 ...), and plain
-            // words are all common. Missing/unmatched -> handled below.
+            // words are all common. On no match, stage.regex is a silent
+            // no-op (see stages/regex.go Process) so the "unknown" seed above
+            // survives.
             stage.regex {
               expression = "(?i)(?:^|[^A-Za-z])(?P<level>trace|debug|info|warn(?:ing)?|err(?:or)?|fatal|critical|panic)(?:[^A-Za-z]|$)"
             }
@@ -178,26 +242,34 @@ spec:
             }
 
             // Canonicalise to lowercase {info, warn, error, debug}. Anchored
-            // so partial matches don't collide. River requires each attribute
-            // on its own line (or comma-separated) inside a block.
+            // so partial matches don't collide.
+            //
+            // IMPORTANT: `stage.replace` only substitutes the CAPTURED groups,
+            // not the full match (see stages/replace.go getReplacedEntry).
+            // So the entire input we want to overwrite MUST be wrapped in a
+            // capture group, otherwise the un-captured prefix survives and we
+            // end up with values like "Iinfo", "wwarn", "eerror". This was a
+            // latent bug in the original #3347 pipeline, only unmasked once
+            // #3395 stopped `stage.template` from clobbering level to
+            // "unknown" before anyone could see the real value.
             stage.replace {
               source     = "level"
-              expression = "^(?i)I(nfo)?$"
+              expression = "^(?i)(i|info)$"
               replace    = "info"
             }
             stage.replace {
               source     = "level"
-              expression = "^(?i)W(arn(ing)?)?$"
+              expression = "^(?i)(w|warn(?:ing)?)$"
               replace    = "warn"
             }
             stage.replace {
               source     = "level"
-              expression = "^(?i)E(rr(or)?)?$"
+              expression = "^(?i)(e|err(?:or)?)$"
               replace    = "error"
             }
             stage.replace {
               source     = "level"
-              expression = "^(?i)D(ebug)?$"
+              expression = "^(?i)(d|debug)$"
               replace    = "debug"
             }
             stage.replace {
@@ -207,32 +279,18 @@ spec:
             }
             stage.replace {
               source     = "level"
-              expression = "^(?i)trace$"
+              expression = "^(?i)(trace)$"
               replace    = "debug"
             }
 
-            // Soft-enforce required fields: missing/empty -> "unknown" so the
-            // line is still ingested and queryable, per the edge-case AC.
-            stage.template {
-              source   = "level"
-              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
-            }
-            stage.template {
-              source   = "namespace"
-              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
-            }
-            stage.template {
-              source   = "app"
-              template = "{{ if .Value }}{{ .Value }}{{ else }}unknown{{ end }}"
-            }
-
-            // Promote the four approved keys to stream labels.
+            // Promote extracted level -> stream label. namespace/app/container
+            // already arrive as stream labels via discovery.relabel and are
+            // preserved by stage.label_keep below; running them through
+            // stage.labels would be a no-op at best (extracted map is empty
+            // for them) and destructive at worst.
             stage.labels {
               values = {
-                namespace = "",
-                app       = "",
-                container = "",
-                level     = "",
+                level = "",
               }
             }
 
