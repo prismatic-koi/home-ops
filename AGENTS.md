@@ -273,6 +273,61 @@ Working in-tree examples: `coredns-allow-kube-apiserver` in
 `kubernetes/cluster0/apps/cert-manager/cert-manager/app/cilium-network-policy.yaml`.
 Prior occurrences: #2829 (external-dns), #2947 (cnpg), #3381 / #3382 (tailscale).
 
+## Cilium Helm chart minor/major upgrades
+
+Cilium CRDs (especially `ciliumnodeconfigs.cilium.io`) track deprecated apiVersions in their
+`status.storedVersions` field **independently** of live objects. When upgrading Cilium to a
+version that removes an apiVersion from the CRD spec, the Kubernetes API will block that
+change if any version still exists in `status.storedVersions` — even if zero objects of
+that version exist on the cluster.
+
+**Real incident**: cilium Helm chart 1.19.6 -> 1.20.0 (PR #3414) caused `cilium-operator`
+CrashLoopBackOff (`createCRDs` hook failed) because `ciliumnodeconfigs.cilium.io` had
+`v2alpha1` in its `status.storedVersions` leftover from a prior install. The 1.20 release
+removed v2alpha1 from spec.versions, triggering the conflict. The dataplane (cilium agents)
+remained healthy throughout.
+
+### Preflight checklist before merging a Cilium minor/major chart bump
+
+**1. Check for stale apiVersions in Cilium CRDs:**
+```bash
+# Check the main CRD that most often has stale versions
+kubectl get crd ciliumnodeconfigs.cilium.io -o jsonpath='{.status.storedVersions}'
+
+# Also check the full CRD for spec.versions to compare
+kubectl get crd ciliumnodeconfigs.cilium.io -o jsonpath='{.spec.versions[*].name}'
+```
+
+If `storedVersions` contains any versions NOT in `spec.versions`, investigate the new
+Cilium chart version's CRD to see if it drops those versions.
+
+**2. Verify zero live objects of deprecated versions** (safety gate):
+```bash
+# If storedVersions lists v2alpha1, for example:
+kubectl get ciliumnodeconfigs.v2alpha1 2>&1 | grep -i 'No resources'
+```
+
+**3. If you find a stale version AND the new Cilium release removes it from spec.versions:**
+
+Before merging, patch the CRD to prune the stale version from status:
+```bash
+kubectl patch crd ciliumnodeconfigs.cilium.io --subresource=status --type=merge \
+  -p '{"status":{"storedVersions":["v2"]}}'
+```
+
+Adjust the version list to match the new Cilium chart's `spec.versions`. Wait for the
+patch to complete, then proceed with the merge.
+
+### Key insight
+
+**Zero live objects of a deprecated version does NOT guarantee a safe upgrade.** The
+`status.storedVersions` field is managed independently by Kubernetes and is not cleaned
+up automatically just because no objects use that version. Always check both `spec.versions`
+(what the CRD declares) and `status.storedVersions` (what Kubernetes thinks is in use).
+
+If upgrade fails with `Unable to update CRD ... storedVersions` or similar, the operator
+crashed during the createCRDs hook — check operator pod logs and rerun the patch command above.
+
 ## Init Containers
 
 Some applications use init containers that must complete before the main container starts:
