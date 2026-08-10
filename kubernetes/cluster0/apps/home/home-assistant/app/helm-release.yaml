@@ -27,7 +27,7 @@ spec:
           git-sync:
             image:
               repository: alpine/git
-              tag: v2.54.0@sha256:729da2347ce652f30476b064198577fe12e1147e58499be9f343039343ef2cee
+              tag: v2.54.0@sha256:3b44767883ac77bddae0160cc27b6b039345e23fa3504f4159efaa32264ab57f
             command:
               - sh
               - -c
