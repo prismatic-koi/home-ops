@@ -63,6 +63,14 @@
       "dst": ["tag:ts-metrics-ingest"],
       "ip":  ["tcp:9090"],
     },
+    // MPD (Music Player Daemon) control/streaming port 6600. Scoped to ben@
+    // devices only; enables device-to-device music access (e.g. navi <-> bens-s25).
+    // TCP only, no UDP. Does not widen any other access.
+    {
+      "src": ["ben@"],
+      "dst": ["ben@"],
+      "ip":  ["tcp:6600"],
+    },
   ],
 
   // Static assertions evaluated on every policy load/boot. If any accept
