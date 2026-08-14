@@ -20,6 +20,12 @@ metadata:
     grafana_dashboard: "1"
   annotations:
     grafana_folder: Fleet
+    # Grafana's $var / ${var:regex} template syntax collides with Flux's
+    # postBuild envsubst (strict mode): Flux sees $hostname etc. as its own
+    # substitution targets and fails the build when no such variable exists.
+    # Disable Flux substitution for this resource so the literal Grafana
+    # variables reach the sidecar unmodified.
+    kustomize.toolkit.fluxcd.io/substitute: disabled
 data:
   prism-fleet.json: |
     {
