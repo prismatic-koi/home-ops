@@ -83,6 +83,11 @@ spec:
           certificateRefs:
             - kind: Secret
               name: "${SECRET_PUBLIC_DOMAIN/./-}-tls"
+            # Second cert for the tailnet-only web UIs (*.ts.<domain>, #3466).
+            # Traefik selects the listener cert by SNI, so both the base
+            # wildcard and this ts. wildcard are served side by side.
+            - kind: Secret
+              name: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
     additionalArguments:
       - "--api.insecure=true"
       - "--providers.kubernetesingress.ingressclass=traefik"

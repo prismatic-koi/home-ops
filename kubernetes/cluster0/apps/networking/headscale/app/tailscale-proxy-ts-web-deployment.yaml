@@ -1,0 +1,147 @@
+---
+# =============================================================================
+# tailscale-proxy-ts-web
+#
+# Shared tailnet entrypoint for tailnet-only web UIs served with a public-CA
+# cert (pilot: prometheus.ts.${SECRET_PUBLIC_DOMAIN}; design/issue #3466).
+#
+# Unlike tailscale-proxy-prometheus / -loki / -metrics-ingest, this proxy is
+# NOT bound to one backend Service. It is a dumb L4 pipe: it TCPForwards
+# inbound tailnet TCP :443 straight to the in-cluster traefik gateway on
+# :443. Traefik terminates TLS on the *.ts.${SECRET_PUBLIC_DOMAIN} cert and
+# routes by SNI/hostname to the right backend via an HTTPRoute. One proxy
+# fronts every *.ts.${SECRET_PUBLIC_DOMAIN} name; the per-service piece is an
+# HTTPRoute + a target-side ingress NetworkPolicy, not a new proxy.
+#
+# Why tailscale never terminates TLS here:
+#   The proxy forwards the raw TCP stream, SNI intact. TLS terminates on
+#   traefik, on a real public-CA cert. The base-domain (.internal) cert
+#   limitation of tailscale `serve` HTTPS does not apply because we never
+#   ask tailscale to serve HTTPS — we TCPForward L4.
+#
+# Everything below mirrors tailscale-proxy-prometheus. Read that file's
+# header for the origin-socket rationale (why userspace mode is load-bearing
+# under Cilium socket-LB) and the tag-from-preauth-key rule; both apply here
+# unchanged.
+#
+# Tag from preauth key, NOT --advertise-tags:
+#   headscale 0.28+ hard-rejects registration when a PreAuthKey-authenticated
+#   node ALSO passes --advertise-tags. The preauth key committed in
+#   tailscale-proxy-ts-web-secret.sops.yaml MUST be created with
+#   `headscale preauthkeys create --tags tag:ts-web --reusable`; do NOT set
+#   --advertise-tags in TS_EXTRA_ARGS.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-proxy-ts-web-serve
+  namespace: networking
+data:
+  # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
+  # port 443 to the traefik gateway Service by DNS name. TCPForward does a
+  # standard net.Dial (fresh outbound socket) per accepted connection; it
+  # does NOT proxy packets and does NOT terminate TLS. Target is the Service
+  # DNS name, not a pinned ClusterIP: no /32 pin drift when the Service is
+  # reconstituted.
+  serve.json: |-
+    {
+      "TCP": {
+        "443": {
+          "TCPForward": "traefik.networking.svc.cluster.local:443"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-proxy-ts-web
+  namespace: networking
+spec:
+  replicas: 1
+  strategy:
+    # Recreate rather than RollingUpdate: two tailnet nodes with the same
+    # hostname would collide on registration. A brief gap on redeploy is
+    # acceptable for the web-UI use case.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale-proxy-ts-web
+    spec:
+      serviceAccountName: tailscale-proxy-ts-web
+      containers:
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.102.2@sha256:321ce041508c19079b57a28b6666c8d81ab0b08accc0a2585b3ab663d557ac24
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Userspace mode needs no capabilities. Drop everything.
+            capabilities:
+              drop: [ALL]
+            allowPrivilegeEscalation: false
+          env:
+            # Persist tailnet node state (machine key, node key, ...) into
+            # this Secret. The RBAC in tailscale-proxy-ts-web-rbac.yaml pins
+            # get/update/patch to exactly this name. Surviving a pod delete +
+            # reschedule with the tag intact depends on this Secret being
+            # reused across pod lifecycles.
+            - name: TS_KUBE_SECRET
+              value: tailscale-proxy-ts-web-state
+            # Userspace networking — no tun, no packet forwarding. This is
+            # what makes the origin-socket path (see file header) hold.
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-proxy-ts-web-auth
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              # No --advertise-tags: the tag is on the preauth key (see
+              # file header). Hostname becomes the MagicDNS label:
+              # ts-web.tailnet.internal.
+              value: >-
+                --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
+                --hostname=ts-web
+            # We do not want tailscaled rewriting the pod's resolv.conf;
+            # the pod already gets cluster DNS via ClusterFirst.
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            # Serve config: mounted from the ConfigMap above. containerboot
+            # applies this after tailscale up.
+            - name: TS_SERVE_CONFIG
+              value: /etc/tsserve/serve.json
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: serve-config
+              mountPath: /etc/tsserve
+              readOnly: true
+            # tailscaled needs a writable state area even with
+            # TS_KUBE_SECRET (localapi socket, scratch). Backed by memory
+            # rather than the container FS so it survives readOnlyRootFs
+            # tightening if we ever add it.
+            - name: tailscale-run
+              mountPath: /var/run/tailscale
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: serve-config
+          configMap:
+            name: tailscale-proxy-ts-web-serve
+        - name: tailscale-run
+          emptyDir:
+            medium: Memory

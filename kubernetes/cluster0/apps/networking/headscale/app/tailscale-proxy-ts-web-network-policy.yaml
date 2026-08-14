@@ -1,0 +1,190 @@
+---
+# =============================================================================
+# tailscale-proxy-ts-web NetworkPolicies
+#
+# The proxy runs with a real pod identity (userspace mode, no hostNetwork),
+# so these NetworkPolicy resources ARE enforced at runtime. Mirrors
+# tailscale-proxy-prometheus-network-policy.yaml; the only difference is the
+# forward target — traefik on :443 rather than prometheus on :9090.
+#
+# Egress needed:
+#   - DNS to CoreDNS (kube-system): resolve hs.${DOMAIN} + traefik Service
+#   - HTTPS/DERP to internet: control-plane + DERP relay fallback
+#   - UDP high-ports to internet: direct WireGuard + STUN
+#   - TCP :443 to networking/traefik pods: the actual forward target
+#   - kube-apiserver: read/write the node-state Secret (TS_KUBE_SECRET)
+#
+# No ingress needed on the proxy pod: tailnet peers reach it via the
+# WireGuard userspace stack (inside the tailscale process), not via any
+# pod-network ingress path.
+#
+# The reciprocal traefik-side ingress rule (AGENTS.md reciprocal-pair
+# guidance) is the last resource in this file: traefik ingress from the
+# ts-web pod on :443.
+# =============================================================================
+---
+# Default deny-all. All egress must be explicitly permitted below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-ts-web-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  policyTypes: [Ingress, Egress]
+---
+# DNS resolution to cluster CoreDNS. Needed for hs.${SECRET_PUBLIC_DOMAIN}
+# (control plane) and the traefik Service's DNS name.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-ts-web-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Internet egress on :443/TCP — the headscale control endpoint at
+# hs.${SECRET_PUBLIC_DOMAIN} and Tailscale's public DERP relay pool
+# (DERP falls back to :443/TCP when direct WireGuard fails). Private
+# ranges excluded so the proxy can't accidentally reach the internal
+# network on :443. The in-cluster traefik target is a private address and
+# is handled by the dedicated allow-target-egress rule below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-ts-web-allow-internet-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Direct WireGuard + STUN (UDP). tailscaled binds a random UDP port and
+# sends/receives WireGuard datagrams peer-to-peer when direct path is
+# available. STUN on UDP 3478 for NAT discovery. Full high-port UDP range
+# to any public IP; private ranges excluded.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-ts-web-allow-wireguard-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - protocol: UDP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# The actual forward target: TCP :443 to traefik pods in the networking
+# namespace. This is the outbound net.Dial the TCPForward handler makes for
+# each accepted tailnet connection. Under Cilium socket-LB the connect() to
+# the traefik ClusterIP:443 is DNAT'd to a traefik PodIP:443 before egress
+# policy evaluation, so this podSelector rule matches the translated target.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tailscale-proxy-ts-web-allow-target-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+---
+# tailscaled runs in Kubernetes state-store mode (TS_KUBE_SECRET) and must
+# reach the kube-apiserver ClusterIP (10.43.0.1:443) to read/write its
+# node-state Secret. Expressed via the Cilium `kube-apiserver` entity rather
+# than a hardcoded ClusterIP. Port is intentionally unrestricted: with
+# kubeProxyReplacement=true, Cilium socket-LB translates the ClusterIP
+# (10.43.0.1:443) to the host apiserver backend port (6443) before egress
+# policy evaluation, so a :443-only toPorts rule would deny the translated
+# traffic. See #2829/#2947 and the AGENTS.md kube-apiserver guidance.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tailscale-proxy-ts-web-allow-kube-apiserver-egress
+  namespace: networking
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-ts-web
+  egress:
+    - toEntities:
+        - kube-apiserver
+---
+# Reciprocal traefik-side ingress (AGENTS.md reciprocal-pair guidance):
+# allow the ts-web proxy pod to reach traefik on :443. Traefik's broad
+# traefik-allow-intracluster-ingress already admits any in-namespace pod on
+# :443, but this explicit narrow rule documents the ts-web -> traefik half of
+# the pair so the pilot path is legible in one place.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-ts-web-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tailscale-proxy-ts-web
+      ports:
+        - port: 443
+          protocol: TCP
