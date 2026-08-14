@@ -1,0 +1,76 @@
+# kube-vip static pod manifest.
+#
+# This file is version-controlled but NOT applied by Flux. It lives in
+# `bootstrap/` on purpose: kube-vip must be running before the k3s apiserver
+# is reachable, and Flux needs a reachable apiserver, so Flux can never be
+# the thing that manages this manifest. No Flux Kustomization references
+# this path.
+#
+# k3s reads this file from the on-node static-pod directory
+# (`/var/lib/rancher/k3s/agent/pod-manifests/` by default) on node0, node1,
+# and node2. It is placed there by hand — see
+# docs/runbooks/kube-vip-upgrade.md for the per-node procedure.
+#
+# renovate: datasource=docker depName=ghcr.io/kube-vip/kube-vip
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-vip
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: kube-vip
+    app.kubernetes.io/instance: kube-vip
+spec:
+  hostNetwork: true
+  hostAliases:
+    - ip: 127.0.0.1
+      hostnames:
+        - kubernetes
+  containers:
+    - name: kube-vip
+      image: ghcr.io/kube-vip/kube-vip:v1.2.3@sha256:2fcdbb014a2e217b9ea1b6dacac53d6851b185af323cdd28d100ad82d74bc79a
+      imagePullPolicy: IfNotPresent
+      args:
+        - manager
+      env:
+        - name: address
+          value: "10.87.42.2"
+        - name: vip_arp
+          value: "true"
+        - name: port
+          value: "6443"
+        - name: vip_cidr
+          value: "32"
+        - name: cp_enable
+          value: "true"
+        - name: cp_namespace
+          value: kube-system
+        - name: vip_ddns
+          value: "false"
+        - name: svc_enable
+          value: "false"
+        - name: vip_leaderelection
+          value: "true"
+        - name: vip_leaseduration
+          value: "15"
+        - name: vip_renewdeadline
+          value: "10"
+        - name: vip_retryperiod
+          value: "2"
+        - name: prometheus_server
+          value: ":2112"
+      securityContext:
+        capabilities:
+          add:
+            - NET_ADMIN
+            - NET_RAW
+      volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubernetes/admin.conf
+  tolerations:
+    - effect: NoExecute
+      operator: Exists
+  volumes:
+    - name: kubeconfig
+      hostPath:
+        path: /etc/rancher/k3s/k3s.yaml
