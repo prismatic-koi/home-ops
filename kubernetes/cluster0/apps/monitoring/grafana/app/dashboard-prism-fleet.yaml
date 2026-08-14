@@ -1,0 +1,432 @@
+---
+# Prism fleet telemetry dashboard, provisioned as a ConfigMap the Grafana
+# sidecar auto-discovers (see helm-release.yaml: sidecar.dashboards). This is
+# the first in-repo dashboard-as-ConfigMap; copy this pattern for the next one.
+#
+# Contract for the sidecar to pick this up:
+#   - namespace: monitoring (searchNamespace: ALL also works, monitoring is home)
+#   - label   grafana_dashboard: "1"      -> marks the ConfigMap as a dashboard
+#   - annot   grafana_folder:    Fleet    -> target folder in Grafana
+#   - the data key MUST end in .json       -> sidecar writes it to disk as-is
+#
+# Every panel pins the Fleet Ingest datasource by uid (P09FC0E78B5F11C2D); it is
+# NOT the default datasource, so it must be named explicitly everywhere.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-prism-fleet
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: Fleet
+data:
+  prism-fleet.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": ["prism", "fleet"],
+      "templating": {
+        "list": [
+          {
+            "name": "hostname",
+            "label": "Host",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+            "definition": "label_values(prism_exporter_build_info, hostname)",
+            "query": { "qryType": 1, "query": "label_values(prism_exporter_build_info, hostname)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+            "refresh": 2,
+            "multi": true,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" },
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "repo",
+            "label": "Repo",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+            "definition": "label_values(prism_sessions_active, repo)",
+            "query": { "qryType": 1, "query": "label_values(prism_sessions_active, repo)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+            "refresh": 2,
+            "multi": true,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" },
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "agent_role",
+            "label": "Agent role",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+            "definition": "label_values(prism_spawns_total, agent_role)",
+            "query": { "qryType": 1, "query": "label_values(prism_spawns_total, agent_role)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+            "refresh": 2,
+            "multi": true,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" },
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "profile",
+            "label": "Profile",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+            "definition": "label_values(prism_spawns_total, profile)",
+            "query": { "qryType": 1, "query": "label_values(prism_spawns_total, profile)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+            "refresh": 2,
+            "multi": true,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" },
+            "sort": 1,
+            "hide": 0
+          }
+        ]
+      },
+      "time": { "from": "now-24h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Prism Fleet Telemetry",
+      "uid": "prism-fleet-telemetry",
+      "version": 1,
+      "weekStart": "",
+      "panels": [
+        {
+          "type": "row",
+          "id": 1,
+          "title": "Fleet health",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "id": 2,
+          "title": "Sessions by state & role",
+          "description": "prism_sessions_active. state=\"finished\" counts known sessions, not running ones. Empty repo is an upstream defect (nixos-config#2764), left visible.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 1 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" },
+              "unit": "short",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (state, agent_role) (prism_sessions_active{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\"})",
+              "legendFormat": "{{state}} / {{agent_role}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 3,
+          "title": "Sidecars live by repo",
+          "description": "prism_sidecars_live.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 1 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" },
+              "unit": "short",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (repo) (prism_sidecars_live{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"})",
+              "legendFormat": "{{repo}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 4,
+          "title": "Merge queue depth by repo",
+          "description": "prism_merge_queue_depth. Empty when no merges are queued.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" },
+              "unit": "short",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (repo) (prism_merge_queue_depth{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"})",
+              "legendFormat": "{{repo}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 5,
+          "title": "Bus backlog by repo",
+          "description": "prism_bus_messages_pending. Stall signal: a floor that rises means messages are not consumed.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" },
+              "unit": "short",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (repo) (prism_bus_messages_pending{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"})",
+              "legendFormat": "{{repo}}"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "id": 10,
+          "title": "Spend",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+          "panels": []
+        },
+        {
+          "type": "bargauge",
+          "id": 11,
+          "title": "Cost by account (range total)",
+          "description": "increase(prism_model_cost_usd_total) joined to prism_account_info for the readable account name. The info side is deduplicated with max by (account_org_id, account) so it stays one row per account when more than one host reports.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "instant": true,
+              "expr": "sum by (account) (\n  increase(prism_model_cost_usd_total{hostname=~\"${hostname:regex}\"}[$__range])\n  * on (account_org_id) group_left(account)\n    max by (account_org_id, account) (prism_account_info)\n)",
+              "legendFormat": "{{account}}"
+            }
+          ]
+        },
+        {
+          "type": "bargauge",
+          "id": 12,
+          "title": "Cost by model (range total)",
+          "description": "increase(prism_model_cost_usd_total) grouped by model_id.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "instant": true,
+              "expr": "sum by (model_id) (increase(prism_model_cost_usd_total{hostname=~\"${hostname:regex}\"}[$__range]))",
+              "legendFormat": "{{model_id}}"
+            }
+          ]
+        },
+        {
+          "type": "bargauge",
+          "id": 13,
+          "title": "Cost by profile (range total)",
+          "description": "increase(prism_spend_by_profile_usd_total). Answers whether --profile max earns its keep. profile=\"default\" is a spawn with no explicit --profile.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "instant": true,
+              "expr": "sum by (profile) (increase(prism_spend_by_profile_usd_total{profile=~\"${profile:regex}\"}[$__range]))",
+              "legendFormat": "{{profile}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 14,
+          "title": "Token rate by kind (log scale)",
+          "description": "rate(prism_model_tokens_total) by kind. cache_read exceeds input by ~2 orders of magnitude, so the Y axis is logarithmic to keep input legible instead of flat at zero.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "scaleDistribution": { "type": "log", "log": 10 } },
+              "unit": "cps",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max", "mean"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (kind) (rate(prism_model_tokens_total{hostname=~\"${hostname:regex}\"}[$__rate_interval]))",
+              "legendFormat": "{{kind}}"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "id": 20,
+          "title": "Throughput & quality",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "id": 21,
+          "title": "Spawn rate by role & profile",
+          "description": "rate(prism_spawns_total) by agent_role and profile.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
+              "unit": "cps",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (agent_role, profile) (rate(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[$__rate_interval]))",
+              "legendFormat": "{{agent_role}} / {{profile}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 22,
+          "title": "Merge outcomes by status",
+          "description": "rate(prism_merges_by_status). cancelled and abandoned are the failure signal.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" },
+              "unit": "cps",
+              "min": 0
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "cancelled" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+              { "matcher": { "id": "byName", "options": "abandoned" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+            ]
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (status) (rate(prism_merges_by_status{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"}[$__rate_interval]))",
+              "legendFormat": "{{status}}"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "id": 23,
+          "title": "Review pass rate",
+          "description": "rate(prism_review_verdicts_total{verdict=\"pass\"}) / rate(prism_review_verdicts_total).",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "green", "value": 0.8 } ] }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum(rate(prism_review_verdicts_total{verdict=\"pass\"}[$__rate_interval])) / sum(rate(prism_review_verdicts_total[$__rate_interval]))",
+              "legendFormat": "pass rate"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 24,
+          "title": "Escalation rate by repo",
+          "description": "rate(prism_escalations_total) by repo.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
+              "unit": "cps",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum by (repo) (rate(prism_escalations_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"}[$__rate_interval]))",
+              "legendFormat": "{{repo}}"
+            }
+          ]
+        }
+      ]
+    }
