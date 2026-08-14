@@ -16,6 +16,39 @@
     // fits, so homeops@ owns the machine identity. One ts-web node fronts
     // every *.ts.<domain> web UI (prometheus first; Hubble/Longhorn later).
     "tag:ts-web":            ["homeops@"],
+    // k3s control-plane hosts node0/1/2 (issue #3477). Unlike every tag
+    // above, these are NOT pods: tailscaled runs on the bare-metal Ubuntu
+    // hosts. An in-cluster proxy would be a circular dependency, because
+    // headscale itself runs on this cluster -- a cluster outage would then
+    // remove the only path in. homeops@ owns the tag for the same reason it
+    // owns the proxies: infrastructure identity, no human owner fits.
+    //
+    // This tag is deliberately NOT a grant destination (read the grant in
+    // the grants block for why). It still does two real jobs, so do not
+    // delete it as unused:
+    //   1. It is the auto-approver identity for the 10.87.42.2/32 route.
+    //   2. It keeps the hosts machine-identity nodes. A tagged node must
+    //      not have a user_id, so node0/1/2 never inherit the ben@ grants.
+    "tag:ts-cp":             ["homeops@"],
+  },
+
+  // Route auto-approval (issue #3477). The tag:ts-cp hosts each advertise
+  // 10.87.42.2/32 -- the kube-vip control-plane VIP. Without this entry an
+  // operator must run `headscale nodes approve-routes ...` by hand after
+  // every re-registration of every host, and the control-plane path stays
+  // down until they do.
+  //
+  // `autoApprovers` is a SIBLING of `grants`, not a key inside it.
+  // Approval and access are separate decisions: this block says WHICH nodes
+  // may advertise the prefix; the grant below says WHO may then use it.
+  //
+  // The prefix must match what the hosts advertise EXACTLY. Auto-approval
+  // covers a route equal to or narrower than a key here, never a broader
+  // one, so a host that advertised 10.87.42.0/24 would not be approved.
+  "autoApprovers": {
+    "routes": {
+      "10.87.42.2/32": ["tag:ts-cp"],
+    },
   },
 
   // Least-privilege access: tag:nixos peers may reach ONLY
@@ -89,6 +122,51 @@
       "dst": ["ben@"],
       "ip":  ["tcp:6600"],
     },
+    // Kubernetes control plane over the tailnet (issue #3477). Replaces the
+    // public router port-forward of tcp/6443 to the home WAN address, which
+    // answered unauthenticated requests from the open internet.
+    //
+    // READ THIS BEFORE YOU "FIX" THE dst TO tag:ts-cp.
+    //
+    // The dst is the VIP prefix, not the tag, and that is deliberate. The
+    // two tailnet patterns in this file are NOT interchangeable:
+    //
+    //   Proxy pattern -- every other grant above (tag:ts-prometheus,
+    //     tag:ts-loki, tag:ts-metrics-ingest, tag:ts-web). A userspace
+    //     tailscale pod TCPForwards the connection, so traffic terminates
+    //     on the proxy's OWN tailnet IP. There the tag IS the destination
+    //     and dst: [tag] is correct.
+    //
+    //   Subnet-router pattern -- this grant. The tag:ts-cp hosts forward
+    //     packets to an address BEHIND them. headscale resolves a tag dst
+    //     to the tagged nodes' own 100.64.0.0/10 addresses only; it never
+    //     expands a tag dst to the routes those nodes advertise. With
+    //     dst: [tag:ts-cp], ReduceRoutes/CanAccessRoute finds no rule whose
+    //     destination overlaps 10.87.42.2/32, strips the prefix from every
+    //     ben@ device's AllowedIPs, and --accept-routes then receives no
+    //     route at all -- the VIP is unreachable. Upstream states the same
+    //     rule in docs/ref/routes.md: "Access to the subnet router itself
+    //     is denied."
+    //
+    // In-tree precedent, checkable with:
+    //   git show 0e207ff2e~1:kubernetes/cluster0/apps/networking/headscale/app/config/policy.hujson
+    // The retired tag:k8s-router subnet router granted dst: ["prometheus"]
+    // and dst: ["loki"] -- /32 hosts behind the router -- and never
+    // dst: ["tag:k8s-router"]. Same shape as this grant.
+    //
+    // Granting tag:ts-cp would also be dead surface, not just redundant:
+    // the apiserver serving cert has no 100.64.0.0/10 SAN, so a client that
+    // reached a host's tailnet IP on 6443 would fail certificate validation
+    // anyway -- and fail in a confusing way.
+    //
+    // ONLY tcp:6443. No tcp:22: SSH over the tailnet is a separate change
+    // (retiring cloudflared for SSH) and must not ride in on this grant.
+    // The tests block asserts both halves of that.
+    {
+      "src": ["ben@"],
+      "dst": ["10.87.42.2/32"],
+      "ip":  ["tcp:6443"],
+    },
   ],
 
   // Static assertions evaluated on every policy load/boot. If any accept
@@ -108,6 +186,21 @@
   // registered proxy node) covers cross-tag / unauthorised-source denies
   // that ben@ itself can't exercise, since ben@ is legitimately granted
   // access to tag:ts-metrics-ingest.
+  //
+  // The #3477 control-plane assertions name the VIP literal 10.87.42.2 and
+  // NOT tag:ts-cp. Two reasons, both load-bearing:
+  //   1. They must match the grant, whose dst is the VIP prefix. An
+  //      assertion on tag:ts-cp would test a path the policy does not
+  //      grant and does not need.
+  //   2. They must resolve. A test DESTINATION that resolves to no IP
+  //      addresses is an error, and evalReachability counts that error as a
+  //      failure in `deny` exactly as in `accept`. tag:ts-cp has no
+  //      registered node until an operator runs
+  //      docs/runbooks/tailnet-control-plane-access.md, so a tag:ts-cp
+  //      assertion would fail at boot and re-create the misleading warning
+  //      of #3370 / #3398. A bare IP literal resolves to itself whatever
+  //      nodes exist, so these assertions pass from the moment this merges
+  //      and keep passing after the hosts join.
   "tests": [
     {
       "src": "ben@",
@@ -116,11 +209,13 @@
         "tag:ts-loki:3100",
         "tag:ts-web:443",       // tailnet-only web UI proxy (#3466)
         "tag:ts-web:80",        // HTTP->HTTPS redirect entrypoint (#3471)
+        "10.87.42.2:6443",      // k8s control plane via the tag:ts-cp subnet route (#3477)
       ],
       "deny": [
         "tag:ts-prometheus:22", // no SSH on the prometheus proxy
         "tag:ts-loki:22",       // no SSH on the loki proxy
         "tag:ts-web:9090",      // ben@ reaches ts-web ONLY on tcp:443, not the backend port
+        "10.87.42.2:22",        // the #3477 grant is tcp:6443 ONLY -- it must not open SSH on the VIP
       ],
     },
     {
@@ -129,6 +224,7 @@
         "tag:ts-loki:3100",           // no cross-tag: loki port from prom node
         "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
         "tag:ts-web:443",             // ts-web is granted to ben@ only, not to tag:ts-prometheus
+        "10.87.42.2:6443",            // control-plane VIP is granted to ben@ only (#3477)
       ],
     },
   ],
