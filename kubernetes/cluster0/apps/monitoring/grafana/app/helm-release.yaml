@@ -86,6 +86,13 @@ spec:
           - name: Prometheus (Fleet Ingest)
             type: prometheus
             access: proxy
+            # Pin the uid so it is declared in Git and reprovision-safe. The
+            # in-repo prism fleet dashboard (grafana-dashboard-prism-fleet)
+            # binds every panel to this uid; without pinning, Grafana would
+            # generate a random uid on first provision and store it only in
+            # the longhorn PVC, so a PVC rebuild / DR reprovision would
+            # regenerate a different uid and break every panel silently.
+            uid: P09FC0E78B5F11C2D
             url: http://fleet-ingest.monitoring.svc:9090
             jsonData:
               # Fleet Alloy typically pushes on a 15s interval; keep the
