@@ -26,6 +26,17 @@ resources:
   - ./tailscale-proxy-metrics-ingest-secret.sops.yaml
   - ./tailscale-proxy-metrics-ingest-deployment.yaml
   - ./tailscale-proxy-metrics-ingest-network-policy.yaml
+  # Shared tailnet-only web-UI proxy (pilot #3466). One ts-web node fronts
+  # every *.ts.<domain> web UI; TCPForwards :443 to the traefik gateway,
+  # which terminates TLS and routes by hostname. First consumer:
+  # prometheus.ts.<domain> (HTTPRoute in monitoring/kube-prometheus-stack).
+  - ./tailscale-proxy-ts-web-rbac.yaml
+  # Preauth-key Secret: created + SOPS-encrypted by the operator and landed on
+  # main via #3468 (tagged tag:ts-web). Referenced here so the ts-web proxy
+  # Deployment can mount TS_AUTHKEY.
+  - ./tailscale-proxy-ts-web-secret.sops.yaml
+  - ./tailscale-proxy-ts-web-deployment.yaml
+  - ./tailscale-proxy-ts-web-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: headscale

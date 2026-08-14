@@ -146,6 +146,36 @@ spec:
         - port: 8080
           protocol: TCP
 ---
+# Allow ingress from Traefik (networking namespace) on :9090 for the
+# tailnet-only web UI (prometheus.ts.${SECRET_PUBLIC_DOMAIN}, pilot #3466).
+# Reciprocal to traefik's traefik-allow-backend-egress (monitoring carries
+# netpol.home-ops/traefik-backend=true): that rule is the traefik egress
+# half; this is the prometheus ingress half. Without it the tailnet UI path
+# ts-web -> traefik -> prometheus:9090 is denied silently at the prometheus
+# pod. Distinct from the ts-prometheus :9090 proxy path, which is a direct
+# ingress from the tailscale-proxy-prometheus pod (see headscale app).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow-traefik-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 9090
+          protocol: TCP
+---
 # Allow egress to intra-ns Alertmanager on :9093 (alert push)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

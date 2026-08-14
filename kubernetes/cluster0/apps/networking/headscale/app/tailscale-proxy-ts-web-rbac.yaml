@@ -1,0 +1,46 @@
+---
+# =============================================================================
+# tailscale-proxy-ts-web RBAC
+#
+# Per-proxy ServiceAccount so this tailnet node has its own kube identity and
+# its own state Secret. Mirrors tailscale-proxy-prometheus-rbac.yaml.
+#
+# The state Secret name (tailscale-proxy-ts-web-state) is pinned in the Role's
+# resourceNames, matching the TS_KUBE_SECRET env in the Deployment. The
+# `create` verb is granted on the whole `secrets` resource because Kubernetes
+# RBAC does not allow resourceNames on `create` (the object does not exist yet
+# at create time).
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tailscale-proxy-ts-web
+  namespace: networking
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tailscale-proxy-ts-web
+  namespace: networking
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["tailscale-proxy-ts-web-state"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tailscale-proxy-ts-web
+  namespace: networking
+subjects:
+  - kind: ServiceAccount
+    name: tailscale-proxy-ts-web
+    namespace: networking
+roleRef:
+  kind: Role
+  name: tailscale-proxy-ts-web
+  apiGroup: rbac.authorization.k8s.io
