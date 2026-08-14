@@ -111,10 +111,12 @@
       "accept": [
         "tag:ts-prometheus:9090",
         "tag:ts-loki:3100",
+        "tag:ts-web:443",       // tailnet-only web UI proxy (#3466)
       ],
       "deny": [
         "tag:ts-prometheus:22", // no SSH on the prometheus proxy
         "tag:ts-loki:22",       // no SSH on the loki proxy
+        "tag:ts-web:9090",      // ben@ reaches ts-web ONLY on tcp:443, not the backend port
       ],
     },
     {
@@ -122,20 +124,9 @@
       "deny": [
         "tag:ts-loki:3100",           // no cross-tag: loki port from prom node
         "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
+        "tag:ts-web:443",             // ts-web is granted to ben@ only, not to tag:ts-prometheus
       ],
     },
-    // PHASE 2 (#3466) -- add ts-web test assertions ONLY after the
-    // tailscale-proxy-ts-web node registers:
-    //   accept: src ben@            -> "tag:ts-web:443"  (the granted path)
-    //   deny:   src ben@            -> "tag:ts-web:9090" (backend port, not granted)
-    //   deny:   src tag:ts-prometheus -> "tag:ts-web:443" (unauthorised source)
-    // They are deferred because a test entry whose tag resolves to zero
-    // registered nodes both (a) can FAIL policy load for an accept -- the
-    // #3370 / #3398 trap that keeps the previous policy and would deadlock
-    // preauth-key creation -- and (b) emits the misleading "resolved to no IP
-    // addresses" warning that #3398 flags as actively harmful. Phase 1 ships
-    // the tagOwner + grant so the node can register; the assertions land once
-    // it has.
   ],
 }
 

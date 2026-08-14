@@ -35,6 +35,43 @@ dns:
     global:
       - 1.1.1.1
       - 8.8.8.8
+    split:
+      # =====================================================================
+      # THE SINGLE MOST DANGEROUS LINE IN THE #3466 PILOT. DO NOT WIDEN IT.
+      #
+      # A headscale split route is a SUFFIX match. Scoped to
+      # ts.${SECRET_PUBLIC_DOMAIN} it captures ONLY *.ts.<domain>. If anyone
+      # ever changes the key to the bare ${SECRET_PUBLIC_DOMAIN}, the empty
+      # resolver list ([]) becomes a client-side LocalDomains suffix entry
+      # that returns NXDOMAIN for every name under it not pinned in
+      # extra_records -- i.e. it NXDOMAINs ~20 live public app hostnames
+      # (grafana, jellyfin, home-assistant, ...) for EVERY tailnet device on
+      # EVERY network. grafana.${SECRET_PUBLIC_DOMAIN} is not a subdomain of
+      # ts.${SECRET_PUBLIC_DOMAIN}, so with this scoping it never routes here
+      # and resolves exactly as it does today. Keep it scoped to ts.
+      # The empty list is deliberate: the only name that resolves under this
+      # suffix is the one pinned in extra_records below.
+      # =====================================================================
+      ts.${SECRET_PUBLIC_DOMAIN}: []
+  extra_records:
+    # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
+    # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
+    # device_ips=100.64.0.3 / fd7a:115c:a1e0::3, device_fqdn=
+    # ts-web.tailnet.internal). This is served as a MagicDNS Hosts (exact)
+    # entry, which takes precedence over the LocalDomains NXDOMAIN above.
+    #
+    # A-only, no AAAA -- deliberate, reasoning recorded per the phase-3 brief:
+    # every tailnet node is always assigned a 100.64.0.0/10 IPv4 by tailscale
+    # regardless of the client's underlying network, so a single A record
+    # reaches every tailnet client. The node's ULA IPv6 (fd7a:115c:a1e0::3)
+    # adds a second address family to reason about (happy-eyeballs ordering,
+    # v6 reachability) for zero functional gain, since no tailnet client is
+    # v4-less. The design doc and issue #3466 specify an A record only. If a
+    # genuinely IPv6-only consumer ever appears, add the AAAA then -- not
+    # reflexively now.
+    - name: "prometheus.ts.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
 
 policy:
   mode: file
