@@ -291,7 +291,7 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "instant": true,
-              "expr": "sum by (profile) (increase(prism_spend_by_profile_usd_total{profile=~\"${profile:regex}\"}[$__range]))",
+              "expr": "sum by (profile) (increase(prism_spend_by_profile_usd_total{hostname=~\"${hostname:regex}\", profile=~\"${profile:regex}\"}[$__range]))",
               "legendFormat": "{{profile}}"
             }
           ]
