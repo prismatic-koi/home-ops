@@ -11,6 +11,11 @@
     // fits; homeops@ owns the machine identity so any cluster admin can
     // redeploy without needing to re-own the tag.
     "tag:ts-metrics-ingest": ["homeops@"],
+    // Shared tailnet-only web-UI proxy (pilot #3466). Same rationale as the
+    // per-service proxies above: cluster-managed workload, no human owner
+    // fits, so homeops@ owns the machine identity. One ts-web node fronts
+    // every *.ts.<domain> web UI (prometheus first; Hubble/Longhorn later).
+    "tag:ts-web":            ["homeops@"],
   },
 
   // Least-privilege access: tag:nixos peers may reach ONLY
@@ -63,6 +68,16 @@
       "dst": ["tag:ts-metrics-ingest"],
       "ip":  ["tcp:9090"],
     },
+    // Tailnet-only web UI (pilot #3466). ben@ devices reach the shared
+    // ts-web proxy on tcp:443 ONLY; the proxy TCPForwards to the in-cluster
+    // traefik gateway, which terminates TLS and routes by hostname. No other
+    // ports. TLS terminates on traefik, not on tailscale, so the base-domain
+    // cert limitation does not apply.
+    {
+      "src": ["ben@"],
+      "dst": ["tag:ts-web"],
+      "ip":  ["tcp:443"],
+    },
     // MPD (Music Player Daemon) control/streaming port 6600. Scoped to ben@
     // devices only; enables device-to-device music access (e.g. navi <-> bens-s25).
     // TCP only, no UDP. Does not widen any other access.
@@ -109,6 +124,18 @@
         "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
       ],
     },
+    // PHASE 2 (#3466) -- add ts-web test assertions ONLY after the
+    // tailscale-proxy-ts-web node registers:
+    //   accept: src ben@            -> "tag:ts-web:443"  (the granted path)
+    //   deny:   src ben@            -> "tag:ts-web:9090" (backend port, not granted)
+    //   deny:   src tag:ts-prometheus -> "tag:ts-web:443" (unauthorised source)
+    // They are deferred because a test entry whose tag resolves to zero
+    // registered nodes both (a) can FAIL policy load for an accept -- the
+    // #3370 / #3398 trap that keeps the previous policy and would deadlock
+    // preauth-key creation -- and (b) emits the misleading "resolved to no IP
+    // addresses" warning that #3398 flags as actively harmful. Phase 1 ships
+    // the tagOwner + grant so the node can register; the assertions land once
+    // it has.
   ],
 }
 
