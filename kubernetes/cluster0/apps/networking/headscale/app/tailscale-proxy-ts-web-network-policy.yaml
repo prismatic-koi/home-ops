@@ -11,7 +11,8 @@
 #   - DNS to CoreDNS (kube-system): resolve hs.${DOMAIN} + traefik Service
 #   - HTTPS/DERP to internet: control-plane + DERP relay fallback
 #   - UDP high-ports to internet: direct WireGuard + STUN
-#   - TCP :443 to networking/traefik pods: the actual forward target
+#   - TCP :80, :443 to networking/traefik pods: the actual forward targets
+#     (:80 added in issue #3471 for the HTTP->HTTPS redirect)
 #   - kube-apiserver: read/write the node-state Secret (TS_KUBE_SECRET)
 #
 # No ingress needed on the proxy pod: tailnet peers reach it via the
@@ -114,11 +115,13 @@ spec:
               - 172.16.0.0/12
               - 192.168.0.0/16
 ---
-# The actual forward target: TCP :443 to traefik pods in the networking
-# namespace. This is the outbound net.Dial the TCPForward handler makes for
-# each accepted tailnet connection. Under Cilium socket-LB the connect() to
-# the traefik ClusterIP:443 is DNAT'd to a traefik PodIP:443 before egress
-# policy evaluation, so this podSelector rule matches the translated target.
+# The actual forward target: TCP :80 and :443 to traefik pods in the
+# networking namespace. This is the outbound net.Dial the TCPForward handler
+# makes for each accepted tailnet connection -- :443 for the app itself,
+# :80 for the HTTP->HTTPS redirect (issue #3471). Under Cilium socket-LB the
+# connect() to the traefik ClusterIP is DNAT'd to a traefik PodIP before
+# egress policy evaluation, so this podSelector rule matches the translated
+# target.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -131,6 +134,8 @@ spec:
   policyTypes: [Egress]
   egress:
     - ports:
+        - port: 80
+          protocol: TCP
         - port: 443
           protocol: TCP
       to:
@@ -163,10 +168,11 @@ spec:
         - kube-apiserver
 ---
 # Reciprocal traefik-side ingress (AGENTS.md reciprocal-pair guidance):
-# allow the ts-web proxy pod to reach traefik on :443. Traefik's broad
-# traefik-allow-intracluster-ingress already admits any in-namespace pod on
-# :443, but this explicit narrow rule documents the ts-web -> traefik half of
-# the pair so the pilot path is legible in one place.
+# allow the ts-web proxy pod to reach traefik on :80 and :443. Traefik's
+# broad traefik-allow-intracluster-ingress already admits any in-namespace
+# pod on these ports, but this explicit narrow rule documents the ts-web ->
+# traefik half of the pair so the pilot path is legible in one place. :80
+# added in issue #3471 for the HTTP->HTTPS redirect.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -186,5 +192,7 @@ spec:
             matchLabels:
               app.kubernetes.io/name: tailscale-proxy-ts-web
       ports:
+        - port: 80
+          protocol: TCP
         - port: 443
           protocol: TCP

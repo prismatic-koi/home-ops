@@ -8,10 +8,13 @@
 # Unlike tailscale-proxy-prometheus / -loki / -metrics-ingest, this proxy is
 # NOT bound to one backend Service. It is a dumb L4 pipe: it TCPForwards
 # inbound tailnet TCP :443 straight to the in-cluster traefik gateway on
-# :443. Traefik terminates TLS on the *.ts.${SECRET_PUBLIC_DOMAIN} cert and
-# routes by SNI/hostname to the right backend via an HTTPRoute. One proxy
-# fronts every *.ts.${SECRET_PUBLIC_DOMAIN} name; the per-service piece is an
-# HTTPRoute + a target-side ingress NetworkPolicy, not a new proxy.
+# :443, and (since issue #3471) inbound tailnet TCP :80 to traefik on :80
+# for the HTTP->HTTPS redirect -- traefik's web entrypoint 308s every
+# request to websecure, so no application content is ever served in
+# plaintext. Traefik terminates TLS on the *.ts.${SECRET_PUBLIC_DOMAIN} cert
+# and routes by SNI/hostname to the right backend via an HTTPRoute. One
+# proxy fronts every *.ts.${SECRET_PUBLIC_DOMAIN} name; the per-service piece
+# is an HTTPRoute + a target-side ingress NetworkPolicy, not a new proxy.
 #
 # Why tailscale never terminates TLS here:
 #   The proxy forwards the raw TCP stream, SNI intact. TLS terminates on
@@ -38,14 +41,19 @@ metadata:
   namespace: networking
 data:
   # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
-  # port 443 to the traefik gateway Service by DNS name. TCPForward does a
-  # standard net.Dial (fresh outbound socket) per accepted connection; it
-  # does NOT proxy packets and does NOT terminate TLS. Target is the Service
-  # DNS name, not a pinned ClusterIP: no /32 pin drift when the Service is
-  # reconstituted.
+  # ports 80 and 443 to the traefik gateway Service by DNS name. TCPForward
+  # does a standard net.Dial (fresh outbound socket) per accepted connection;
+  # it does NOT proxy packets and does NOT terminate TLS. Target is the
+  # Service DNS name, not a pinned ClusterIP: no /32 pin drift when the
+  # Service is reconstituted. Port 80 (issue #3471) exists only so traefik's
+  # web entrypoint can redirect to websecure; no plaintext app content is
+  # served.
   serve.json: |-
     {
       "TCP": {
+        "80": {
+          "TCPForward": "traefik.networking.svc.cluster.local:80"
+        },
         "443": {
           "TCPForward": "traefik.networking.svc.cluster.local:443"
         }

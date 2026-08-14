@@ -69,14 +69,17 @@
       "ip":  ["tcp:9090"],
     },
     // Tailnet-only web UI (pilot #3466). ben@ devices reach the shared
-    // ts-web proxy on tcp:443 ONLY; the proxy TCPForwards to the in-cluster
-    // traefik gateway, which terminates TLS and routes by hostname. No other
-    // ports. TLS terminates on traefik, not on tailscale, so the base-domain
-    // cert limitation does not apply.
+    // ts-web proxy on tcp:443, and on tcp:80 for the HTTP->HTTPS redirect
+    // only (issue #3471) -- traefik's web entrypoint 308s every request to
+    // websecure, so no application content is ever served in plaintext on
+    // port 80. The proxy TCPForwards to the in-cluster traefik gateway,
+    // which terminates TLS and routes by hostname. No other ports. TLS
+    // terminates on traefik, not on tailscale, so the base-domain cert
+    // limitation does not apply.
     {
       "src": ["ben@"],
       "dst": ["tag:ts-web"],
-      "ip":  ["tcp:443"],
+      "ip":  ["tcp:80", "tcp:443"],
     },
     // MPD (Music Player Daemon) control/streaming port 6600. Scoped to ben@
     // devices only; enables device-to-device music access (e.g. navi <-> bens-s25).
@@ -112,6 +115,7 @@
         "tag:ts-prometheus:9090",
         "tag:ts-loki:3100",
         "tag:ts-web:443",       // tailnet-only web UI proxy (#3466)
+        "tag:ts-web:80",        // HTTP->HTTPS redirect entrypoint (#3471)
       ],
       "deny": [
         "tag:ts-prometheus:22", // no SSH on the prometheus proxy
