@@ -13,3 +13,30 @@ spec:
   dnsNames:
     - "${SECRET_PUBLIC_DOMAIN}"
     - "*.${SECRET_PUBLIC_DOMAIN}"
+---
+# Second wildcard, one label deeper, for the tailnet-only web UIs served over
+# the ts-web tailscale proxy (pilot: prometheus.ts.${SECRET_PUBLIC_DOMAIN},
+# #3466). A wildcard covers EXACTLY one label, so the existing
+# *.${SECRET_PUBLIC_DOMAIN} cert does NOT match a two-label name like
+# prometheus.ts.${SECRET_PUBLIC_DOMAIN}; this dedicated cert is required.
+# Issued by the same Cloudflare DNS-01 ClusterIssuer; the _acme-challenge
+# TXT lands in the ${SECRET_PUBLIC_DOMAIN} zone, which the issuer solves.
+# This PR only lands the Certificate; the follow-up wires it as a SECOND
+# certificateRef on the traefik websecure listener (#3466). Landing the
+# Certificate first means the secret is Ready before the listener references
+# it, so the websecure listener that terminates TLS for the live public apps
+# never goes ResolvedRefs=False. It does not replace the base wildcard.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "ts-${SECRET_PUBLIC_DOMAIN/./-}"
+  namespace: networking
+spec:
+  secretName: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  commonName: "ts.${SECRET_PUBLIC_DOMAIN}"
+  dnsNames:
+    - "ts.${SECRET_PUBLIC_DOMAIN}"
+    - "*.ts.${SECRET_PUBLIC_DOMAIN}"
