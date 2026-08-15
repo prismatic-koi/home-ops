@@ -71,7 +71,7 @@ spec:
 # under Cilium `kubeProxyReplacement=true` in-cluster pod-to-pod flows are
 # matched by pod identity rather than source IP — so the ipBlock rule does
 # NOT cover an in-cluster pod (e.g. `monitoring/uptime-kuma`) connecting to
-# `https://<route>.tinfoilforest.nz/`. The two rules are complementary: the
+# `https://<route>.mydomain.com/`. The two rules are complementary: the
 # ipBlock rule matches non-pod sources, this rule matches pod-identity
 # sources. See #2977 for the root cause and the Phase 4a origin (#2950 /
 # #2968).
@@ -97,9 +97,9 @@ spec:
     - Ingress
   ingress:
     - from:
-        - namespaceSelector: {}    # universal — see comment above; complements
-                                   # the ipBlock 0.0.0.0/0 rule for in-cluster
-                                   # pod-identity sources under Cilium kpr.
+        - namespaceSelector: {} # universal — see comment above; complements
+            # the ipBlock 0.0.0.0/0 rule for in-cluster
+            # pod-identity sources under Cilium kpr.
       ports:
         - port: 80
           protocol: TCP
@@ -208,19 +208,19 @@ spec:
   egress:
     - to:
         - ipBlock:
-            cidr: 10.87.42.200/32  # nas0
+            cidr: 10.87.42.200/32 # nas0
       ports:
         - port: 5000
           protocol: TCP
     - to:
         - ipBlock:
-            cidr: 10.87.1.74/32  # octoprint
+            cidr: 10.87.1.74/32 # octoprint
       ports:
         - port: 80
           protocol: TCP
     - to:
         - ipBlock:
-            cidr: 10.87.1.1/32  # unifi
+            cidr: 10.87.1.1/32 # unifi
       ports:
         - port: 443
           protocol: TCP
@@ -274,7 +274,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+            cidr: 10.43.0.0/16 # Service CIDR (kubernetes.default.svc)
     - ports:
         - port: 443
           protocol: TCP
@@ -282,4 +282,4 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.87.42.2/32  # control plane node
+            cidr: 10.87.42.2/32 # control plane node

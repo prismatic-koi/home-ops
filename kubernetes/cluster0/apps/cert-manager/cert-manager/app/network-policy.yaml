@@ -25,7 +25,7 @@ spec:
 # queries to the public resolvers used for the DNS-01 self-check
 # (`--dns01-recursive-nameservers=1.1.1.1:53,9.9.9.9:53` on the controller).
 # Without the two ipBlock entries below, the DNS-01 self-check for wildcard
-# certs (e.g. `*.tinfoilforest.nz`) cannot verify `_acme-challenge` TXT
+# certs cannot verify `_acme-challenge` TXT
 # propagation on public DNS and renewals stall. See #3291.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -101,7 +101,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+            cidr: 10.43.0.0/16 # Service CIDR (kubernetes.default.svc)
     - ports:
         - port: 443
           protocol: TCP
@@ -109,7 +109,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+            cidr: 10.87.42.2/32 # control plane node (defence-in-depth)
 ---
 # Allow egress to external :443 for ACME HTTP-01 / DNS-01 challenges
 # (Let's Encrypt, ZeroSSL, etc.). Let's Encrypt and similar CAs are fronted by
@@ -228,7 +228,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+            cidr: 10.43.0.0/16 # Service CIDR (kubernetes.default.svc)
     - ports:
         - port: 443
           protocol: TCP
@@ -236,7 +236,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+            cidr: 10.87.42.2/32 # control plane node (defence-in-depth)
 # =============================================================================
 # cert-manager-webhook — Phase 4b (#2951)
 # Pod label: app.kubernetes.io/name=webhook (Deployment, 1 replica)
@@ -314,9 +314,9 @@ spec:
   ingress:
     - from:
         - ipBlock:
-            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+            cidr: 10.43.0.0/16 # Service CIDR (kubernetes.default.svc)
         - ipBlock:
-            cidr: 10.87.42.2/32  # control plane node
+            cidr: 10.87.42.2/32 # control plane node
       ports:
         - port: 10250
           protocol: TCP
@@ -364,7 +364,7 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+            cidr: 10.43.0.0/16 # Service CIDR (kubernetes.default.svc)
     - ports:
         - port: 443
           protocol: TCP
@@ -372,4 +372,4 @@ spec:
           protocol: TCP
       to:
         - ipBlock:
-            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+            cidr: 10.87.42.2/32 # control plane node (defence-in-depth)

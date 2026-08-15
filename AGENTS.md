@@ -6,6 +6,8 @@ This document contains important context for AI agents working with this reposit
 
 This is a GitOps repository managing a Kubernetes homelab cluster using Flux CD. All cluster configuration is stored as code, and Flux automatically reconciles the cluster state with the Git repository.
 
+Note: This repo is public, don't commit anything that does not belong in a public repository
+
 ### Key Technologies
 
 - **Flux CD**: GitOps toolkit that continuously reconciles cluster state with Git

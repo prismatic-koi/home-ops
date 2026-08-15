@@ -34,7 +34,7 @@ spec:
             env:
               SEARXNG_BASE_URL: https://search.${SECRET_PUBLIC_DOMAIN}
               SEARXNG_URL: https://search.${SECRET_PUBLIC_DOMAIN}
-              INSTANCE_NAME: tinfoilforest
+              INSTANCE_NAME: ${SECRET_PUBLIC_INSTANCE_NAME}
     service:
       searxng:
         controller: searxng
@@ -53,11 +53,11 @@ spec:
               - identifier: searxng
                 port: *port
             filters:
-              - type: 'ExtensionRef'
+              - type: "ExtensionRef"
                 extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
-                  name: 'forwardauth-authelia'
+                  group: "traefik.io"
+                  kind: "Middleware"
+                  name: "forwardauth-authelia"
     networkpolicies:
       default-deny:
         controller: searxng
@@ -127,4 +127,3 @@ spec:
               - path: /etc/searxng/settings.yml
                 subPath: settings.yml
                 readOnly: true
-
