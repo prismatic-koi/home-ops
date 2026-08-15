@@ -334,6 +334,28 @@ Some applications use init containers that must complete before the main contain
 - **home-assistant**: Uses `git-sync` init container to pull config from Git
 - Check pod status carefully - `Init:0/1` is normal during startup
 
+## Public Repository Disclosure Rule
+
+This repository is **public**. Anything committed to it, or written into a GitHub
+issue body, PR description, or commit message, is visible to the internet. This
+rule applies to those surfaces, not only to files tracked in the repo.
+
+**Never publish:**
+- Ben's home WAN IP, or any other publicly routable address belonging to their
+  network. Use the placeholder `<WAN_IP>` instead.
+- Secrets of any kind. Secrets always go through SOPS and are never committed
+  in plaintext.
+
+**Accepted and in scope — do not retro-scrub:**
+- RFC1918 addresses (`10.87.x.x`) and `*.tinfoilforest.nz` hostnames. These are
+  already published deliberately across the repo, notably in
+  `kubernetes/cluster0/flux/vars/cluster-settings.yaml`. They are not a leak.
+  Do not treat them as one, and do not "helpfully" remove them from files where
+  they already appear.
+
+If you are unsure whether a value is safe to publish, escalate to the operator
+and ask before writing it into a file, issue, PR, or commit.
+
 ## Best Practices
 
 1. **Never assume resource names** - Always verify with `kubectl get`
