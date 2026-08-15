@@ -6,8 +6,8 @@ metadata:
   namespace: auth
 spec:
   dependsOn:
-  - name: longhorn
-    namespace: longhorn-system
+    - name: longhorn
+      namespace: longhorn-system
   interval: 5m
   chart:
     spec:
@@ -45,12 +45,12 @@ spec:
       ingress:
         enabled: false
     ltb-passwd:
-      enabled : false
+      enabled: false
     customLdifFiles:
       01-root.ldif: |-
         dn: ${SECRET_LDAP_BASE_DN}
-        dc: tinfoilforest
-        o: Tinfoilforest
+        dc: ${SECRET_PUBLIC_INSTANCE_NAME}
+        o: ${SECRET_PUBLIC_INSTANCE_NAME}
         objectclass: top
         objectclass: dcObject
         objectclass: organization
@@ -68,7 +68,7 @@ spec:
         gidNumber: 8742
         objectclass: top
         objectclass: posixGroup
-        
+
         dn: uid=ben,ou=people,${SECRET_LDAP_BASE_DN}
         cn: ben
         givenName: Ben
