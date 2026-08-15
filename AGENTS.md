@@ -343,12 +343,29 @@ rule applies to those surfaces, not only to files tracked in the repo.
 **Never publish:**
 - Ben's home WAN IP, or any other publicly routable address belonging to their
   network. Use the placeholder `<WAN_IP>` instead.
+- The domain `tinfoilforest.nz`, and any subdomain of it. In prose, issue
+  bodies, PR descriptions, and commit messages, use the placeholder
+  `<DOMAIN>` instead. The domain is already present in git history and that
+  cannot be undone, but a casual reader who finds it in history, rather than
+  in current files, cannot tell whether it is current or stale — keeping it
+  out of current files degrades the value of the history find for an
+  opportunistic reader. That is a real reduction in exposure, even though it
+  is not an absolute one.
 - Secrets of any kind. Secrets always go through SOPS and are never committed
   in plaintext.
 
+The domain's in-tree config occurrences are a separate matter from prose, and
+are NOT covered by the prose rule above: several are functional (the
+headscale `server_url`, the split-DNS suffix key in `policy.hujson`, ingress
+hostnames) and cannot simply be deleted. These will migrate to a
+`${SECRET_DOMAIN}` substitution variable sourced from
+`cluster-secrets.sops.yaml`. That migration is tracked separately and is NOT
+yet done — do not read this rule as a signal that the tree is already clean,
+and do not start removing the domain from config files yourself.
+
 **Accepted and in scope — do not retro-scrub:**
-- RFC1918 addresses (`10.87.x.x`) and `*.tinfoilforest.nz` hostnames. These are
-  already published deliberately across the repo, notably in
+- RFC1918 addresses (`10.87.x.x`). These are already published deliberately
+  across the repo, notably in
   `kubernetes/cluster0/flux/vars/cluster-settings.yaml`. They are not a leak.
   Do not treat them as one, and do not "helpfully" remove them from files where
   they already appear.
