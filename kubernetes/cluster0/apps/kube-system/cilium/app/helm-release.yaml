@@ -70,6 +70,35 @@ spec:
         prometheus:
           serviceMonitor:
             enabled: true
+      tls:
+        enabled: true
+        # The chart default is `auto.method: helm`. That method generates the
+        # Hubble CA and leaf certs inside the Helm release at install time and
+        # never renews them. The certs expired on 2026-08-01, hubble-relay
+        # CrashLooped on the expired peer cert, and the blocked `helm --wait`
+        # also stalled the 1.20.1 chart bump (#3494). See #3508.
+        #
+        # `cronJob` moves issuance to cilium-certgen: a one-shot Job on each
+        # install and upgrade, plus a recurring CronJob that regenerates every
+        # Hubble leaf cert on the schedule below.
+        auto:
+          enabled: true
+          method: cronJob
+          # Leaf validity in days, for hubble-server-certs and
+          # hubble-relay-client-certs. 180 days against a monthly schedule
+          # gives about 6 renewal attempts of margin. Several consecutive
+          # CronJob failures therefore cannot expire a cert.
+          certValidityDuration: 180
+          # 03:00 on the 1st of every month. CronJob schedules are UTC. The
+          # chart does not expose spec.timeZone for the certgen CronJob, so
+          # this is not the Pacific/Auckland timezone of the cluster.
+          schedule: "0 3 1 * *"
+          # The CA (`cilium-ca`) is not on this rotation. certgen runs with
+          # `--ca-reuse-secret`, so it creates the CA once with its own
+          # 3-year validity and reuses it after that. certgen also runs with
+          # `--ca-enforce-validity-throughout-leaves-duration=true`, so this
+          # CronJob starts to fail about 180 days before the CA expires. That
+          # failure is the signal to rotate the CA by hand.
       ui:
         enabled: true
         rollOutPods: true
