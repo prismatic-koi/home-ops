@@ -10,20 +10,22 @@ data:
   CONTROLPLANE_IP:  "10.87.42.2"
   # Explicit start/stop ranges, not a CIDR: 10.87.42.10/27 normalises to
   # 10.87.42.0/27 and would silently re-include .1 (LAN router) and .2
-  # (kube-vip control-plane VIP). Split into two blocks around .13, which
-  # is deliberately excluded so the next unpinned Service lands on .16+
-  # (see the comment in cilium-ippool.yaml). Keep this in sync with
+  # (kube-vip control-plane VIP). The upper bound stays at .31 (the top
+  # of the original /27) so this narrows the pool and does not widen it
+  # to cover the cluster nodes (.100-.103) or NAS0_IP (.200). Split into
+  # two blocks around .13, which is deliberately excluded so the next
+  # unpinned Service lands on .16+ (see the comment in cilium-ippool.yaml).
+  # Keep this in sync with
   # kubernetes/cluster0/apps/kube-system/cilium/config/cilium-ippool.yaml.
   LOADBALANCER_IP_POOL_BLOCK1_START: "10.87.42.10"
   LOADBALANCER_IP_POOL_BLOCK1_STOP: "10.87.42.12"
   LOADBALANCER_IP_POOL_BLOCK2_START: "10.87.42.14"
-  LOADBALANCER_IP_POOL_BLOCK2_STOP: "10.87.42.199"
+  LOADBALANCER_IP_POOL_BLOCK2_STOP: "10.87.42.31"
   TRAEFIK_IP:       "10.87.42.10"
   PRIMARY_DNS_IP:   "10.87.42.11"
   PLEX_IP:          "10.87.42.12"
   SYNC_ENDPOINT:    "10.87.42.14"
   SECONDARY_DNS_IP: "10.87.42.15"
-  GATEWAY_IP:       "10.87.42.16"
   # external service IPs
   NAS0_IP:          "10.87.42.200"
   UNIFI_IP:         "10.87.1.1"
