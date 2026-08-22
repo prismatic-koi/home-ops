@@ -15,12 +15,20 @@
 # (ben@ -> tag:ts-web tcp:443 in headscale policy.hujson). Prometheus is a
 # read-mostly, non-destructive UI; this is the whole point of the pilot.
 #
-# external-dns.alpha.kubernetes.io/controller: none is LOAD-BEARING. Without
-# it, external-dns (source=gateway-httproute, policy=sync) would publish a
-# PUBLIC A record + k8s. TXT for this hostname pointing at the Cloudflare
-# edge, defeating the tailnet-only property. `none` is the only per-object
-# opt-out that external-dns v0.21.0 actually reads — the `.../exclude`
-# annotation does NOT exist in that version and is silently ignored (#3466).
+# external-dns publication is now FAIL-CLOSED (#3518): external-dns runs
+# --label-filter=dns.home-ops/public=true, so a route without that label is
+# invisible to it and gets no public record. This route deliberately carries no
+# such label, which is what keeps the hostname tailnet-only. It is the ONLY
+# HTTPRoute on the cluster with no opt-in label — every other route had a
+# public record before #3518 and kept it. Do not add the label here.
+#
+# external-dns.alpha.kubernetes.io/controller: none is KEPT as a second,
+# independent layer (#3466). It is no longer the primary control, but it costs
+# nothing and it holds even if someone copies this file and pastes the opt-in
+# label in by mistake. Two independent mechanisms must both fail before this
+# hostname leaks to public DNS. `none` is the only per-object opt-out that
+# external-dns v0.21.0 actually reads — the `.../exclude` annotation does NOT
+# exist in that version and is silently ignored.
 # =============================================================================
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

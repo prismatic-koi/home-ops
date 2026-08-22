@@ -61,6 +61,11 @@ spec:
             port: &port 5055
     route:
       app:
+        labels:
+          # Public DNS opt-in (#3518). Intended-public endpoint: the
+          # guest-facing request UI, used off the tailnet. Not a
+          # tailnet-migration candidate. See AGENTS.md.
+          dns.home-ops/public: "true"
         hostnames: ["requests.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           - name: traefik-gateway

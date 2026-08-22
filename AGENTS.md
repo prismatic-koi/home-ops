@@ -275,6 +275,165 @@ Working in-tree examples: `coredns-allow-kube-apiserver` in
 `kubernetes/cluster0/apps/cert-manager/cert-manager/app/cilium-network-policy.yaml`.
 Prior occurrences: #2829 (external-dns), #2947 (cnpg), #3381 / #3382 (tailscale).
 
+## Public DNS is opt-in (external-dns)
+
+external-dns publishes a public record **only** for an object that carries this
+label:
+
+```yaml
+dns.home-ops/public: "true"
+```
+
+The flag that enforces it lives in
+`kubernetes/cluster0/apps/networking/external-dns/app/helm-release.yaml`:
+
+```yaml
+extraArgs:
+  - --label-filter=dns.home-ops/public=true
+```
+
+An object without the label is invisible to external-dns. It gets **no** public
+A/CNAME record and **no** `k8s.` TXT ownership record. A new HTTPRoute is
+private by default (#3518).
+
+Before #3518 the default was the reverse: every HTTPRoute was published unless
+it carried `external-dns.alpha.kubernetes.io/controller: none`. A route added
+without that annotation got a public record silently. That is the defect the
+label fixes.
+
+### The label means "published", not "should be public"
+
+#3518 changed the **mechanism** and kept the published set identical. Every
+hostname that external-dns published at the time carries the label. So the
+label on a given route means "external-dns publishes this hostname today". It
+does not mean someone decided the hostname belongs on the public internet.
+
+Only five hostnames are *intended* to stay public:
+
+| Hostname | Why |
+|---|---|
+| `hs` | headscale control plane. **Permanent** — see below. |
+| `plex` | family and guest native apps |
+| `jellyfin` | family and guest native apps |
+| `home-assistant` | mobile app, webhooks, voice |
+| `requests` | guest-facing request UI (overseerr) |
+
+Every other labelled route is a **tailnet-migration candidate**. Its comment
+says so.
+
+`hs.${SECRET_PUBLIC_DOMAIN}` can never be made tailnet-only. A tailscale client
+must reach headscale to register and to re-key, so a tailnet-gated control plane
+is a circular dependency.
+
+### Removing the label withdraws public DNS — do not do it alone
+
+`policy: sync` is unchanged, so removing the label makes external-dns delete the
+record on the next reconcile. **That is not the same as making a service
+internal-only. For most hostnames here it makes the service unreachable from
+everywhere.**
+
+The reason is the client resolver path, not the cluster:
+
+- headscale pushes `1.1.1.1` and `8.8.8.8` as the global resolvers, so a
+  tailnet client resolves app hostnames through **public DNS even on the LAN**.
+- blocky pins only five names in `customDNS`
+  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi`,
+  `traefik`, `longhorn`, `auth`, `search`. Everything else falls through to the
+  public upstreams.
+- coredns does not serve the public domain, and there is no wildcard, no
+  `conditional` upstream block, and no k8s-gateway.
+
+So for any hostname outside those five pins, the public record **is** the only
+resolution path today, LAN included.
+
+**Never remove the label as a bulk operation.** Withdraw a hostname one service
+at a time, as part of that service's tailnet migration, and land internal
+resolution for it in the same change. `prometheus.ts` is the pilot for that
+pattern (#3466): a `*.ts.${SECRET_PUBLIC_DOMAIN}` hostname, a tailscale proxy, a
+tailnet ACL, and no public record.
+
+### `--label-filter` is global, not per-source
+
+The flag applies to **every** enabled source, not only `gateway-httproute`. The
+effective source set is `ingress`, `crd` and `gateway-httproute`. So:
+
+- `DNSEndpoint` objects need the label as well. See
+  `kubernetes/cluster0/apps/networking/cloudflared/app/dns-endpoint.yaml`,
+  which publishes `tun.${SECRET_PUBLIC_DOMAIN}` for the cloudflared tunnel.
+- Any future `Ingress` object needs the label to publish a record.
+
+Enumerate every active source before you touch this flag. Checking only
+`gateway-httproute` is what nearly deleted the cloudflared tunnel record.
+
+### Records external-dns does not own
+
+external-dns deletes only records for which it holds a `k8s.` TXT ownership
+record — `plan.calculateChanges` filters deletes through
+`FilterEndpointsByOwnerID`. Some names in the zone have no ownership TXT and are
+therefore outside its control entirely, whatever the label says. It logs them
+each loop as `missing owner label` or `owner id does not match`. Check the logs
+before you assume a record is managed here.
+
+### Worked example — publish a new hostname
+
+Most hostnames come from a bjw-s `app-template` HelmRelease. Add `labels` to the
+route, beside `hostnames`:
+
+```yaml
+# kubernetes/cluster0/apps/<namespace>/<app>/app/helm-release.yaml
+  values:
+    route:
+      app:
+        labels:
+          # Public DNS opt-in (#3518). State why the hostname must be public.
+          dns.home-ops/public: "true"
+        hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
+        parentRefs:
+          - name: traefik-gateway
+            namespace: networking
+            sectionName: websecure
+```
+
+For a raw HTTPRoute manifest, put the label in `metadata.labels`:
+
+```yaml
+# kubernetes/cluster0/apps/<namespace>/<app>/app/httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: <app>
+  namespace: <namespace>
+  labels:
+    # Public DNS opt-in (#3518). State why the hostname must be public.
+    dns.home-ops/public: "true"
+```
+
+The `grafana` chart uses the same `route.<name>.labels` key as `app-template`.
+
+To keep a new hostname private, add nothing — absence of the label is enough.
+Do not copy the old `external-dns.alpha.kubernetes.io/controller: none`
+annotation onto new objects. The one route that still carries it,
+`monitoring/kube-prometheus-stack/app/httproute.yaml`, keeps it as deliberate
+defence in depth and is the only HTTPRoute with no opt-in label.
+
+### Verify
+
+```bash
+# Every labelled route. Expect the full published set, not a subset.
+kubectl get httproute -A -l dns.home-ops/public=true
+
+# Expect cloudflared-tunnel.
+kubectl get dnsendpoint -A -l dns.home-ops/public=true
+
+# Any route that is NOT labelled — each one publishes nothing.
+kubectl get httproute -A -L dns.home-ops/public | grep -v true
+
+# What external-dns actually generates.
+kubectl -n networking logs deploy/external-dns --tail=500 \
+  | grep "Endpoints generated from"
+```
+
+
 ## Cilium Helm chart minor/major upgrades
 
 Cilium CRDs (especially `ciliumnodeconfigs.cilium.io`) track deprecated apiVersions in their

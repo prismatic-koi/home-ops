@@ -3,6 +3,19 @@ kind: HTTPRoute
 metadata:
   name: headscale
   namespace: networking
+  labels:
+    # PUBLIC DNS OPT-IN — PERMANENT. DO NOT REMOVE (#3518).
+    #
+    # hs.${SECRET_PUBLIC_DOMAIN} is the headscale control plane. It can never
+    # be made tailnet-only, because a tailscale client must reach headscale to
+    # register and to re-key. Put the control plane behind the tailnet and you
+    # get a circular dependency: a client with an expired key cannot re-key,
+    # because it cannot reach the server that issues the key.
+    #
+    # Remove this label and external-dns (policy: sync) deletes the record on
+    # its next reconcile. Every tailnet client then loses the ability to
+    # register or re-key. This label is structural, not a convenience.
+    dns.home-ops/public: "true"
 spec:
   hostnames:
     - hs.${SECRET_PUBLIC_DOMAIN}
