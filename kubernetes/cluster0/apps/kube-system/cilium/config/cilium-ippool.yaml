@@ -14,6 +14,14 @@ spec:
   # normalises to the containing network (10.87.42.0/27), which silently
   # widens the pool back to include .0-.9 and hands out .1/.2 to the next
   # unpinned LoadBalancer Service.
+  #
+  # 10.87.42.13 is deliberately excluded (split into two blocks below)
+  # instead of pinned: Cilium hands out the lowest free address in the
+  # pool, so if .13 were allocatable, the next unpinned Service would take
+  # it instead of .16+, contradicting the intent that .16+ is the free
+  # range for new, unpinned Services.
   blocks:
-    - start: ${LOADBALANCER_IP_POOL_START}
-      stop: ${LOADBALANCER_IP_POOL_STOP}
+    - start: ${LOADBALANCER_IP_POOL_BLOCK1_START}
+      stop: ${LOADBALANCER_IP_POOL_BLOCK1_STOP}
+    - start: ${LOADBALANCER_IP_POOL_BLOCK2_START}
+      stop: ${LOADBALANCER_IP_POOL_BLOCK2_STOP}
