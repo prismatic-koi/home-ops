@@ -330,6 +330,24 @@ up automatically just because no objects use that version. Always check both `sp
 If upgrade fails with `Unable to update CRD ... storedVersions` or similar, the operator
 crashed during the createCRDs hook — check operator pod logs and rerun the patch command above.
 
+## Changing an allocatable IP range or address pool
+
+Any change to an allocatable IP range (a `CiliumLoadBalancerIPPool` block, a DHCP
+range, a metallb pool, or similar) must enumerate the reserved infrastructure
+addresses that fall inside the proposed range and confirm each one is excluded.
+At minimum, check the range against:
+
+- the LAN router (`10.87.42.1`)
+- the kube-vip control-plane VIP (`10.87.42.2`)
+- the cluster nodes' InternalIPs (`10.87.42.100`-`.103`)
+- NAS0_IP, the physical Synology (`10.87.42.200`)
+
+A narrowing fix can silently become a widening one at the other end of the range —
+see PR #3521, where fixing the lower bound of the Cilium LB-IPAM pool first
+introduced a new upper-bound overreach into the node IPs and NAS0_IP, caught only
+by a human second pass after two review rounds passed it. State the reserved
+addresses you checked, and the result, in the PR description.
+
 ## Init Containers
 
 Some applications use init containers that must complete before the main container starts:

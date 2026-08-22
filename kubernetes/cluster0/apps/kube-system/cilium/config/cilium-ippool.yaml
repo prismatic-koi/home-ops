@@ -6,5 +6,19 @@ metadata:
   name: pool
 spec:
   disabled: false
+  # Range is .10 to .31 - the same top boundary as the original
+  # 10.87.42.0/27 block, deliberately NOT widened. Two addresses are cut
+  # from the bottom, addresses Cilium does not own:
+  #   10.87.42.1 - the LAN router (CoreDNS's only upstream)
+  #   10.87.42.2 - the kube-vip control-plane VIP
+  # Do NOT express this as a CIDR (e.g. 10.87.42.10/27): CIDR notation
+  # normalises to the containing network (10.87.42.0/27), which silently
+  # widens the pool back to include .0-.9 and hands out .1/.2 to the next
+  # unpinned LoadBalancer Service.
+  #
+  # Do NOT raise the stop bound past .31: 10.87.42.100-.103 are the
+  # cluster nodes' InternalIPs and 10.87.42.200 is NAS0_IP (a physical
+  # Synology) - both must stay outside this pool.
   blocks:
-    - cidr: ${LOADBALANCER_IP_POOL}
+    - start: ${LOADBALANCER_IP_POOL_START}
+      stop: ${LOADBALANCER_IP_POOL_STOP}
