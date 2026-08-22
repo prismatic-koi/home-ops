@@ -19,14 +19,6 @@ spec:
   # Do NOT raise the stop bound past .31: 10.87.42.100-.103 are the
   # cluster nodes' InternalIPs and 10.87.42.200 is NAS0_IP (a physical
   # Synology) - both must stay outside this pool.
-  #
-  # 10.87.42.13 is deliberately excluded (split into two blocks below)
-  # instead of pinned: Cilium hands out the lowest free address in the
-  # pool, so if .13 were allocatable, the next unpinned Service would take
-  # it instead of .16+, contradicting the intent that .16+ is the free
-  # range for new, unpinned Services.
   blocks:
-    - start: ${LOADBALANCER_IP_POOL_BLOCK1_START}
-      stop: ${LOADBALANCER_IP_POOL_BLOCK1_STOP}
-    - start: ${LOADBALANCER_IP_POOL_BLOCK2_START}
-      stop: ${LOADBALANCER_IP_POOL_BLOCK2_STOP}
+    - start: ${LOADBALANCER_IP_POOL_START}
+      stop: ${LOADBALANCER_IP_POOL_STOP}
