@@ -32,15 +32,21 @@
 #
 # The `forward . /etc/resolv.conf` clause delegates upstream resolution to the
 # node's resolv.conf (the Deployment runs with dnsPolicy=Default). On this
-# cluster the node resolv.conf points at the Blocky DNS appliances exposed as
-# LoadBalancer services in the `networking` namespace:
-#   - blocky-primary-dns   LB IP 10.87.42.11
-#   - blocky-secondary-dns LB IP 10.87.42.15
-# Both LB IPs sit in the node /24 (10.87.42.0/24). The egress allow below
-# scopes upstream DNS to that /24 — covering the Blocky LBs plus the router
-# and any other LAN-side DNS device on the same subnet. Per #2812 and #2952
-# the upstream-DNS narrowing beyond this point is explicitly router-config
-# territory and out of scope.
+# cluster the node resolv.conf points at the LAN router, 10.87.42.1 — NOT at
+# the Blocky LoadBalancer IPs. Verified from runtime metrics: CoreDNS forwards
+# every request to exactly one upstream, confirmed by the `to` label on
+# `coredns_proxy_request_duration_seconds_count`:
+#
+#     sum by (to) (increase(coredns_proxy_request_duration_seconds_count[24h]))
+#     => {to="10.87.42.1:53"} 29069
+#
+# Blocky is not in the cluster resolution path. 10.87.42.1 sits in the node
+# /24 (10.87.42.0/24). The egress allow below scopes upstream DNS to that
+# /24 — covering the router plus any other LAN-side DNS device on the same
+# subnet, so a future resolv.conf or router change doesn't require a policy
+# edit. Per #2812 and #2952 the upstream-DNS narrowing beyond this point is
+# explicitly router-config territory and out of scope. See #3516 for the
+# comment correction.
 #
 # This file lives under a dedicated `policy/` subdirectory (sibling to `app/`)
 # in the same pattern as `local-path-provisioner/policy/`: the Helm release
