@@ -412,9 +412,21 @@ The `grafana` chart uses the same `route.<name>.labels` key as `app-template`.
 
 To keep a new hostname private, add nothing — absence of the label is enough.
 Do not copy the old `external-dns.alpha.kubernetes.io/controller: none`
-annotation onto new objects. The one route that still carries it,
-`monitoring/kube-prometheus-stack/app/httproute.yaml`, keeps it as deliberate
-defence in depth and is the only HTTPRoute with no opt-in label.
+annotation onto new objects. One route still carries it —
+`monitoring/kube-prometheus-stack/app/httproute.yaml` — and keeps it as
+deliberate defence in depth.
+
+### The two routes with no opt-in label
+
+Exactly two HTTPRoutes carry no label. They are **not** the same case, and
+neither is an oversight:
+
+| Route | Declares a hostname? | Why it has no label |
+|---|---|---|
+| `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | Tailnet-only pilot (#3466). The missing label is the control that keeps it off public DNS. **Do not add the label.** |
+| `networking/httpsredirect` | No | It declares no hostnames, so it can never produce a record. The missing label is immaterial. |
+
+Do not "reconcile the count" by adding the label to either one.
 
 ### Verify
 
@@ -426,6 +438,8 @@ kubectl get httproute -A -l dns.home-ops/public=true
 kubectl get dnsendpoint -A -l dns.home-ops/public=true
 
 # Any route that is NOT labelled — each one publishes nothing.
+# Expect exactly TWO: monitoring/prometheus-ts-web and networking/httpsredirect.
+# See "The two routes with no opt-in label" above before you change either.
 kubectl get httproute -A -L dns.home-ops/public | grep -v true
 
 # What external-dns actually generates.
