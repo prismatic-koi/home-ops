@@ -8,7 +8,12 @@ data:
   CLUSTER_NAME: "home-ops-cluster0"
   TIMEZONE: "Pacific/Auckland"
   CONTROLPLANE_IP:  "10.87.42.2"
-  LOADBALANCER_IP_POOL: "10.87.42.10/27"
+  # Explicit start/stop range, not a CIDR: 10.87.42.10/27 normalises to
+  # 10.87.42.0/27 and would silently re-include .1 (LAN router) and .2
+  # (kube-vip control-plane VIP). Keep this in sync with
+  # kubernetes/cluster0/apps/kube-system/cilium/config/cilium-ippool.yaml.
+  LOADBALANCER_IP_POOL_START: "10.87.42.10"
+  LOADBALANCER_IP_POOL_STOP: "10.87.42.199"
   TRAEFIK_IP:       "10.87.42.10"
   PRIMARY_DNS_IP:   "10.87.42.11"
   PLEX_IP:          "10.87.42.12"
