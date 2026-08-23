@@ -86,6 +86,10 @@ spec:
             port: *port
     route:
       app:
+        labels:
+          # Public DNS opt-in (#3518). Removing this withdraws public DNS for
+          # the hostname — pair it with internal resolution. See AGENTS.md.
+          dns.home-ops/public: "true"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           - name: traefik-gateway

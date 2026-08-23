@@ -50,6 +50,10 @@ kind: HTTPRoute
 metadata:
   name: unifi
   namespace: networking
+  labels:
+    # Public DNS opt-in (#3518). Removing this withdraws public DNS for the
+    # hostname — pair it with internal resolution. See AGENTS.md.
+    dns.home-ops/public: "true"
 spec:
   parentRefs:
     - group: gateway.networking.k8s.io

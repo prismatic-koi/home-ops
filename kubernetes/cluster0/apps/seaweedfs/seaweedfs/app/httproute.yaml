@@ -4,6 +4,10 @@ kind: HTTPRoute
 metadata:
   name: seaweedfs-console
   namespace: seaweedfs
+  labels:
+    # Public DNS opt-in (#3518). Removing this withdraws public DNS for the
+    # hostname — pair it with internal resolution. See AGENTS.md.
+    dns.home-ops/public: "true"
 spec:
   hostnames:
     - seaweedfs.${SECRET_PUBLIC_DOMAIN}

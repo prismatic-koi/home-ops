@@ -4,6 +4,18 @@ kind: DNSEndpoint
 metadata:
   name: cloudflared-tunnel
   namespace: networking
+  labels:
+    # Public DNS opt-in (#3518). DO NOT REMOVE.
+    #
+    # external-dns runs --label-filter=dns.home-ops/public=true, and that flag
+    # is global: it filters the `crd` source as well as `gateway-httproute`.
+    # Without this label external-dns stops seeing this DNSEndpoint and, under
+    # policy: sync, deletes tun.${SECRET_PUBLIC_DOMAIN} — which breaks the
+    # cloudflared tunnel.
+    #
+    # A DNSEndpoint is an explicit request to publish a record, so the label is
+    # a restatement of intent rather than a new decision.
+    dns.home-ops/public: "true"
 spec:
   endpoints:
     - dnsName: tun.${SECRET_PUBLIC_DOMAIN}

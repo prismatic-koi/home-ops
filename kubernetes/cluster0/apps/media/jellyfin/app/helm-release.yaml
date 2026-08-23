@@ -70,6 +70,11 @@ spec:
             port: *port
     route:
       app:
+        labels:
+          # Public DNS opt-in (#3518). Intended-public endpoint: family and
+          # guest consumers reach Jellyfin from native apps off the tailnet.
+          # Not a tailnet-migration candidate. See AGENTS.md.
+          dns.home-ops/public: "true"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           - name: traefik-gateway
