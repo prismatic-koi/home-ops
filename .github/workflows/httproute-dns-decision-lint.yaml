@@ -1,0 +1,83 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: HTTPRoute DNS decision lint
+
+# Enforces an explicit public/private DNS decision on every HTTPRoute that
+# declares a hostname. external-dns publishes only `dns.home-ops/public: "true"`
+# (#3518, fail-closed). A route that declares a hostname must carry the label
+# with the value "true" (publish) or "false" (keep private). A missing label,
+# an unquoted boolean, or any other value fails the lint. See issue #3519 and
+# AGENTS.md, "Public DNS is opt-in (external-dns)".
+#
+# The lint reads rendered manifests from `flux-local build`, so it also sees a
+# route a chart emits with no repository-side `route:` block and resolves a
+# templated hostname before it applies the no-hostname exemption.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-httproute-dns-decision.py"
+      - ".github/workflows/httproute-dns-decision-lint.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-httproute-dns-decision.py"
+      - ".github/workflows/httproute-dns-decision-lint.yaml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint HTTPRoute DNS decision
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Render manifests with flux-local
+        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0@sha256:c0be852e30f299ce6a220cc992b0c21a2a0b0684cc17713b9d718e18d9c8beff
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          args: >-
+            build all
+            --enable-helm
+            --skip-secrets
+            --skip-crds
+            --output-file /github/workspace/rendered-manifests.yaml
+            /github/workspace/kubernetes/cluster0/flux
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install PyYAML
+        run: python3 -m pip install --disable-pip-version-check "pyyaml==6.0.2"
+
+      - name: Run lint
+        run: >-
+          python3 scripts/lint-httproute-dns-decision.py
+          --rendered rendered-manifests.yaml
+          --root kubernetes
+          --verbose
