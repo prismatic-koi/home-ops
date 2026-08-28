@@ -106,13 +106,38 @@ For each PR, follow this review process.
 gh pr view <PR_NUMBER> --json title,body,files,labels
 ```
 
+Do not pipe the PR body through `head`, `tail`, or `sed -n`. Any of these can
+cut off a warning that sits below the line count you chose. To read a long
+body, search it instead:
+
+```bash
+gh pr view <N> --json body --jq '.body' | grep -niE '\[!WARNING\]|breaking|deprecat|migrat|CVE-'
+```
+
 ### 3.2 Review release notes
 
-- Check the PR body for release notes and changelogs.
+Search these four sources in order, and stop at the first one that makes the
+impact of the update clear. Record which tier answered.
+
+1. `pr-body` — the release notes in the PR body.
+2. `upstream-release` — the upstream release page, for example
+   `gh api repos/<owner>/<repo>/releases/tags/<tag>`.
+3. `changelog` — a changelog file in the upstream repo, or the commit range
+   between the two tags.
+4. `source-diff` — the source diff between the two tags, limited to the
+   values keys and flags this repository sets.
+
+Some PR bodies carry no release-notes section at all — this is normal for a
+ghcr.io image. Do not treat an empty PR body as a safe update. Move to tier 2,
+`upstream-release`, and continue down the ladder from there.
+
 - Identify the version bump type (patch/minor/major) — labels include
   `dep/patch`, `dep/minor`, `dep/major`.
 - Look for security fixes (CVE mentions).
 - Note any breaking changes or migration requirements.
+
+**Stop rule:** if the impact is still unclear after tier 4, the recommendation
+is NEEDS CAUTION or DO NOT MERGE. Unclear is never SAFE.
 
 ### 3.3 Read current configuration
 
@@ -163,6 +188,8 @@ For each PR, capture:
 - Why it didn't auto-merge (Tier 1, Tier 2 major, database minor, etc.)
 - Key changes (security fixes, new features, breaking changes)
 - Safety call (SAFE TO MERGE / NEEDS CAUTION / DO NOT MERGE — with a reason)
+- Source tier that answered (`pr-body` / `upstream-release` / `changelog` /
+  `source-diff` / `none-found`), and the evidence line it gave
 
 ## Step 4: 🛑 Human approval gate — STOP HERE
 
@@ -172,12 +199,22 @@ and **stop**. Do not run `gh pr merge` for any PR until the human responds.
 Table shape:
 
 ```
-| PR    | Package           | Change          | Type  | Why surfaced       | Recommendation  | Notes                          |
-|-------|-------------------|-----------------|-------|--------------------|-----------------|--------------------------------|
-| #1234 | cert-manager      | v1.19 → v1.20   | minor | Tier 2 minor       | SAFE TO MERGE   | No breaking changes in notes   |
-| #1235 | seaweedfs (chart) | v4.30 → v4.31   | minor | seaweedfs carve-out| NEEDS CAUTION   | Verify image tag on Docker Hub |
-| #1236 | rancher/k3s-upgrade | v1.30 → v1.31 | minor | Tier 1             | DO NOT MERGE    | Plan k3s upgrade separately    |
+| PR    | Package           | Change          | Type  | Why surfaced       | Source          | Evidence                                                              | Recommendation  | Notes                          |
+|-------|-------------------|-----------------|-------|--------------------|-----------------|------------------------------------------------------------------------|-----------------|--------------------------------|
+| #1234 | cert-manager      | v1.19 → v1.20   | minor | Tier 2 minor       | pr-body         | no warnings section                                                     | SAFE TO MERGE   | No breaking changes in notes   |
+| #1235 | seaweedfs (chart) | v4.30 → v4.31   | minor | seaweedfs carve-out| upstream-release| `tag chrislusf/seaweedfs:v4.31 confirmed present on Docker Hub`         | NEEDS CAUTION   | Verify image tag on Docker Hub |
+| #1236 | rancher/k3s-upgrade | v1.30 → v1.31 | minor | Tier 1             | changelog       | `removes support for the in-tree cloud provider`                       | DO NOT MERGE    | Plan k3s upgrade separately    |
 ```
+
+`Source` holds one of five values: `pr-body`, `upstream-release`, `changelog`,
+`source-diff`, `none-found`. `Evidence` holds a quoted line from the release,
+or the exact text `no warnings section`. A boolean column is not acceptable
+here — a boolean records a claim about the agent's behaviour, and the
+`Evidence` cell records a checkable fact about the release, so the human at
+the gate can verify it without repeating the work.
+
+A rollout plan, a settle window, or a drain order is not an assessment. It
+does not satisfy Step 3.2, and it does not belong in the `Evidence` cell.
 
 After the table, ask the human something like:
 
