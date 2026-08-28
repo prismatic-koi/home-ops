@@ -40,6 +40,12 @@ kind: HTTPRoute
 metadata:
   name: prometheus-ts-web
   namespace: monitoring
+  labels:
+    # Private DNS decision (#3519), not an omission. Tailnet-only pilot
+    # (#3466): the hostname stays off public DNS. external-dns publishes only
+    # `dns.home-ops/public: "true"`, so "false" keeps this route invisible to
+    # it and changes nothing at runtime. Do NOT change this to "true".
+    dns.home-ops/public: "false"
   annotations:
     external-dns.alpha.kubernetes.io/controller: none
 spec:

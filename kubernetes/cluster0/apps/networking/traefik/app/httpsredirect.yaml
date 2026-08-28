@@ -5,6 +5,11 @@ kind: HTTPRoute
 metadata:
   name: httpsredirect
   namespace: networking
+  labels:
+    # Private DNS decision (#3519), not an omission. This route declares no
+    # hostnames, so it can never produce a DNS record; the lint exempts a
+    # no-hostname route either way. The label states the decision explicitly.
+    dns.home-ops/public: "false"
 spec:
   parentRefs:
     - name: traefik-gateway
