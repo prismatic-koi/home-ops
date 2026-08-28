@@ -9,8 +9,12 @@ on:
     paths:
       - .github/renovate.json5
       - .github/renovate/**.json5
+  # Minute :00 is the most contended slot on the GitHub scheduler, so runs
+  # start late and are sometimes dropped. Two crons at odd minutes limit the
+  # cost of a dropped run to about 30 minutes instead of several hours (#3543).
   schedule:
-    - cron: 0 * * * *
+    - cron: 7 * * * *
+    - cron: 37 * * * *
   workflow_dispatch:
     inputs:
       dryRun:
