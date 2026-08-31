@@ -8,8 +8,8 @@ spec:
   interval: 10m
   url: oci://ghcr.io/fluxcd/flux-manifests
   ref:
-    tag: "v2.9.4"
-    digest: sha256:57804ca34eab87a2071ec03c4a523e89e1c8775937586ba89fc6c66148700f02
+    tag: "v2.9.5"
+    digest: sha256:321bf281b6cc6529506d97c37f478b78445e110f1f8ca5111320d14ca369d1dd
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
