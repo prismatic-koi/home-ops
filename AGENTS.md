@@ -327,6 +327,11 @@ Only five hostnames are *intended* to stay public:
 Every other labelled route is a **tailnet-migration candidate**. Its comment
 says so.
 
+`search` was the first candidate to complete that migration. #3553 added the
+internal resolution paths and #3555 withdrew the public record, so the route
+now carries `dns.home-ops/public: "false"` and has left the labelled set. See
+"Count of unlabelled routes: zero" below for what resolves the hostname now.
+
 `hs.${SECRET_PUBLIC_DOMAIN}` can never be made tailnet-only. A tailscale client
 must reach headscale to register and to re-key, so a tailnet-gated control plane
 is a circular dependency.
@@ -445,16 +450,18 @@ add. The usual fix is to add that one line.
 
 ### Count of unlabelled routes: zero
 
-Since #3519 no HTTPRoute is unlabelled. The two routes that once had no label
-now carry `dns.home-ops/public: "false"`, a recorded private decision. They are
-still **not** the same case:
+Since #3519 no HTTPRoute is unlabelled. Three routes carry
+`dns.home-ops/public: "false"`, a recorded private decision. Two of them are the
+routes that once had no label; the third is a hostname withdrawn from public DNS
+after its tailnet migration. No two are the same case:
 
 | Route | Declares a hostname? | Value | Why it is private |
 |---|---|---|---|
 | `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | `"false"` | Tailnet-only pilot (#3466). The `"false"` keeps it off public DNS. **Do not change it to `"true"`.** It also keeps `external-dns.alpha.kubernetes.io/controller: none` as defence in depth. |
 | `networking/httpsredirect` | No | `"false"` | It declares no hostnames, so it can never produce a record. The lint exempts a no-hostname route regardless; the label states the decision anyway. |
+| `home/searxng` | Yes, `search.…` | `"false"` | Withdrawn from public DNS in #3555, the contract half of an expand-then-contract migration. Two internal paths replace the public record: the headscale `nameservers.split` entry plus `extra_records` pin (#3553) for a tailnet client, and the blocky `customDNS` pin for a LAN client that is not on the tailnet. **Both are load-bearing — removing either breaks a client class.** Change the value to `"true"` only to roll the withdrawal back. |
 
-Do not remove either label.
+Do not remove any of the three labels.
 
 ### Verify
 
