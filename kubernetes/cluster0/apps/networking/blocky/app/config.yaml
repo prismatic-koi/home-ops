@@ -12,11 +12,13 @@ data:
     # cert below. The intended consumer is Android Private DNS, which points
     # at one hostname and speaks DoT on every network the device joins.
     #
-    # The :853 listener also answers on the blocky-dns LoadBalancer IPs, so it
-    # is reachable from the LAN as well as the tailnet. That is accepted, not
-    # overlooked: the same resolver already answers plaintext :53 on those
-    # same IPs, so DoT there exposes nothing new and is better transport. The
-    # tailnet ACL still scopes tag:ts-blocky to tcp:853 alone.
+    # The :853 listener is tailnet-only, NOT LAN-exposed. It is fronted by the
+    # blocky-dot ClusterIP Service (no LB frontend, no announced LAN IP);
+    # tailscale-proxy-blocky dials blocky-dot.networking.svc.cluster.local:853
+    # and Cilium socket-LB translates it to a blocky PodIP. The blocky-dns
+    # LoadBalancer carries plaintext :53 only. The tailnet ACL scopes
+    # tag:ts-blocky to tcp:853 alone. This satisfies the #3564 Goal ("Not
+    # LAN-exposed on 853").
     #
     # certFile / keyFile are TOP-LEVEL keys in blocky's config, not children
     # of `ports`. They are read once at startup: NewServer calls
