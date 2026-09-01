@@ -53,6 +53,17 @@ dns:
       # suffix is the one pinned in extra_records below.
       # =====================================================================
       ts.${SECRET_PUBLIC_DOMAIN}: []
+      # searxng (#3553), expand phase. Leaf-scoped, and the block above is
+      # why. The leaf key is safe because dnsname.FQDN.Contains returns true
+      # on equality as well as on a dot-boundary suffix, so this entry
+      # captures search.<domain> and nothing beside it.
+      #
+      # This entry and the search.<domain> pin in extra_records are a PAIR.
+      # Drop the pin and this entry NXDOMAINs searxng for every tailnet
+      # device. Drop this entry and the pin goes inert: the client builds its
+      # OS match-domain list from Routes only, never from Hosts, so a pinned
+      # name with no route is never sent to the tailscale resolver at all.
+      search.${SECRET_PUBLIC_DOMAIN}: []
   extra_records:
     # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
     # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
@@ -70,6 +81,20 @@ dns:
     # genuinely IPv6-only consumer ever appears, add the AAAA then -- not
     # reflexively now.
     - name: "prometheus.ts.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    # searxng (#3553), expand phase. Same ts-web IP as the pilot pin above:
+    # one shared proxy fronts every tailnet web UI, so a new consumer is a
+    # pin plus a split entry, not a new proxy. A-only for the reason recorded
+    # above. Paired with the search.<domain> split entry -- read the note
+    # there before you remove either.
+    #
+    # Expand, not contract: this pin is visible only to a MagicDNS-enabled
+    # tailnet client. Every other client reaches searxng through the public
+    # record, so do not withdraw that record until internal resolution
+    # replaces it for those clients too. See AGENTS.md, "Removing the label
+    # withdraws public DNS -- do not do it alone".
+    - name: "search.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
 
