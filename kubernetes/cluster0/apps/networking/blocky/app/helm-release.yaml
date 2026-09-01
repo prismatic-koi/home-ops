@@ -42,6 +42,23 @@ spec:
     controllers:
       blocky:
         replicas: 2
+        annotations:
+          # Without this, blocky serves an EXPIRED cert about 90 days after the
+          # DoT listener goes live (#3564).
+          #
+          # blocky reads the key pair once, at startup: newTLSConfig builds a
+          # tls.Config with a fixed Certificates slice and no GetCertificate
+          # callback. cert-manager rewrites the wildcard Secret at about day 60
+          # of a 90-day Let's Encrypt lifetime, and nothing else here rolls the
+          # pods -- blocky-config is a fixed-name ConfigMap, so the PodSpec does
+          # not change, and the reloader chart default autoReloadAll is false.
+          # Android Private DNS validates strictly and fails closed, so a stale
+          # cert costs the device DNS on every network.
+          #
+          # Also closes a pre-existing gap: a config.yaml edit alone did not
+          # roll blocky either. Safe with the RollingUpdate settings below --
+          # unavailable "0" and surge 1 keep one replica serving throughout.
+          reloader.stakater.com/auto: "true"
         strategy: RollingUpdate
         rollingUpdate:
           # Quoted "0": app-template's chart template uses `with .unavailable`,

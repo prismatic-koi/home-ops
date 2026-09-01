@@ -43,12 +43,10 @@ resources:
   # which takes one hostname and uses DoT everywhere -- so it needs an L4
   # pipe, not ts-web (which exists to hand HTTPS to traefik).
   - ./tailscale-proxy-blocky-rbac.yaml
-  # Preauth-key Secret: created + SOPS-encrypted by the operator, because only
-  # they hold the sops key. Listed here so the kustomize path is complete; the
-  # commit that adds the encrypted file is what makes this reconcile.
-  # Mint the key with `headscale preauthkeys create --user homeops@ --tags
-  # tag:ts-blocky --reusable`. headscale accepts a tag it does not yet know at
-  # mint time, so the key can be minted before this policy is live.
+  # Preauth-key Secret. Committed as an UNENCRYPTED PLACEHOLDER: only the
+  # operator holds the sops key. Read that file's OPERATOR TODO header before
+  # merging -- the real key must replace the placeholder and the file must be
+  # sops-encrypted first, or the proxy pod crash-loops on a bogus key.
   - ./tailscale-proxy-blocky-secret.sops.yaml
   - ./tailscale-proxy-blocky-deployment.yaml
   - ./tailscale-proxy-blocky-network-policy.yaml
