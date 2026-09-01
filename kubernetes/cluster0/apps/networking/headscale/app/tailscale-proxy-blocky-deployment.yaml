@@ -1,0 +1,173 @@
+---
+# =============================================================================
+# tailscale-proxy-blocky
+#
+# Per-service tailscale proxy exposing the in-cluster blocky DNS resolver to
+# the headscale tailnet as its own node (tag:ts-blocky), speaking DNS-over-TLS
+# (DoT) on TCP :853. Issue #3564.
+#
+# The intended consumer is Android Private DNS, which takes ONE hostname and
+# then uses DoT for every query on every network the device joins. That is why
+# this is a dedicated L4 proxy and not ts-web: DoT is not HTTP, and ts-web
+# exists specifically to hand HTTPS traffic to traefik.
+#
+# Tailnet-only. No public DNS record, no LAN listener added by this file.
+#
+# Templated off tailscale-proxy-prometheus. Read that file's header for the
+# full "why not a subnet router" rationale; it applies here unchanged.
+#
+# Origin-socket property (this is the whole point):
+#   TS_USERSPACE=true runs tailscaled with the userspace netstack (no tun
+#   device, no packet forwarding is even *possible*). Inbound TCP on the
+#   tailnet interface is terminated inside tailscaled. The TS_SERVE_CONFIG
+#   TCPForward handler then calls a fresh net.Dial from the pod netns to
+#   the target's Service DNS name. That outbound socket originates in the
+#   pod, so Cilium's cgroup-attached socket-LB sees connect() and DNATs
+#   ClusterIP -> PodIP correctly. A subnet router forwarding packets to a
+#   ClusterIP would never get that translation and would time out (#3377).
+#
+# TLS is NOT terminated here:
+#   TCPForward pipes the raw TCP stream, so the DoT session runs end to end
+#   from the client to blocky. blocky presents the wildcard cert for
+#   *.${SECRET_PUBLIC_DOMAIN}, which covers the one-label name
+#   dns.${SECRET_PUBLIC_DOMAIN}. tailscale never sees the plaintext queries
+#   and never needs a cert of its own.
+#
+# Tag from preauth key, NOT --advertise-tags:
+#   headscale 0.28+ hard-rejects registration when a PreAuthKey-authenticated
+#   node ALSO passes --advertise-tags (see the note in
+#   tailscale-router-deployment.yaml and #3370). The preauth key committed
+#   in tailscale-proxy-blocky-secret.sops.yaml MUST be created with
+#   `headscale preauthkeys create --user homeops@ --tags tag:ts-blocky
+#   --reusable`; do NOT set --advertise-tags in TS_EXTRA_ARGS.
+#
+# No hostNetwork, no NET_ADMIN, no /dev/net/tun:
+#   None of these are required for userspace mode. The proxy keeps a standard
+#   pod endpoint identity, so the NetworkPolicy resources in
+#   tailscale-proxy-blocky-network-policy.yaml are actually enforced.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-proxy-blocky-serve
+  namespace: networking
+data:
+  # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
+  # port 853 to the blocky DNS Service by DNS name. TCPForward does a
+  # standard net.Dial (fresh outbound socket) per accepted connection; it
+  # does NOT proxy packets and does NOT terminate TLS. Target is the
+  # Service DNS name, not a pinned ClusterIP: no /32 pin drift when the
+  # Service is reconstituted.
+  serve.json: |-
+    {
+      "TCP": {
+        "853": {
+          "TCPForward": "blocky-dns.networking.svc.cluster.local:853"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-proxy-blocky
+  namespace: networking
+spec:
+  replicas: 1
+  strategy:
+    # Recreate rather than RollingUpdate: two tailnet nodes with the same
+    # hostname would collide on registration.
+    #
+    # The gap on redeploy costs more here than on the other proxies. An
+    # Android device with Private DNS set to a hostname is strict: while DoT
+    # is unreachable the device gets no DNS at all rather than falling back
+    # to plaintext. Single-replica exposure for this proxy and for ts-web is
+    # tracked in #3556; do not "fix" it by raising replicas here, because the
+    # hostname collision above is the actual constraint.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-proxy-blocky
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale-proxy-blocky
+    spec:
+      serviceAccountName: tailscale-proxy-blocky
+      containers:
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.102.3@sha256:8c42c4574ab066384fcb72f69e086a2ff1dd3652eb6f56856cee34bcf0d2f680
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Userspace mode needs no capabilities. Drop everything.
+            capabilities:
+              drop: [ALL]
+            allowPrivilegeEscalation: false
+          env:
+            # Persist tailnet node state (machine key, node key, ...) into
+            # this Secret. The RBAC in tailscale-proxy-blocky-rbac.yaml pins
+            # get/update/patch to exactly this name. Surviving a pod delete +
+            # reschedule with the tag AND the allocated tailnet IP intact
+            # depends on this Secret being reused across pod lifecycles --
+            # and the follow-up PR pins that IP in headscale extra_records,
+            # so losing it would NXDOMAIN the DoT endpoint.
+            - name: TS_KUBE_SECRET
+              value: tailscale-proxy-blocky-state
+            # Userspace networking — no tun, no packet forwarding. This is
+            # what makes the origin-socket path (see file header) hold.
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-proxy-blocky-auth
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              # No --advertise-tags: the tag is on the preauth key (see
+              # file header). Hostname becomes the MagicDNS label:
+              # ts-blocky.tailnet.internal.
+              value: >-
+                --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
+                --hostname=ts-blocky
+            # We do not want tailscaled rewriting the pod's resolv.conf;
+            # the pod already gets cluster DNS via ClusterFirst. Leaving this
+            # true would point the pod's own resolver at the tailnet
+            # nameservers, and the proxy would then resolve its forward
+            # target through the very path it is meant to serve.
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            # Serve config: mounted from the ConfigMap above. containerboot
+            # applies this after tailscale up.
+            - name: TS_SERVE_CONFIG
+              value: /etc/tsserve/serve.json
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: serve-config
+              mountPath: /etc/tsserve
+              readOnly: true
+            # tailscaled needs a writable state area even with
+            # TS_KUBE_SECRET (localapi socket, scratch). Backed by memory
+            # rather than the container FS so it survives readOnlyRootFs
+            # tightening if we ever add it.
+            - name: tailscale-run
+              mountPath: /var/run/tailscale
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: serve-config
+          configMap:
+            name: tailscale-proxy-blocky-serve
+        - name: tailscale-run
+          emptyDir:
+            medium: Memory
