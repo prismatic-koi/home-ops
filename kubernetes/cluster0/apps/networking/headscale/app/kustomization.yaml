@@ -43,10 +43,10 @@ resources:
   # which takes one hostname and uses DoT everywhere -- so it needs an L4
   # pipe, not ts-web (which exists to hand HTTPS to traefik).
   - ./tailscale-proxy-blocky-rbac.yaml
-  # Preauth-key Secret. Committed as an UNENCRYPTED PLACEHOLDER: only the
-  # operator holds the sops key. Read that file's OPERATOR TODO header before
-  # merging -- the real key must replace the placeholder and the file must be
-  # sops-encrypted first, or the proxy pod crash-loops on a bogus key.
+  # Preauth-key Secret, SOPS-encrypted, holding the real reusable key minted
+  # with `--tags tag:ts-blocky`. The tag rides on the key, NOT on
+  # --advertise-tags: headscale 0.28+ rejects a registration that uses a
+  # preauth key and also advertises tags (#3370).
   - ./tailscale-proxy-blocky-secret.sops.yaml
   - ./tailscale-proxy-blocky-deployment.yaml
   - ./tailscale-proxy-blocky-network-policy.yaml
