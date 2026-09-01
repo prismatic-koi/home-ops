@@ -16,6 +16,11 @@
     // fits, so homeops@ owns the machine identity. One ts-web node fronts
     // every *.ts.<domain> web UI (prometheus first; Hubble/Longhorn later).
     "tag:ts-web":            ["homeops@"],
+    // Tailnet-only DoT proxy for blocky (issue #3564). Same rationale as the
+    // per-service proxies above: cluster-managed workload, no human owner
+    // fits, so homeops@ owns the machine identity. Fronts blocky's DoT
+    // listener for Android Private DNS at dns.<domain>:853.
+    "tag:ts-blocky":         ["homeops@"],
     // k3s control-plane hosts node0/1/2 (issue #3477). Unlike every tag
     // above, these are NOT pods: tailscaled runs on the bare-metal Ubuntu
     // hosts. An in-cluster proxy would be a circular dependency, because
@@ -167,6 +172,15 @@
       "dst": ["10.87.42.2/32"],
       "ip":  ["tcp:6443"],
     },
+    // DoT for Android Private DNS over the tailnet (issue #3564). ben@
+    // devices reach the ts-blocky proxy on tcp:853 only -- the proxy
+    // TCPForwards to blocky's in-cluster DoT listener. No other port on
+    // the tag; plaintext DNS (53) is deliberately not granted.
+    {
+      "src": ["ben@"],
+      "dst": ["tag:ts-blocky"],
+      "ip":  ["tcp:853"],
+    },
   ],
 
   // Static assertions evaluated on every policy load/boot. If any accept
@@ -209,12 +223,15 @@
         "tag:ts-loki:3100",
         "tag:ts-web:443",       // tailnet-only web UI proxy (#3466)
         "tag:ts-web:80",        // HTTP->HTTPS redirect entrypoint (#3471)
+        "tag:ts-blocky:853",    // DoT for Android Private DNS over the tailnet (#3564)
         "10.87.42.2:6443",      // k8s control plane via the tag:ts-cp subnet route (#3477)
       ],
       "deny": [
         "tag:ts-prometheus:22", // no SSH on the prometheus proxy
         "tag:ts-loki:22",       // no SSH on the loki proxy
         "tag:ts-web:9090",      // ben@ reaches ts-web ONLY on tcp:443, not the backend port
+        "tag:ts-blocky:22",     // no SSH on the blocky proxy (#3564)
+        "tag:ts-blocky:53",     // DoT is tcp:853, not 53 -- plaintext DNS is not opened (#3564)
         "10.87.42.2:22",        // the #3477 grant is tcp:6443 ONLY -- it must not open SSH on the VIP
       ],
     },
@@ -224,6 +241,7 @@
         "tag:ts-loki:3100",           // no cross-tag: loki port from prom node
         "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
         "tag:ts-web:443",             // ts-web is granted to ben@ only, not to tag:ts-prometheus
+        "tag:ts-blocky:853",          // ts-blocky is granted to ben@ only, not to tag:ts-prometheus (#3564)
         "10.87.42.2:6443",            // control-plane VIP is granted to ben@ only (#3477)
       ],
     },
