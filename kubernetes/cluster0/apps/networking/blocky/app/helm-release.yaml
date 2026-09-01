@@ -42,6 +42,23 @@ spec:
     controllers:
       blocky:
         replicas: 2
+        annotations:
+          # Without this, blocky serves an EXPIRED cert about 90 days after the
+          # DoT listener goes live (#3564).
+          #
+          # blocky reads the key pair once, at startup: newTLSConfig builds a
+          # tls.Config with a fixed Certificates slice and no GetCertificate
+          # callback. cert-manager rewrites the wildcard Secret at about day 60
+          # of a 90-day Let's Encrypt lifetime, and nothing else here rolls the
+          # pods -- blocky-config is a fixed-name ConfigMap, so the PodSpec does
+          # not change, and the reloader chart default autoReloadAll is false.
+          # Android Private DNS validates strictly and fails closed, so a stale
+          # cert costs the device DNS on every network.
+          #
+          # Also closes a pre-existing gap: a config.yaml edit alone did not
+          # roll blocky either. Safe with the RollingUpdate settings below --
+          # unavailable "0" and surge 1 keep one replica serving throughout.
+          reloader.stakater.com/auto: "true"
         strategy: RollingUpdate
         rollingUpdate:
           # Quoted "0": app-template's chart template uses `with .unavailable`,
@@ -50,6 +67,25 @@ spec:
           # `with`. See issue #3342 (zero-downtime DNS rollout requires this).
           unavailable: "0"
           surge: 1
+        pod:
+          securityContext:
+            # Required for the wildcard-tls mount below, not cosmetic.
+            #
+            # The blocky image runs as UID 100 with no group (OCI config
+            # User: "100", scratch base, no /etc/passwd). Kubernetes writes a
+            # secret volume root:root and only sets the group to fsGroup when
+            # fsGroup is set. Without this, UID 100 cannot read the key at any
+            # mode that is not world-readable, tls.LoadX509KeyPair fails,
+            # blocky exits, and LAN DNS goes down on both replicas.
+            #
+            # fsGroup 100 plus defaultMode 0440 keeps the private key
+            # group-readable only. Kubernetes always adds fsGroup to the
+            # process supplementary groups, so this does not depend on how the
+            # runtime resolves the GID of a numeric-only image user.
+            # fsGroupChangePolicy is deliberately omitted: the Kubernetes
+            # field has no effect on secret / configMap volumes, and blocky
+            # has no PVC.
+            fsGroup: 100
         containers:
           app:
             image:
@@ -110,6 +146,19 @@ spec:
           dns-udp:
             port: *port
             protocol: UDP
+          # DNS-over-TLS (#3564). The in-cluster path that matters is the
+          # ClusterIP: tailscale-proxy-blocky dials
+          # blocky-dns.networking.svc.cluster.local:853 and Cilium socket-LB
+          # translates it to a blocky PodIP. Adding the port to this
+          # LoadBalancer Service also creates an LB frontend for :853 on the
+          # announced IPs, so DoT answers on the LAN too -- see the config.yaml
+          # comment for why that is accepted.
+          #
+          # Additive only: externalTrafficPolicy: Local and the two :53 ports
+          # above are untouched, and no new IP is announced.
+          dot:
+            port: 853
+            protocol: TCP
     serviceMonitor:
       main:
         serviceName: *app
@@ -127,4 +176,19 @@ spec:
         globalMounts:
           - path: /app/config.yml
             subPath: config.yml
+            readOnly: true
+      # Wildcard cert for the DoT listener (#3564). Same namespace as blocky,
+      # so no cross-namespace copy: cert-manager issues it into networking via
+      # networking/traefik/certificates/certificates.yaml. The one-label DoT
+      # hostname dns.${SECRET_PUBLIC_DOMAIN} is covered by the
+      # *.${SECRET_PUBLIC_DOMAIN} SAN.
+      #
+      # Read the fsGroup comment on the controller above before changing
+      # defaultMode. 0400 does NOT work here.
+      wildcard-tls:
+        type: secret
+        name: ${SECRET_PUBLIC_DOMAIN/./-}-tls
+        defaultMode: 0440
+        globalMounts:
+          - path: /etc/ssl/wildcard
             readOnly: true
