@@ -28,7 +28,7 @@ spec:
       type: Recreate
     image:
       repository: grafana/grafana
-      tag: 13.1.3
+      tag: 13.2.0
     route:
       main:
         enabled: true
