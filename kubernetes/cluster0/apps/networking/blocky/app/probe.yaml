@@ -3,7 +3,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
 metadata:
-  name: blocky-dns-primary
+  name: blocky-dns
   namespace: networking
 spec:
   jobName: blackbox-dns
@@ -14,27 +14,6 @@ spec:
   targets:
     staticConfig:
       static:
-        - blocky-primary-dns.networking.svc.cluster.local:53
+        - blocky-dns.networking.svc.cluster.local:53
       labels:
         app: blocky
-        instance: primary
----
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/probe_v1.json
-apiVersion: monitoring.coreos.com/v1
-kind: Probe
-metadata:
-  name: blocky-dns-secondary
-  namespace: networking
-spec:
-  jobName: blackbox-dns
-  prober:
-    url: blackbox-exporter.monitoring.svc.cluster.local:9115
-    path: /probe
-  module: dns_a_lookup
-  targets:
-    staticConfig:
-      static:
-        - blocky-secondary-dns.networking.svc.cluster.local:53
-      labels:
-        app: blocky
-        instance: secondary
