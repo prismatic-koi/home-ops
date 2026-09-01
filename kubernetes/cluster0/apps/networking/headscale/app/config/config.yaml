@@ -64,6 +64,17 @@ dns:
       # OS match-domain list from Routes only, never from Hosts, so a pinned
       # name with no route is never sent to the tailscale resolver at all.
       search.${SECRET_PUBLIC_DOMAIN}: []
+      # blocky DoT (#3564), for Android Private DNS. Leaf-scoped, and the
+      # block above is why: this key captures dns.<domain> and nothing beside
+      # it, because dnsname.FQDN.Contains returns true on equality as well as
+      # on a dot-boundary suffix.
+      #
+      # This entry and the dns.<domain> pin in extra_records are a PAIR.
+      # Remove either and DoT resolution breaks: drop the pin and this entry
+      # NXDOMAINs the DoT endpoint for every tailnet device; drop this entry
+      # and the pin goes inert because the client builds its OS match-domain
+      # list from Routes only, never from Hosts.
+      dns.${SECRET_PUBLIC_DOMAIN}: []
   extra_records:
     # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
     # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
@@ -89,14 +100,24 @@ dns:
     # above. Paired with the search.<domain> split entry -- read the note
     # there before you remove either.
     #
-    # Expand, not contract: this pin is visible only to a MagicDNS-enabled
-    # tailnet client. Every other client reaches searxng through the public
-    # record, so do not withdraw that record until internal resolution
-    # replaces it for those clients too. See AGENTS.md, "Removing the label
-    # withdraws public DNS -- do not do it alone".
+    # Contract phase (#3555): the public record is withdrawn. This pin is
+    # visible only to a MagicDNS-enabled tailnet client. A LAN client that is
+    # not on the tailnet reaches searxng through the blocky customDNS pin
+    # (kubernetes/cluster0/apps/networking/blocky/app/config.yaml), which is
+    # now load-bearing -- do not remove it as redundant. See AGENTS.md,
+    # "Removing the label withdraws public DNS -- do not do it alone".
     - name: "search.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
+    # blocky DoT (#3564). ts-blocky's OWN registered tailnet IP -- not
+    # ts-web's. Different consumer (Android Private DNS speaking DoT, not a
+    # web UI) and a different proxy (tailscale-proxy-blocky, tag:ts-blocky),
+    # so this does not share the ts-web pin above. A-only for the reason
+    # recorded on the pilot pin. Paired with the dns.<domain> split entry --
+    # read the note there before you remove either.
+    - name: "dns.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.13"
 
 policy:
   mode: file

@@ -146,16 +146,17 @@ spec:
           dns-udp:
             port: *port
             protocol: UDP
-          # DNS-over-TLS (#3564). The in-cluster path that matters is the
-          # ClusterIP: tailscale-proxy-blocky dials
-          # blocky-dns.networking.svc.cluster.local:853 and Cilium socket-LB
-          # translates it to a blocky PodIP. Adding the port to this
-          # LoadBalancer Service also creates an LB frontend for :853 on the
-          # announced IPs, so DoT answers on the LAN too -- see the config.yaml
-          # comment for why that is accepted.
-          #
-          # Additive only: externalTrafficPolicy: Local and the two :53 ports
-          # above are untouched, and no new IP is announced.
+      # DNS-over-TLS (#3564). Deliberately a separate ClusterIP Service, NOT a
+      # port on the LoadBalancer above: the umbrella issue requires DoT to be
+      # tailnet-only and NOT LAN-exposed on 853. The only in-cluster consumer
+      # is tailscale-proxy-blocky, which dials
+      # blocky-dot.networking.svc.cluster.local:853; Cilium socket-LB then
+      # translates the ClusterIP to a blocky PodIP. A ClusterIP Service gets no
+      # LB frontend, so :853 never appears on any announced LAN IP.
+      dot:
+        controller: *app
+        type: ClusterIP
+        ports:
           dot:
             port: 853
             protocol: TCP

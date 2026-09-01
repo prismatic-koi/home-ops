@@ -53,16 +53,18 @@ metadata:
   namespace: networking
 data:
   # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
-  # port 853 to the blocky DNS Service by DNS name. TCPForward does a
+  # port 853 to the blocky DoT Service by DNS name. TCPForward does a
   # standard net.Dial (fresh outbound socket) per accepted connection; it
   # does NOT proxy packets and does NOT terminate TLS. Target is the
   # Service DNS name, not a pinned ClusterIP: no /32 pin drift when the
-  # Service is reconstituted.
+  # Service is reconstituted. The target is the dedicated ClusterIP Service
+  # blocky-dot (#3564), not the blocky-dns LoadBalancer: DoT stays
+  # tailnet-only and off any announced LAN IP.
   serve.json: |-
     {
       "TCP": {
         "853": {
-          "TCPForward": "blocky-dns.networking.svc.cluster.local:853"
+          "TCPForward": "blocky-dot.networking.svc.cluster.local:853"
         }
       }
     }
