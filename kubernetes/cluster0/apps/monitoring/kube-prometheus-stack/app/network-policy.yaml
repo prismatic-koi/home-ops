@@ -683,9 +683,9 @@ spec:
             matchLabels:
               app.kubernetes.io/name: prometheus-blackbox-exporter
 ---
-# Allow Prometheus egress to scrape networking/blocky-primary and blocky-secondary on :4000
-# ServiceMonitors blocky-primary and blocky-secondary target port http -> :4000
-# Pod labels: app.kubernetes.io/name=blocky-primary / blocky-secondary
+# Allow Prometheus egress to scrape networking/blocky on :4000
+# ServiceMonitor blocky targets port http -> :4000
+# Pod label: app.kubernetes.io/name=blocky
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -706,13 +706,7 @@ spec:
               kubernetes.io/metadata.name: networking
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: blocky-primary
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: networking
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: blocky-secondary
+              app.kubernetes.io/name: blocky
 ---
 # Allow Prometheus egress to scrape networking/headscale on :9091 (metrics via ServiceMonitor)
 # Pod label: app.kubernetes.io/name=headscale; ServiceMonitor endpoint port `metrics` -> :9091.

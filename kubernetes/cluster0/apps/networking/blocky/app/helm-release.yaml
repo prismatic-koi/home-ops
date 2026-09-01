@@ -2,7 +2,7 @@
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: &app blocky-secondary
+  name: &app blocky
   namespace: networking
 spec:
   interval: 5m
@@ -40,7 +40,8 @@ spec:
   maxHistory: 3
   values:
     controllers:
-      blocky-secondary:
+      blocky:
+        replicas: 2
         strategy: RollingUpdate
         rollingUpdate:
           # Quoted "0": app-template's chart template uses `with .unavailable`,
@@ -54,6 +55,10 @@ spec:
             image:
               repository: ghcr.io/0xerr0r/blocky
               tag: v0.34.0@sha256:595136fb127f4c952b621113e668c09acdcf15ac054d96ee6d4c51a76c35f5fd
+            resources:
+              requests:
+                cpu: 50m
+                memory: 200Mi
             probes:
               liveness:
                 enabled: true
@@ -97,7 +102,7 @@ spec:
         type: LoadBalancer
         externalTrafficPolicy: Local # Important for UDP to preserve source IP
         annotations:
-          io.cilium/lb-ipam-ips: ${SECONDARY_DNS_IP}
+          io.cilium/lb-ipam-ips: ${PRIMARY_DNS_IP},${SECONDARY_DNS_IP}
         ports:
           dns-tcp:
             port: *port
