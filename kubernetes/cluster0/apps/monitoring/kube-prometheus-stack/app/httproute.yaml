@@ -17,14 +17,16 @@
 #
 # external-dns publication is now FAIL-CLOSED (#3518): external-dns runs
 # --label-filter=dns.home-ops/public=true, so a route without that label is
-# invisible to it and gets no public record. This route deliberately carries no
-# such label, which is what keeps the hostname tailnet-only. Do not add the
-# label here.
+# invisible to it and gets no public record. This route carries the label with
+# the value "false" (#3519), which is what keeps the hostname tailnet-only. Do
+# not change it to "true".
 #
-# Two HTTPRoutes on the cluster carry no opt-in label: this one and
-# networking/httpsredirect. They are NOT the same case. httpsredirect declares
-# no hostnames, so it can never produce a record and its missing label is
-# immaterial. This route DOES declare a hostname, so the missing label is the
+# Three HTTPRoutes on the cluster are private: this one,
+# networking/httpsredirect and home/searxng. They are NOT the same case.
+# httpsredirect declares no hostnames, so it can never produce a record and its
+# value is immaterial. searxng declares one and had a public record until #3555
+# withdrew it; a headscale pin and a blocky pin resolve it now. This route
+# declares a hostname and never had a public record, so the label is the only
 # control. Every other route had a public record before #3518 and kept it.
 #
 # external-dns.alpha.kubernetes.io/controller: none is KEPT as a second,
