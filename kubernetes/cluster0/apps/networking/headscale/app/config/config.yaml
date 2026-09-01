@@ -53,12 +53,10 @@ dns:
       # suffix is the one pinned in extra_records below.
       # =====================================================================
       ts.${SECRET_PUBLIC_DOMAIN}: []
-      # searxng (#3553), expand phase. Keyed on the FULL LEAF HOSTNAME, never
-      # on the bare ${SECRET_PUBLIC_DOMAIN} -- widening it here carries the
-      # same ~20-hostname NXDOMAIN blast radius described in the block above.
-      # The leaf key is safe because dnsname.FQDN.Contains returns true on
-      # equality as well as on a dot-boundary suffix, so this entry captures
-      # search.<domain> and nothing beside it.
+      # searxng (#3553), expand phase. Leaf-scoped, and the block above is
+      # why. The leaf key is safe because dnsname.FQDN.Contains returns true
+      # on equality as well as on a dot-boundary suffix, so this entry
+      # captures search.<domain> and nothing beside it.
       #
       # This entry and the search.<domain> pin in extra_records are a PAIR.
       # Drop the pin and this entry NXDOMAINs searxng for every tailnet
@@ -91,10 +89,11 @@ dns:
     # above. Paired with the search.<domain> split entry -- read the note
     # there before you remove either.
     #
-    # Expand, not contract: the public record is untouched and the searxng
-    # HTTPRoute keeps dns.home-ops/public: "true". Only a MagicDNS-enabled
-    # tailnet client sees this pin; every other client still resolves the
-    # public A record to the traefik gateway.
+    # Expand, not contract: this pin is visible only to a MagicDNS-enabled
+    # tailnet client. Every other client reaches searxng through the public
+    # record, so do not withdraw that record until internal resolution
+    # replaces it for those clients too. See AGENTS.md, "Removing the label
+    # withdraws public DNS -- do not do it alone".
     - name: "search.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
