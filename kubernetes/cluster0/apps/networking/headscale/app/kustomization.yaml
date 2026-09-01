@@ -38,7 +38,7 @@ resources:
   - ./tailscale-proxy-ts-web-deployment.yaml
   - ./tailscale-proxy-ts-web-network-policy.yaml
   # DNS-over-TLS proxy for blocky (#3564). Tailnet-only: TCPForwards :853 to
-  # the in-cluster blocky-dns Service, and blocky terminates DoT on the
+  # the in-cluster blocky-dot Service, and blocky terminates DoT on the
   # existing *.<domain> wildcard cert. Its consumer is Android Private DNS,
   # which takes one hostname and uses DoT everywhere -- so it needs an L4
   # pipe, not ts-web (which exists to hand HTTPS to traefik).

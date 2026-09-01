@@ -10,7 +10,7 @@
 #
 # Egress needed:
 #   - DNS to CoreDNS (kube-system): resolve hs.${SECRET_PUBLIC_DOMAIN}
-#     (control plane) + the blocky-dns Service name
+#     (control plane) + the blocky-dot Service name
 #   - HTTPS/DERP to internet: control-plane + DERP relay fallback
 #   - UDP high-ports to internet: direct WireGuard + STUN
 #   - TCP :853 to networking/blocky pods: the actual forward target
@@ -56,7 +56,7 @@ spec:
   policyTypes: [Ingress, Egress]
 ---
 # DNS resolution to cluster CoreDNS. Needed for hs.${SECRET_PUBLIC_DOMAIN}
-# (control plane) and the blocky-dns Service's DNS name. This is cluster DNS,
+# (control plane) and the blocky-dot Service's DNS name. This is cluster DNS,
 # not the blocky instance the proxy fronts: the pod keeps dnsPolicy
 # ClusterFirst and TS_ACCEPT_DNS=false precisely so the proxy does not depend
 # on the path it serves.
@@ -140,7 +140,7 @@ spec:
 # The actual forward target: TCP :853 to blocky pods in the networking
 # namespace. This is the outbound net.Dial the TCPForward handler makes for
 # each accepted tailnet connection. Under Cilium socket-LB the connect() to
-# the blocky-dns ClusterIP is DNAT'd to a blocky PodIP before egress policy
+# the blocky-dot ClusterIP is DNAT'd to a blocky PodIP before egress policy
 # evaluation, so this podSelector rule matches the translated target.
 # :853 only — the proxy has no reason to reach plaintext :53 or the metrics
 # port, and the tailnet ACL grant for tag:ts-blocky is tcp:853 only.
