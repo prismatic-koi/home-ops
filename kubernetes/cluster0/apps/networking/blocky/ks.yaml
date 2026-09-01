@@ -34,6 +34,10 @@ spec:
     name: home-ops-cluster0
   dependsOn:
     - name: cluster-apps-blocky-valkey
+    # The wildcard cert Secret (${SECRET_PUBLIC_DOMAIN/./-}-tls) for the DoT
+    # listener (#3564) must exist before the blocky pod starts, or blocky
+    # sits in ContainerCreating on a cold rebuild waiting for the mount.
+    - name: cluster-apps-traefik-certificates
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease

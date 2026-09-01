@@ -102,7 +102,7 @@ kubectl -n <namespace> rollout status deployment/<exact-name>
 
 Some applications have multiple instances deployed:
 - **valkey**: 3 instances (auth, home/searxng, networking/blocky)
-- **blocky**: 2 instances (primary, secondary)
+- **blocky**: 1 HelmRelease running 2 replicas (consolidated from separate primary/secondary in #3563)
 - **postgres clusters**: Multiple managed by cloudnative-pg operator
 
 Always check all instances when reviewing updates.
