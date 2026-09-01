@@ -18,7 +18,13 @@ server:
   secret_key: "i-dont-understand-why-this-is-needed"
   image_proxy: false
   method: GET
-  # behind authelia, no need for bot protection
+  # Bot protection stays off: #3555 withdrew the public DNS record, so no
+  # path from the public internet remains. Two internal paths remain, and
+  # both are network-gated. A tailnet client resolves through the headscale
+  # split entry plus extra_records pin (#3553) and needs the
+  # ben@ -> tag:ts-web ACL grant. A LAN client that is not on the tailnet
+  # resolves through the blocky customDNS pin, which gates on the network
+  # only, not on identity. Enable the limiter again if a public path returns.
   limiter: false
 
 valkey:
