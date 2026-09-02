@@ -336,20 +336,31 @@
     // whole, so folding these two lines into the entry above would mark
     // every assertion in it failed -- including the 10.87.42.2:22 deny --
     // for as long as tag:ts-node resolves to no IP addresses. Keep them
-    // separate so a node3 that has not registered yet cannot mask a real
-    // regression on the paths that ARE live.
+    // separate so a node3 that does not yet carry this tag cannot mask a
+    // real regression on the paths that ARE live.
     //
-    // tag:ts-node resolves to no IP addresses until node3 registers, which
-    // is a host step an operator runs from
-    // docs/runbooks/tailnet-control-plane-access.md. Until then this ONE
-    // entry errors with "destination resolved to no IP addresses" and
-    // headscale logs "policy tests failed at boot". That is the same
-    // tolerated exception as the tag:ts-dns entries below, for the same
-    // reason: the boot path warns and continues, so every grant in this file
-    // -- including both SSH grants -- goes live regardless. Read the
-    // tag:ts-dns paragraphs above for the full boot-vs-reload split.
+    // tag:ts-node resolves to no IP addresses until a registered node
+    // carries that EXACT tag. Registration alone is not enough: a node
+    // registered under any other tag -- including a one-letter typo of this
+    // one -- leaves this tag resolving to nothing, and leaves the SSH grant
+    // above matching no node. headscale validates the format of a tag, not
+    // its presence in tagOwners, so it accepts a typo silently and the tag
+    // reads as correct in a log line.
     //
-    // Do NOT delete this entry to silence that warning. Register node3.
+    // Until the tag matches, this ONE entry errors with "destination
+    // resolved to no IP addresses" and headscale logs "policy tests failed
+    // at boot". That is the same tolerated exception as the tag:ts-dns
+    // entries below, for the same reason: the boot path warns and continues,
+    // so every grant in this file -- including both SSH grants -- goes live
+    // regardless. Read the tag:ts-dns paragraphs above for the full
+    // boot-vs-reload split.
+    //
+    // Do NOT delete this entry to silence that warning. Read the tag with
+    // `headscale nodes list` and correct it. The procedure is "Repair a host
+    // that is registered under the wrong tag" in
+    // docs/runbooks/tailnet-control-plane-access.md -- a control-plane
+    // retag, NOT a host step, because a plain `tailscale up` on a registered
+    // host does not re-apply the tags of a new preauth key.
     {
       "src": "ben@",
       "accept": [
