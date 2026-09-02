@@ -30,11 +30,20 @@ route that serves `tcp:6443`.
 
 ## The `tailscale up` invocation — node0, node1, node2
 
-Run this on the host, as root:
+The host registers under the `tag:ts-cp` tag. The tag rides on the preauth key,
+not on `--advertise-tags`. headscale 0.28+ rejects a registration that uses a
+preauth key and also passes `--advertise-tags`. Mint the key first:
+
+```bash
+headscale preauthkeys create --user homeops@ --tags tag:ts-cp --reusable
+```
+
+Copy the key that the command prints. Then run this on the host, as root:
 
 ```bash
 sudo tailscale up \
   --login-server=https://hs.${SECRET_PUBLIC_DOMAIN} \
+  --authkey=<key-from-the-command-above> \
   --advertise-routes=10.87.42.2/32 \
   --accept-dns=false
 ```
@@ -43,18 +52,15 @@ Each flag is load-bearing:
 
 - `--login-server` points the host at the headscale control plane, not the
   public tailscale service.
+- `--authkey` consumes the preauth key you minted above. **The tag comes from
+  this flag and from nothing else.** If you omit it, `tailscale up` prints a
+  registration URL and waits for a browser instead. That path registers the host
+  untagged, and an operator then sets the tag by hand, where a typo can enter.
+  Read "Repair a host that is registered under the wrong tag" if that happens.
 - `--advertise-routes=10.87.42.2/32` advertises the kube-vip control-plane VIP.
   A tailnet client reaches the Kubernetes API server through this route.
 - `--accept-dns=false` stops the host from accepting the pushed resolver. Read
   "Why `--accept-dns=false` is load-bearing" before you remove it.
-
-The host registers under the `tag:ts-cp` tag. The tag rides on the preauth key,
-not on `--advertise-tags`. headscale 0.28+ rejects a registration that uses a
-preauth key and also passes `--advertise-tags`. Mint the key with the tag:
-
-```bash
-headscale preauthkeys create --user homeops@ --tags tag:ts-cp --reusable
-```
 
 ## The `tailscale up` invocation — node3
 
@@ -64,11 +70,12 @@ Mint a preauth key that carries `tag:ts-node`:
 headscale preauthkeys create --user homeops@ --tags tag:ts-node --reusable
 ```
 
-Then run this on node3, as root:
+Copy the key that the command prints. Then run this on node3, as root:
 
 ```bash
 sudo tailscale up \
   --login-server=https://hs.${SECRET_PUBLIC_DOMAIN} \
+  --authkey=<key-from-the-command-above> \
   --accept-dns=false
 ```
 
@@ -79,9 +86,53 @@ The differences from node0/1/2 are deliberate:
   `10.87.42.2/32`, the route stays unapproved, because `tag:ts-node` is not an
   auto-approver for that prefix.
 - **The tag is `tag:ts-node`, not `tag:ts-cp`.** The tag comes from the preauth
-  key above. Do not reuse a `tag:ts-cp` key on node3.
+  key in `--authkey`. Do not reuse a `tag:ts-cp` key on node3.
+- `--authkey` is as load-bearing here as on node0/1/2. Without it the host
+  registers untagged and the `tag:ts-node` grant matches nothing.
 - `--accept-dns=false` is the same on all four hosts, for the same reason. The
   next section states it.
+
+## Repair a host that is registered under the wrong tag
+
+A plain `tailscale up` on a host that is already registered does **not** re-apply
+the tags of a new preauth key. Use this section when `headscale nodes list` shows
+the wrong tag, or no tag, on a host.
+
+First read the current state. Note the ID and the tag of the host:
+
+```bash
+headscale nodes list
+```
+
+Then set the tag from the control plane. This replaces the whole tag list of the
+node, so name every tag the node must carry:
+
+```bash
+headscale nodes tag --identifier <id> --tags tag:ts-node
+```
+
+headscale validates the format of the tag, not its presence in `tagOwners`. So a
+typo such as `tag:ts-dnode` is accepted and looks correct in the log line. Read
+the tag back after you set it:
+
+```bash
+headscale nodes list
+```
+
+A grant names an exact tag. A node under a tag that no grant names is reachable
+by nobody, and a `tests` assertion on the correct tag still fails, because that
+tag resolves to no IP addresses.
+
+The host-side alternative is to register again with the correct key:
+
+```bash
+sudo tailscale up --force-reauth \
+  --login-server=https://hs.${SECRET_PUBLIC_DOMAIN} \
+  --authkey=<key-with-the-correct-tag> \
+  --accept-dns=false
+```
+
+Prefer the control-plane retag. It needs no host access and it changes one field.
 
 ## Why `--accept-dns=false` is load-bearing
 
@@ -127,12 +178,17 @@ VIP, and the tests block asserts that deny.
 
 The policy names `tag:ts-node`. A headscale policy test fails when its
 destination resolves to no IP addresses. So the `tag:ts-node` assertions fail
-until node3 registers.
+while no registered node carries that exact tag.
+
+"Registered" is not enough. A node registered under a different tag — including
+a typo of the correct tag — leaves `tag:ts-node` resolving to nothing, and the
+grant matches no node. Read `headscale nodes list` to confirm the exact tag, and
+use "Repair a host that is registered under the wrong tag" to correct it.
 
 On the boot path — the path a ConfigMap edit takes, because Reloader restarts
 the pod — headscale logs `policy tests failed at boot; server starting anyway`
 and **applies the policy anyway**. Every grant goes live. This includes the SSH
-grant for `tag:ts-cp`. Register node3 to clear the warning.
+grant for `tag:ts-cp`.
 
 Do **not** run `headscale policy reload` (SIGHUP) while `tag:ts-node` has no
 registered node. That path rejects the write and keeps the previous policy live.
@@ -156,6 +212,9 @@ headscale nodes list
 ```
 
 node0, node1 and node2 must show `tag:ts-cp`. node3 must show `tag:ts-node`.
+Read the tag character by character. `tag:ts-dnode` and `tag:ts-node` differ by
+one letter, and headscale accepts both, because it validates the format of a tag
+and not its presence in `tagOwners`.
 
 Confirm that the policy tests pass:
 
