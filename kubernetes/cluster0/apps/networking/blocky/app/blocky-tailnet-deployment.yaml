@@ -74,6 +74,26 @@ kind: Deployment
 metadata:
   name: blocky-tailnet
   namespace: networking
+  annotations:
+    # Without this, the "one source of truth" property above holds only until
+    # the first edit. blocky-config is a fixed-name ConfigMap, so editing
+    # config.yml does not change this PodSpec and nothing rolls the pod; the
+    # reloader chart default autoReloadAll is false and is not overridden, so
+    # the roll has to be opted into per workload. The LAN release carries the
+    # same annotation. Drop it here and a denylist, customDNS or upstream edit
+    # rolls the LAN pair while this pod keeps serving the old config from
+    # memory -- silent divergence between a tailnet client and a LAN client,
+    # which is the exact failure this deployment exists to avoid.
+    #
+    # It also rolls the pod when cert-manager rewrites the wildcard Secret,
+    # which this pod needs for the same reason the LAN pair does: blocky reads
+    # the key pair once, at startup.
+    #
+    # The cost is a short DNS gap for tailnet clients on every config edit,
+    # because this is one replica with strategy: Recreate. That is accepted.
+    # The gap is the single-replica exposure #3556 already tracks for this
+    # node class, and it is bounded; silent divergence is not.
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   strategy:
