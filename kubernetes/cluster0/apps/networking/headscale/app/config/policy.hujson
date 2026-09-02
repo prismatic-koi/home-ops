@@ -277,8 +277,9 @@
   // not a contradiction of the paragraph above. Reason 1 inverts: the SSH
   // grants have a tag dst, so a tag assertion is the one that matches them.
   // Reason 2 is satisfied for tag:ts-cp, because node0/1/2 are registered and
-  // the tag resolves. It is NOT yet satisfied for tag:ts-node -- see the
-  // comment on that test entry below before you touch it.
+  // the tag resolves. For tag:ts-node it holds only while a registered node
+  // carries that exact tag -- see the comment on that test entry below before
+  // you touch it.
   //
   // The tag:ts-dns (#3576) assertions DO name a tag, and they are the
   // documented exception to reason 2 above. Read this before you "fix"
