@@ -31,13 +31,27 @@
     // remove the only path in. homeops@ owns the tag for the same reason it
     // owns the proxies: infrastructure identity, no human owner fits.
     //
-    // This tag is deliberately NOT a grant destination (read the grant in
-    // the grants block for why). It still does two real jobs, so do not
-    // delete it as unused:
+    // This tag is the destination of the tcp:22 SSH grant (#3579) and NOT
+    // of the tcp:6443 control-plane grant (read that grant in the grants
+    // block for why the two differ). It also does two jobs that no grant
+    // covers, so do not delete it as unused:
     //   1. It is the auto-approver identity for the 10.87.42.2/32 route.
     //   2. It keeps the hosts machine-identity nodes. A tagged node must
     //      not have a user_id, so node0/1/2 never inherit the ben@ grants.
     "tag:ts-cp":             ["homeops@"],
+    // k3s WORKER host node3 (issue #3579). Same bare-metal Ubuntu pattern as
+    // tag:ts-cp above -- tailscaled runs on the host, not in a pod -- and
+    // homeops@ owns it for the same reason: infrastructure identity, no human
+    // owner fits, and a tagged node carries no user_id, so node3 never
+    // inherits the ben@ grants.
+    //
+    // node3 is the worker node. It is not control-plane and it advertises no
+    // route, so it takes no --advertise-routes flag and it must never be able
+    // to approve one. That is why it does not share tag:ts-cp, and why
+    // tag:ts-node is absent from the autoApprovers block below. Keep it
+    // absent: adding it would let the worker host advertise and self-approve
+    // the control-plane VIP.
+    "tag:ts-node":           ["homeops@"],
   },
 
   // Route auto-approval (issue #3477). The tag:ts-cp hosts each advertise
@@ -179,13 +193,51 @@
     // reached a host's tailnet IP on 6443 would fail certificate validation
     // anyway -- and fail in a confusing way.
     //
-    // ONLY tcp:6443. No tcp:22: SSH over the tailnet is a separate change
-    // (retiring cloudflared for SSH) and must not ride in on this grant.
-    // The tests block asserts both halves of that.
+    // ONLY tcp:6443. No tcp:22: SSH over the tailnet landed in #3579 as its
+    // own pair of grants below, with a tag dst, and must not ride in on this
+    // grant. The tests block asserts both halves of that.
     {
       "src": ["ben@"],
       "dst": ["10.87.42.2/32"],
       "ip":  ["tcp:6443"],
+    },
+    // SSH over the tailnet to the k3s hosts (issue #3579). Replaces the
+    // cloudflared tunnels that carried SSH to node0-3 and were deleted at the
+    // Cloudflare side. This is the off-LAN recovery path into the hosts.
+    //
+    // The dst is the TAG here. That is the opposite of the tcp:6443 grant
+    // directly above, and both are correct. The rule that decides it is the
+    // one written out in that grant: headscale resolves a tag dst to the
+    // tagged nodes' OWN 100.64.0.0/10 addresses and never to the routes those
+    // nodes advertise.
+    //
+    //   tcp:6443 reaches 10.87.42.2, an address BEHIND the hosts. A tag dst
+    //     never expands to it, so that grant needs the prefix.
+    //   tcp:22 terminates ON the host itself. The host's own tailnet address
+    //     IS the destination, which is exactly what a tag dst resolves to.
+    //
+    // So this pair does not disturb the 10.87.42.2:22 deny, and must not. The
+    // VIP is a different destination from any host's own tailnet address, and
+    // SSH to a floating VIP is not wanted: it lands on whichever host happens
+    // to hold the VIP at the time.
+    //
+    // ONLY tcp:22 on each, and src stays ben@. Do not add a second port and do
+    // not widen src. The tests block asserts the accept on :22 and a deny on a
+    // neighbouring port for both tags, so a widened grant fails at load rather
+    // than passing silently.
+    {
+      "src": ["ben@"],
+      "dst": ["tag:ts-cp"],
+      "ip":  ["tcp:22"],
+    },
+    // Same grant for the worker host node3, which carries tag:ts-node rather
+    // than tag:ts-cp so that it can never auto-approve the 10.87.42.2/32
+    // route. Two tags, two grants; the alternative is one tag and a worker
+    // host that can advertise the control-plane VIP.
+    {
+      "src": ["ben@"],
+      "dst": ["tag:ts-node"],
+      "ip":  ["tcp:22"],
     },
   ],
 
@@ -207,23 +259,30 @@
   // that ben@ itself can't exercise, since ben@ is legitimately granted
   // access to tag:ts-metrics-ingest.
   //
-  // The #3477 control-plane assertions name the VIP literal 10.87.42.2 and
-  // NOT tag:ts-cp. Two reasons, both load-bearing:
+  // The #3477 control-plane assertions -- the tcp:6443 pair -- name the VIP
+  // literal 10.87.42.2 and NOT tag:ts-cp. Two reasons, both load-bearing:
   //   1. They must match the grant, whose dst is the VIP prefix. An
   //      assertion on tag:ts-cp would test a path the policy does not
   //      grant and does not need.
   //   2. They must resolve. A test DESTINATION that resolves to no IP
   //      addresses is an error, and evalReachability counts that error as a
-  //      failure in `deny` exactly as in `accept`. tag:ts-cp has no
-  //      registered node until an operator runs
-  //      docs/runbooks/tailnet-control-plane-access.md, so a tag:ts-cp
-  //      assertion would fail at boot and re-create the misleading warning
-  //      of #3370 / #3398. A bare IP literal resolves to itself whatever
-  //      nodes exist, so these assertions pass from the moment this merges
-  //      and keep passing after the hosts join.
+  //      failure in `deny` exactly as in `accept`. tag:ts-cp had no
+  //      registered node when #3477 merged, so a tag:ts-cp assertion would
+  //      have failed at boot and re-created the misleading warning of
+  //      #3370 / #3398. A bare IP literal resolves to itself whatever nodes
+  //      exist, so these assertions passed from the moment #3477 merged and
+  //      keep passing now that the hosts have joined.
+  //
+  // The #3579 SSH assertions -- the tcp:22 pairs -- DO name tags, and that is
+  // not a contradiction of the paragraph above. Reason 1 inverts: the SSH
+  // grants have a tag dst, so a tag assertion is the one that matches them.
+  // Reason 2 is satisfied for tag:ts-cp, because node0/1/2 are registered and
+  // the tag resolves. For tag:ts-node it holds only while a registered node
+  // carries that exact tag -- see the comment on that test entry below before
+  // you touch it.
   //
   // The tag:ts-dns (#3576) assertions DO name a tag, and they are the
-  // documented exception to the paragraph above. Read this before you "fix"
+  // documented exception to reason 2 above. Read this before you "fix"
   // them to an IP literal or delete them.
   //
   // The tag resolves to no IP addresses until the pod behind it registers,
@@ -262,6 +321,7 @@
         "tag:ts-web:80",        // HTTP->HTTPS redirect entrypoint (#3471)
         "tag:ts-dns:53",        // plain DNS to the pushed tailnet resolver (#3576)
         "10.87.42.2:6443",      // k8s control plane via the tag:ts-cp subnet route (#3477)
+        "tag:ts-cp:22",         // SSH to node0/1/2's own tailnet addresses (#3579)
       ],
       "deny": [
         "tag:ts-prometheus:22", // no SSH on the prometheus proxy
@@ -269,6 +329,46 @@
         "tag:ts-web:9090",      // ben@ reaches ts-web ONLY on tcp:443, not the backend port
         "tag:ts-dns:22",        // the #3576 grant is :53 ONLY -- no SSH on the resolver node
         "10.87.42.2:22",        // the #3477 grant is tcp:6443 ONLY -- it must not open SSH on the VIP
+        "tag:ts-cp:2222",       // the #3579 grant is tcp:22 ONLY -- a widened grant fails here
+      ],
+    },
+    // tag:ts-node lives in its OWN entry, apart from the assertions above,
+    // and that isolation is deliberate (#3579). A test entry fails as a
+    // whole, so folding these two lines into the entry above would mark
+    // every assertion in it failed -- including the 10.87.42.2:22 deny --
+    // for as long as tag:ts-node resolves to no IP addresses. Keep them
+    // separate so a node3 that does not yet carry this tag cannot mask a
+    // real regression on the paths that ARE live.
+    //
+    // tag:ts-node resolves to no IP addresses until a registered node
+    // carries that EXACT tag. Registration alone is not enough: a node
+    // registered under any other tag -- including a one-letter typo of this
+    // one -- leaves this tag resolving to nothing, and leaves the SSH grant
+    // above matching no node. headscale validates the format of a tag, not
+    // its presence in tagOwners, so it accepts a typo silently and the tag
+    // reads as correct in a log line.
+    //
+    // Until the tag matches, this ONE entry errors with "destination
+    // resolved to no IP addresses" and headscale logs "policy tests failed
+    // at boot". That is the same tolerated exception as the tag:ts-dns
+    // entries below, for the same reason: the boot path warns and continues,
+    // so every grant in this file -- including both SSH grants -- goes live
+    // regardless. Read the tag:ts-dns paragraphs above for the full
+    // boot-vs-reload split.
+    //
+    // Do NOT delete this entry to silence that warning. Read the tag with
+    // `headscale nodes list` and correct it. The procedure is "Repair a host
+    // that is registered under the wrong tag" in
+    // docs/runbooks/tailnet-control-plane-access.md -- a control-plane
+    // retag, NOT a host step, because a plain `tailscale up` on a registered
+    // host does not re-apply the tags of a new preauth key.
+    {
+      "src": "ben@",
+      "accept": [
+        "tag:ts-node:22",       // SSH to node3's own tailnet address (#3579)
+      ],
+      "deny": [
+        "tag:ts-node:2222",     // the #3579 grant is tcp:22 ONLY -- a widened grant fails here
       ],
     },
     // The assertions above set no "proto", so headscale applies the client
