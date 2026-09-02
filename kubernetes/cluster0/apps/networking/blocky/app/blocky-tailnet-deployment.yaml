@@ -1,0 +1,277 @@
+---
+# =============================================================================
+# blocky-tailnet
+#
+# A second blocky instance exposed to the headscale tailnet as its own node
+# (tag:ts-dns), answering PLAIN DNS on UDP/TCP 53 at its own tailnet address.
+# Issue #3576. The consumer is headscale's DNS push: headscale hands a tailnet
+# client one resolver address, and the client sends every query there.
+#
+# Why a sidecar and not another tailscale-proxy-* pod:
+#   The proxy pattern is `tailscale serve` / ipn.ServeConfig, which is
+#   TCP-only. It has no UDP forward primitive. A pushed resolver is queried
+#   UDP-first -- tailscale races UDP then TCP in
+#   net/dns/resolver/forwarder.go -- so no serve-based userspace proxy can
+#   carry DNS. Inbound UDP for an application requires tailscaled in kernel
+#   networking mode.
+#
+# Why plain DNS and not DNS-over-TLS:
+#   A pushed tailnet resolver cannot speak DoT. tailscale v1.102.3 rejects a
+#   `tls://` entry in the pushed nameserver list with "tls:// resolvers not
+#   supported yet" and has no fallback path. The WireGuard tunnel already
+#   encrypts every query, so DoT inside it protects nothing extra.
+#
+# This pod terminates; it does not forward:
+#   tailscaled hands the decrypted query to a socket in this pod's own
+#   network namespace, and the blocky container beside it answers. Nothing is
+#   routed to a ClusterIP, so the Cilium socket-LB translation failure that
+#   retired the in-cluster subnet router (#3377 / #3379) cannot arise. There
+#   is no --advertise-routes and no TS_ROUTES, so this pod forwards no
+#   packets, needs no ip_forward sysctl, and needs no privileged init
+#   container.
+#
+# SECURITY POSTURE -- A DELIBERATE, BOUNDED EXCEPTION. READ BEFORE COPYING.
+#   Every other tailscale node in this repository runs TS_USERSPACE=true and
+#   carries the header line "No hostNetwork, no NET_ADMIN, no /dev/net/tun:
+#   ... The security posture is therefore materially better than the router."
+#   This pod gives that up. It is the single exception, and it is a decision,
+#   not an oversight: userspace mode cannot accept inbound UDP on behalf of an
+#   application, and that is a hard limit of `tailscale serve` rather than a
+#   configuration gap.
+#
+#   The exception is held to the minimum that makes tun mode work:
+#     - NET_ADMIN added, every other capability dropped. No NET_RAW.
+#     - allowPrivilegeEscalation: false.
+#     - No privileged: true, no hostNetwork, no hostPID, no sysctls.
+#     - One hostPath, the /dev/net/tun character device, nothing else.
+#   The pod therefore keeps an ordinary pod endpoint identity, so the rules in
+#   blocky-tailnet-network-policy.yaml are enforced against it. The retired
+#   subnet router was hostNetwork and had no such identity.
+#
+#   If tailscaled fails to program netfilter, do NOT add NET_RAW to widen this
+#   exception. tailscale defaults to the iptables backend, and the legacy
+#   iptables binary opens an AF_INET SOCK_RAW socket, which needs CAP_NET_RAW.
+#   Set TS_DEBUG_FIREWALL_MODE=nftables instead: the nftables backend talks
+#   netlink and needs only CAP_NET_ADMIN. This pod programs no rules of its
+#   own -- it neither forwards nor SNATs -- so the backend choice only has to
+#   succeed, not do work.
+#
+# Tag from the preauth key, NOT --advertise-tags:
+#   headscale 0.28+ hard-rejects registration when a PreAuthKey-authenticated
+#   node also passes --advertise-tags (#3370). The key in
+#   blocky-tailnet-secret.sops.yaml MUST be minted with
+#   `headscale preauthkeys create --user homeops@ --tags tag:ts-dns
+#   --reusable`. Do not set --advertise-tags in TS_EXTRA_ARGS.
+#
+# One blocklist source of truth:
+#   The blocky container mounts the SAME blocky-config ConfigMap as the
+#   two-replica LAN deployment. Do not fork it. A tailnet client and a LAN
+#   client must see the same denylists, the same allowlists, and the same
+#   upstreams.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blocky-tailnet
+  namespace: networking
+  annotations:
+    # Without this, the "one source of truth" property above holds only until
+    # the first edit. blocky-config is a fixed-name ConfigMap, so editing
+    # config.yml does not change this PodSpec and nothing rolls the pod; the
+    # reloader chart default autoReloadAll is false and is not overridden, so
+    # the roll has to be opted into per workload. The LAN release carries the
+    # same annotation. Drop it here and a denylist, customDNS or upstream edit
+    # rolls the LAN pair while this pod keeps serving the old config from
+    # memory -- silent divergence between a tailnet client and a LAN client,
+    # which is the exact failure this deployment exists to avoid.
+    #
+    # It also rolls the pod when cert-manager rewrites the wildcard Secret,
+    # which this pod needs for the same reason the LAN pair does: blocky reads
+    # the key pair once, at startup.
+    #
+    # The cost is a short DNS gap for tailnet clients on every config edit,
+    # because this is one replica with strategy: Recreate. That is accepted.
+    # The gap is the single-replica exposure #3556 already tracks for this
+    # node class, and it is bounded; silent divergence is not.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    # Recreate rather than RollingUpdate: two pods would register the same
+    # tailnet hostname and collide on one tailnet identity. Single-replica
+    # tailnet exposure is tracked in #3556. Do not "fix" the gap on redeploy
+    # by raising replicas -- the identity collision is the real constraint.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: blocky-tailnet
+    spec:
+      serviceAccountName: blocky-tailnet
+      securityContext:
+        # Required for the wildcard-tls mount below, not cosmetic. The blocky
+        # image runs as UID 100 with no group, and Kubernetes writes a secret
+        # volume root:root unless fsGroup is set. Without this, UID 100 cannot
+        # read the key, tls.LoadX509KeyPair fails, and blocky exits.
+        #
+        # fsGroup does not touch the /dev/net/tun hostPath: the hostPath
+        # volume plugin reports its mount as unmanaged, so Kubernetes applies
+        # no ownership change to the host device node.
+        fsGroup: 100
+      containers:
+        - name: blocky
+          image: ghcr.io/0xerr0r/blocky:v0.34.0@sha256:595136fb127f4c952b621113e668c09acdcf15ac054d96ee6d4c51a76c35f5fd
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add:
+                # UID 100 binds :53, a privileged port.
+                - NET_BIND_SERVICE
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yml
+              subPath: config.yml
+              readOnly: true
+            # The shared config sets ports.tls, so blocky calls newTLSConfig
+            # at startup and a failed tls.LoadX509KeyPair is FATAL -- blocky
+            # exits rather than serving plaintext only. This instance answers
+            # no DoT traffic, but it must still be able to load the key pair
+            # to start at all. Read the fsGroup comment above before changing
+            # defaultMode; 0400 does NOT work.
+            - name: wildcard-tls
+              mountPath: /etc/ssl/wildcard
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 53
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            # Unauthenticated HTTP endpoint that is 200 as soon as blocky is
+            # serving, independent of blocklist loading, which runs in the
+            # background under blocking.loading.strategy: fast.
+            httpGet:
+              path: /metrics
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Same requests as the LAN blocky, and no memory limit for the same
+          # reason: the two instances load identical blocklists, so a limit
+          # here that the LAN instance does not have would OOMKill the tailnet
+          # resolver on a working-set the LAN pair survives.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 200Mi
+        - name: tailscale
+          image: ghcr.io/tailscale/tailscale:v1.102.3@sha256:8c42c4574ab066384fcb72f69e086a2ff1dd3652eb6f56856cee34bcf0d2f680
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Read the SECURITY POSTURE block in the file header before you
+            # widen this. NET_ADMIN is the whole exception: tailscaled needs
+            # it to create the tun interface and to open the netlink sockets
+            # that configure it.
+            capabilities:
+              add: [NET_ADMIN]
+              drop: [ALL]
+            allowPrivilegeEscalation: false
+          env:
+            # Persist tailnet node state (machine key, node key, allocated
+            # tailnet address) into this Secret. The Role in
+            # blocky-tailnet-rbac.yaml pins get/update/patch to exactly this
+            # name. Reuse across pod lifecycles is what keeps the tailnet
+            # address stable, and headscale's pushed nameserver list names
+            # that address, so losing it silently breaks every client.
+            - name: TS_KUBE_SECRET
+              value: blocky-tailnet-state
+            # Kernel networking mode. This is the reason the pod exists: the
+            # userspace netstack terminates TCP only, so it can never deliver
+            # an inbound UDP DNS query to blocky.
+            - name: TS_USERSPACE
+              value: "false"
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: blocky-tailnet-auth
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              # No --advertise-tags: the tag rides on the preauth key (see
+              # file header). The hostname becomes the MagicDNS label
+              # blocky-tailnet.tailnet.internal.
+              value: >-
+                --login-server=https://hs.${SECRET_PUBLIC_DOMAIN}
+                --hostname=blocky-tailnet
+            # Load-bearing, not boilerplate. The existing proxies set this so
+            # they do not resolve their forward target through the path they
+            # serve. Here it is more direct: this pod IS a resolver that
+            # headscale hands to tailnet clients. The pushed nameserver list
+            # is a global headscale setting that this pod does not control, so
+            # accepting it would let blocky resolve blocky-valkey and its
+            # blocklist sources through itself. A cold start then deadlocks --
+            # blocky cannot answer until its own lookups resolve, and its
+            # lookups cannot resolve until it answers. The pod keeps dnsPolicy
+            # ClusterFirst and reaches CoreDNS instead.
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            # No TS_SERVE_CONFIG and no serve.json ConfigMap. In tun mode
+            # tailscaled delivers inbound traffic straight into this pod's
+            # network namespace, where blocky is already listening on
+            # 0.0.0.0:53. There is no serve handler to configure.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+            # tailscaled needs a writable state area even with TS_KUBE_SECRET
+            # (localapi socket, scratch). Backed by memory rather than the
+            # container filesystem so it survives a readOnlyRootFilesystem
+            # tightening if we ever add one.
+            - name: tailscale-run
+              mountPath: /var/run/tailscale
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        # The SAME ConfigMap the two-replica LAN blocky mounts. One source of
+        # truth for blocklists and upstreams.
+        - name: config
+          configMap:
+            name: blocky-config
+        - name: wildcard-tls
+          secret:
+            secretName: ${SECRET_PUBLIC_DOMAIN/./-}-tls
+            # Group-readable only. Read the fsGroup comment on the pod
+            # securityContext above before changing this.
+            defaultMode: 0440
+        # tailscaled with TS_USERSPACE=false opens /dev/net/tun to create the
+        # tun interface. Kubelet does not expose the device to an
+        # unprivileged container, so it has to be mounted explicitly.
+        # type: CharDevice makes kubelet refuse to start the pod if the host
+        # path is anything other than a character device, rather than
+        # silently creating a directory there.
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: tailscale-run
+          emptyDir:
+            medium: Memory

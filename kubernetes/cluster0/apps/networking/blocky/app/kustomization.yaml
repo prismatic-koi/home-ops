@@ -5,3 +5,16 @@ resources:
   - helm-release.yaml
   - config.yaml
   - probe.yaml
+  # blocky-tailnet (#3576): a second blocky instance with a tun-mode tailscale
+  # sidecar, exposed to the tailnet as tag:ts-dns on plain UDP/TCP 53. It
+  # lives here rather than beside the tailscale proxies because it mounts the
+  # blocky-config ConfigMap generated above, and that ConfigMap must stay a
+  # single source of truth for blocklists and upstreams.
+  - blocky-tailnet-rbac.yaml
+  # Preauth-key Secret, SOPS-encrypted, holding the reusable key minted with
+  # `--tags tag:ts-dns`. The tag rides on the key, NOT on --advertise-tags:
+  # headscale 0.28+ rejects a registration that uses a preauth key and also
+  # advertises tags (#3370).
+  - blocky-tailnet-secret.sops.yaml
+  - blocky-tailnet-deployment.yaml
+  - blocky-tailnet-network-policy.yaml

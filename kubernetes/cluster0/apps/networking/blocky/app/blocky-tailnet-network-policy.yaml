@@ -1,0 +1,211 @@
+---
+# =============================================================================
+# blocky-tailnet NetworkPolicies
+#
+# The pod runs with an ordinary pod endpoint identity -- no hostNetwork -- so
+# these rules ARE enforced at runtime even though tailscaled runs in tun mode.
+# Templated off tailscale-proxy-blocky-network-policy.yaml, with the extra
+# egress the blocky container needs. Issue #3576.
+#
+# Egress needed:
+#   - DNS to CoreDNS (kube-system): resolve hs.${SECRET_PUBLIC_DOMAIN} and
+#     the blocky-valkey Service name
+#   - HTTPS to internet: headscale control plane, DERP relay fallback, and
+#     the blocklist / allowlist downloads
+#   - TCP :853 to internet: blocky's bootstrapDns and its upstream DoT
+#     resolvers
+#   - UDP high-ports to internet: direct WireGuard + STUN
+#   - TCP :6379 to networking/blocky-valkey: the shared cache, which the
+#     config declares as required
+#   - kube-apiserver: read/write the node-state Secret (TS_KUBE_SECRET)
+#
+# The tun device carries no policed traffic. Cilium enforces policy on the
+# pod's veth; a query that tailscaled decrypts and injects into tailscale0 is
+# delivered to blocky inside this netns and never crosses the veth.
+#
+# No ingress rule is needed. Tailnet peers reach this node through WireGuard
+# or DERP, which arrive as replies to sessions tailscaled itself established,
+# and conntrack allows those. Kubelet probes come from the node, which Cilium
+# permits to reach a local endpoint. The same shape runs today on
+# monitoring/prometheus, which has readiness probes behind a default-deny.
+#
+# DELIBERATELY ABSENT: any rule that selects the LAN blocky pods.
+#
+#   Every podSelector below names app.kubernetes.io/name: blocky-tailnet. The
+#   two-replica LAN deployment is labelled app.kubernetes.io/name: blocky and
+#   has no NetworkPolicy at all, so it is not isolated. Creating ANY policy
+#   with policyTypes: [Ingress] that selects the blocky pods would flip them
+#   from "not isolated" to "isolated for ingress", and every source not named
+#   in that policy would then be denied -- including the entire LAN on :53 via
+#   the blocky-dns LoadBalancer. That takes household DNS down.
+#
+#   If blocky ever does get its own default-deny, the LAN :53 rules must land
+#   in the SAME change.
+# =============================================================================
+---
+# Default deny-all. All egress must be explicitly permitted below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blocky-tailnet-default-deny
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  policyTypes: [Ingress, Egress]
+---
+# DNS resolution to cluster CoreDNS. Needed for hs.${SECRET_PUBLIC_DOMAIN}
+# (control plane) and the blocky-valkey Service name. This is cluster DNS, not
+# the blocky container in this same pod: the pod keeps dnsPolicy ClusterFirst
+# and TS_ACCEPT_DNS=false precisely so it does not depend on the path it
+# serves.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blocky-tailnet-allow-dns
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Internet egress on :443/TCP — the headscale control endpoint at
+# hs.${SECRET_PUBLIC_DOMAIN}, Tailscale's public DERP relay pool (DERP falls
+# back to :443/TCP when direct WireGuard fails), and the blocklist and
+# allowlist sources blocky downloads. Private ranges are excluded so the pod
+# cannot reach the internal network on :443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blocky-tailnet-allow-internet-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Upstream DNS on :853/TCP. blocky reaches its bootstrap resolvers by IP
+# literal and its upstream groups by name, and every one of them is DoT, so
+# :853 is the only port that carries a real query out of this pod. Private
+# ranges excluded: the upstreams are public.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blocky-tailnet-allow-upstream-dns-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 853
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# Direct WireGuard + STUN (UDP). tailscaled binds a random UDP port and
+# sends/receives WireGuard datagrams peer-to-peer when a direct path is
+# available. STUN on UDP 3478 for NAT discovery. Full high-port UDP range to
+# any public IP; private ranges excluded.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blocky-tailnet-allow-wireguard-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - protocol: UDP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+# The shared valkey cache. The blocky config sets redis.required: true, so
+# blocky does not start without it. Under Cilium socket-LB the connect() to
+# the blocky-valkey ClusterIP is DNAT'd to a valkey PodIP before egress policy
+# evaluation, so this podSelector rule matches the translated target.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blocky-tailnet-allow-valkey-egress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 6379
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: networking
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: blocky-valkey
+---
+# tailscaled runs in Kubernetes state-store mode (TS_KUBE_SECRET) and must
+# reach the kube-apiserver to read/write its node-state Secret. Expressed via
+# the Cilium `kube-apiserver` entity rather than an ipBlock: with
+# kubeProxyReplacement=true the apiserver has an entity identity, not a pod
+# identity, and an ipBlock rule is silently bypassed. The port is
+# intentionally unrestricted, because Cilium socket-LB translates the
+# ClusterIP (10.43.0.1:443) to the host apiserver backend port before egress
+# policy evaluation, so a :443-only toPorts rule would deny the translated
+# traffic. See #2829 / #2947 and the AGENTS.md kube-apiserver guidance.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: blocky-tailnet-allow-kube-apiserver-egress
+  namespace: networking
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: blocky-tailnet
+  egress:
+    - toEntities:
+        - kube-apiserver

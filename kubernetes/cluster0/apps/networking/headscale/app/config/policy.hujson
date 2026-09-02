@@ -22,6 +22,14 @@
     // tailnet :853 to the in-cluster blocky resolver, which terminates DoT
     // on the *.<domain> wildcard cert. Consumer is Android Private DNS.
     "tag:ts-blocky":         ["homeops@"],
+    // Tailnet DNS resolver (issue #3576). Same rationale as the per-service
+    // proxies above: cluster-managed workload, no human owner fits, so
+    // homeops@ owns the machine identity. The node is a blocky instance with
+    // a tun-mode tailscale sidecar, so it answers plain DNS on its own
+    // tailnet address. A resolver that headscale pushes to a client must be
+    // plain and must accept UDP, and neither is possible through the
+    // userspace `tailscale serve` proxy pattern the tags above use.
+    "tag:ts-dns":            ["homeops@"],
     // k3s control-plane hosts node0/1/2 (issue #3477). Unlike every tag
     // above, these are NOT pods: tailscaled runs on the bare-metal Ubuntu
     // hosts. An in-cluster proxy would be a circular dependency, because
@@ -133,6 +141,18 @@
       "dst": ["tag:ts-blocky"],
       "ip":  ["tcp:853"],
     },
+    // Tailnet DNS resolver (issue #3576). ONLY udp:53 and tcp:53. headscale
+    // pushes this node's tailnet address to ben@ devices as their resolver.
+    // A client queries a pushed resolver UDP-first and falls back to TCP, so
+    // both entries are needed and nothing else is.
+    //
+    // No tcp:853: this path is plain DNS inside the WireGuard tunnel, which
+    // already encrypts every query. No tcp:22. The tests block asserts that.
+    {
+      "src": ["ben@"],
+      "dst": ["tag:ts-dns"],
+      "ip":  ["udp:53", "tcp:53"],
+    },
     // MPD (Music Player Daemon) control/streaming port 6600. Scoped to ben@
     // devices only; enables device-to-device music access (e.g. navi <-> bens-s25).
     // TCP only, no UDP. Does not widen any other access.
@@ -221,12 +241,12 @@
   //      nodes exist, so these assertions pass from the moment this merges
   //      and keep passing after the hosts join.
   //
-  // The #3564 tag:ts-blocky assertions DO name a tag, and they are the one
-  // documented exception to the paragraph above. Read this before you "fix"
-  // them to an IP literal or delete them.
+  // The tag:ts-blocky (#3564) and tag:ts-dns (#3576) assertions DO name a
+  // tag, and they are the documented exception to the paragraph above. Read
+  // this before you "fix" them to an IP literal or delete them.
   //
-  // They resolve to no IP addresses until the tailscale-proxy-blocky pod
-  // registers, so between merge and first registration all four error with
+  // Each resolves to no IP addresses until the pod behind its tag registers,
+  // so between merge and first registration those assertions error with
   // "destination resolved to no IP addresses" and mark their test failed.
   // That is tolerable here, where a tag:ts-cp assertion was not, because of
   // WHICH code path evaluates them. headscale v0.29.3 has two, and they
@@ -244,10 +264,10 @@
   // So this file lands via the warn-and-continue path: the grant goes live,
   // the proxy registers, the tag resolves, and every assertion passes from
   // the next boot onward. There is no chicken-and-egg deadlock. What there
-  // IS, until first registration, is a boot warning naming these four
+  // IS, until first registration, is a boot warning naming those
   // destinations -- the same misleading-log failure mode as #3370 / #3398.
-  // If you are debugging a tailnet problem and see it, check whether
-  // ts-blocky has registered before you treat it as the cause.
+  // If you are debugging a tailnet problem and see it, check whether the pod
+  // behind the named tag has registered before you treat it as the cause.
   //
   // Do NOT run `headscale policy reload` (SIGHUP) while the tag has no
   // registered node: that path rejects the write.
@@ -260,6 +280,7 @@
         "tag:ts-web:443",       // tailnet-only web UI proxy (#3466)
         "tag:ts-web:80",        // HTTP->HTTPS redirect entrypoint (#3471)
         "tag:ts-blocky:853",    // DoT to blocky for Android Private DNS (#3564)
+        "tag:ts-dns:53",        // plain DNS to the pushed tailnet resolver (#3576)
         "10.87.42.2:6443",      // k8s control plane via the tag:ts-cp subnet route (#3477)
       ],
       "deny": [
@@ -268,7 +289,37 @@
         "tag:ts-web:9090",      // ben@ reaches ts-web ONLY on tcp:443, not the backend port
         "tag:ts-blocky:22",     // no SSH on the blocky proxy
         "tag:ts-blocky:53",     // the #3564 grant is DoT (853) ONLY -- not plaintext DNS
+        "tag:ts-dns:22",        // the #3576 grant is :53 ONLY -- no SSH on the resolver node
         "10.87.42.2:22",        // the #3477 grant is tcp:6443 ONLY -- it must not open SSH on the VIP
+      ],
+    },
+    // The assertions above set no "proto", so headscale applies the client
+    // default set {TCP, UDP, ICMP, ICMPv6} and a rule matching ANY member
+    // satisfies them -- srcReachesDst in hscontrol/policy/v2/test.go. A grant
+    // of tcp:53 alone would therefore keep "tag:ts-dns:53" green while the
+    // half that carries the traffic was missing, because a client queries a
+    // pushed resolver UDP-first and falls back to TCP. So one entry per
+    // protocol below, each pinning its own half of the grant and the port on
+    // that half. Drop either protocol from the grant and the matching entry
+    // fails; the untyped assertions above would not notice.
+    {
+      "src":   "ben@",
+      "proto": "udp",
+      "accept": [
+        "tag:ts-dns:53",      // the #3576 grant must carry udp:53 (#3576 queries are UDP-first)
+      ],
+      "deny": [
+        "tag:ts-dns:853",     // the #3576 grant is :53 ONLY on this protocol
+      ],
+    },
+    {
+      "src":   "ben@",
+      "proto": "tcp",
+      "accept": [
+        "tag:ts-dns:53",      // the #3576 grant must carry tcp:53 (truncated-response fallback)
+      ],
+      "deny": [
+        "tag:ts-dns:853",     // the #3576 grant is :53 ONLY on this protocol
       ],
     },
     {
@@ -278,6 +329,7 @@
         "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
         "tag:ts-web:443",             // ts-web is granted to ben@ only, not to tag:ts-prometheus
         "tag:ts-blocky:853",          // ts-blocky is granted to ben@ only, not to tag:ts-prometheus (#3564)
+        "tag:ts-dns:53",              // ts-dns is granted to ben@ only, not to tag:ts-prometheus (#3576)
         "10.87.42.2:6443",            // control-plane VIP is granted to ben@ only (#3477)
       ],
     },
