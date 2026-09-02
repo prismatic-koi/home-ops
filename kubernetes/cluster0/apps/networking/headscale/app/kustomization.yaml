@@ -37,19 +37,6 @@ resources:
   - ./tailscale-proxy-ts-web-secret.sops.yaml
   - ./tailscale-proxy-ts-web-deployment.yaml
   - ./tailscale-proxy-ts-web-network-policy.yaml
-  # DNS-over-TLS proxy for blocky (#3564). Tailnet-only: TCPForwards :853 to
-  # the in-cluster blocky-dot Service, and blocky terminates DoT on the
-  # existing *.<domain> wildcard cert. Its consumer is Android Private DNS,
-  # which takes one hostname and uses DoT everywhere -- so it needs an L4
-  # pipe, not ts-web (which exists to hand HTTPS to traefik).
-  - ./tailscale-proxy-blocky-rbac.yaml
-  # Preauth-key Secret, SOPS-encrypted, holding the real reusable key minted
-  # with `--tags tag:ts-blocky`. The tag rides on the key, NOT on
-  # --advertise-tags: headscale 0.28+ rejects a registration that uses a
-  # preauth key and also advertises tags (#3370).
-  - ./tailscale-proxy-blocky-secret.sops.yaml
-  - ./tailscale-proxy-blocky-deployment.yaml
-  - ./tailscale-proxy-blocky-network-policy.yaml
 labels:
   - pairs:
       app.kubernetes.io/name: headscale

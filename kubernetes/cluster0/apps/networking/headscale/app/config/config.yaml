@@ -30,11 +30,28 @@ prefixes:
 dns:
   magic_dns: true
   base_domain: tailnet.internal
-  override_local_dns: false
+  # true so headscale pushes the global nameserver below to every client that
+  # accepts DNS, and that client resolves through it instead of its local DHCP
+  # resolver (#3576). This reaches ONLY ben@ personal devices: all five
+  # tailscale-proxy pods set TS_ACCEPT_DNS=false and node0/1/2 run
+  # --accept-dns=false (verified live), so no infrastructure inherits blocky.
+  override_local_dns: true
   nameservers:
     global:
-      - 1.1.1.1
-      - 8.8.8.8
+      # EXACTLY ONE entry, by design (#3576). This is the blocky-tailnet node's
+      # own tailnet address (tag:ts-dns), a plain UDP/TCP resolver that runs
+      # the same blocklists as the LAN blocky.
+      #
+      # Do NOT add a public fallback here. tailscale (v1.102.3) races every
+      # plain-IP entry in parallel: resolversWithDelays() assigns startDelay 0
+      # to each one and forwardWithDestChan() returns the first response. A
+      # public resolver would win nearly every race and silently defeat ad
+      # blocking while still looking configured.
+      #
+      # Accepted failure mode: if blocky-tailnet is unreachable while tailscale
+      # is up, there is no DNS fallback. Recovery is to toggle tailscale off on
+      # the affected device, which restores its DHCP resolver.
+      - 100.64.0.14
     split:
       # =====================================================================
       # THE SINGLE MOST DANGEROUS LINE IN THE #3466 PILOT. DO NOT WIDEN IT.
@@ -64,17 +81,6 @@ dns:
       # OS match-domain list from Routes only, never from Hosts, so a pinned
       # name with no route is never sent to the tailscale resolver at all.
       search.${SECRET_PUBLIC_DOMAIN}: []
-      # blocky DoT (#3564), for Android Private DNS. Leaf-scoped, and the
-      # block above is why: this key captures dns.<domain> and nothing beside
-      # it, because dnsname.FQDN.Contains returns true on equality as well as
-      # on a dot-boundary suffix.
-      #
-      # This entry and the dns.<domain> pin in extra_records are a PAIR.
-      # Remove either and DoT resolution breaks: drop the pin and this entry
-      # NXDOMAINs the DoT endpoint for every tailnet device; drop this entry
-      # and the pin goes inert because the client builds its OS match-domain
-      # list from Routes only, never from Hosts.
-      dns.${SECRET_PUBLIC_DOMAIN}: []
   extra_records:
     # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
     # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
@@ -109,15 +115,6 @@ dns:
     - name: "search.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
-    # blocky DoT (#3564). ts-blocky's OWN registered tailnet IP -- not
-    # ts-web's. Different consumer (Android Private DNS speaking DoT, not a
-    # web UI) and a different proxy (tailscale-proxy-blocky, tag:ts-blocky),
-    # so this does not share the ts-web pin above. A-only for the reason
-    # recorded on the pilot pin. Paired with the dns.<domain> split entry --
-    # read the note there before you remove either.
-    - name: "dns.${SECRET_PUBLIC_DOMAIN}"
-      type: "A"
-      value: "100.64.0.13"
 
 policy:
   mode: file

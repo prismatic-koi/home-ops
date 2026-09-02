@@ -16,12 +16,6 @@
     // fits, so homeops@ owns the machine identity. One ts-web node fronts
     // every *.ts.<domain> web UI (prometheus first; Hubble/Longhorn later).
     "tag:ts-web":            ["homeops@"],
-    // DNS-over-TLS proxy for blocky (issue #3564). Same rationale as the
-    // per-service proxies above: cluster-managed workload, no human owner
-    // fits, so homeops@ owns the machine identity. The proxy TCPForwards
-    // tailnet :853 to the in-cluster blocky resolver, which terminates DoT
-    // on the *.<domain> wildcard cert. Consumer is Android Private DNS.
-    "tag:ts-blocky":         ["homeops@"],
     // Tailnet DNS resolver (issue #3576). Same rationale as the per-service
     // proxies above: cluster-managed workload, no human owner fits, so
     // homeops@ owns the machine identity. The node is a blocky instance with
@@ -128,19 +122,6 @@
       "dst": ["tag:ts-web"],
       "ip":  ["tcp:80", "tcp:443"],
     },
-    // DNS-over-TLS to blocky (issue #3564). ONLY tcp:853. The consumer is
-    // Android Private DNS, which points at one hostname and speaks DoT for
-    // every query on every network the device joins, so ben@ devices are the
-    // only source that needs this.
-    //
-    // No tcp:53 and no udp:53: plaintext DNS over the tailnet is not the
-    // point of this path, and the LAN already has its own plaintext route to
-    // the same resolver. No tcp:22. The tests block asserts all of that.
-    {
-      "src": ["ben@"],
-      "dst": ["tag:ts-blocky"],
-      "ip":  ["tcp:853"],
-    },
     // Tailnet DNS resolver (issue #3576). ONLY udp:53 and tcp:53. headscale
     // pushes this node's tailnet address to ben@ devices as their resolver.
     // A client queries a pushed resolver UDP-first and falls back to TCP, so
@@ -241,11 +222,11 @@
   //      nodes exist, so these assertions pass from the moment this merges
   //      and keep passing after the hosts join.
   //
-  // The tag:ts-blocky (#3564) and tag:ts-dns (#3576) assertions DO name a
-  // tag, and they are the documented exception to the paragraph above. Read
-  // this before you "fix" them to an IP literal or delete them.
+  // The tag:ts-dns (#3576) assertions DO name a tag, and they are the
+  // documented exception to the paragraph above. Read this before you "fix"
+  // them to an IP literal or delete them.
   //
-  // Each resolves to no IP addresses until the pod behind its tag registers,
+  // The tag resolves to no IP addresses until the pod behind it registers,
   // so between merge and first registration those assertions error with
   // "destination resolved to no IP addresses" and mark their test failed.
   // That is tolerable here, where a tag:ts-cp assertion was not, because of
@@ -279,7 +260,6 @@
         "tag:ts-loki:3100",
         "tag:ts-web:443",       // tailnet-only web UI proxy (#3466)
         "tag:ts-web:80",        // HTTP->HTTPS redirect entrypoint (#3471)
-        "tag:ts-blocky:853",    // DoT to blocky for Android Private DNS (#3564)
         "tag:ts-dns:53",        // plain DNS to the pushed tailnet resolver (#3576)
         "10.87.42.2:6443",      // k8s control plane via the tag:ts-cp subnet route (#3477)
       ],
@@ -287,8 +267,6 @@
         "tag:ts-prometheus:22", // no SSH on the prometheus proxy
         "tag:ts-loki:22",       // no SSH on the loki proxy
         "tag:ts-web:9090",      // ben@ reaches ts-web ONLY on tcp:443, not the backend port
-        "tag:ts-blocky:22",     // no SSH on the blocky proxy
-        "tag:ts-blocky:53",     // the #3564 grant is DoT (853) ONLY -- not plaintext DNS
         "tag:ts-dns:22",        // the #3576 grant is :53 ONLY -- no SSH on the resolver node
         "10.87.42.2:22",        // the #3477 grant is tcp:6443 ONLY -- it must not open SSH on the VIP
       ],
@@ -328,7 +306,6 @@
         "tag:ts-loki:3100",           // no cross-tag: loki port from prom node
         "tag:ts-metrics-ingest:9090", // ts-metrics-ingest is not granted to tag:ts-prometheus
         "tag:ts-web:443",             // ts-web is granted to ben@ only, not to tag:ts-prometheus
-        "tag:ts-blocky:853",          // ts-blocky is granted to ben@ only, not to tag:ts-prometheus (#3564)
         "tag:ts-dns:53",              // ts-dns is granted to ben@ only, not to tag:ts-prometheus (#3576)
         "10.87.42.2:6443",            // control-plane VIP is granted to ben@ only (#3477)
       ],

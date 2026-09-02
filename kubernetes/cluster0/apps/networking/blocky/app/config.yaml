@@ -6,34 +6,9 @@ metadata:
 data:
   config.yml: |-
     ---
-    # DNS-over-TLS terminates HERE, not on the tailscale proxy (#3564).
-    # tailscale-proxy-blocky is an L4 TCPForward, so the DoT session runs end
-    # to end from the client to this process; blocky presents the wildcard
-    # cert below. The intended consumer is Android Private DNS, which points
-    # at one hostname and speaks DoT on every network the device joins.
-    #
-    # The :853 listener is tailnet-only, NOT LAN-exposed. It is fronted by the
-    # blocky-dot ClusterIP Service (no LB frontend, no announced LAN IP);
-    # tailscale-proxy-blocky dials blocky-dot.networking.svc.cluster.local:853
-    # and Cilium socket-LB translates it to a blocky PodIP. The blocky-dns
-    # LoadBalancer carries plaintext :53 only. The tailnet ACL scopes
-    # tag:ts-blocky to tcp:853 alone. This satisfies the #3564 Goal ("Not
-    # LAN-exposed on 853").
-    #
-    # certFile / keyFile are TOP-LEVEL keys in blocky's config, not children
-    # of `ports`. They are read once at startup: NewServer calls
-    # newTLSConfig whenever ports.tls is set, and tls.LoadX509KeyPair failing
-    # is FATAL -- blocky exits rather than degrading. An unreadable cert
-    # therefore takes LAN DNS down, not just DoT. See the mount comment in
-    # helm-release.yaml for why the file mode and fsGroup there are
-    # load-bearing.
     ports:
       dns: 0.0.0.0:53
-      tls: 0.0.0.0:853
       http: 0.0.0.0:4000
-
-    certFile: /etc/ssl/wildcard/tls.crt
-    keyFile: /etc/ssl/wildcard/tls.key
 
     log:
       level: info
