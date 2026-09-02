@@ -33,8 +33,10 @@ dns:
   # true so headscale pushes the global nameserver below to every client that
   # accepts DNS, and that client resolves through it instead of its local DHCP
   # resolver (#3576). This reaches ONLY ben@ personal devices: all five
-  # tailscale-proxy pods set TS_ACCEPT_DNS=false and node0/1/2 run
-  # --accept-dns=false (verified live), so no infrastructure inherits blocky.
+  # tailscale-proxy pods set TS_ACCEPT_DNS=false, and node0/1/2 run
+  # --accept-dns=false (verified live). node3 joins the tailnet with the same
+  # flag (#3579) -- docs/runbooks/tailnet-control-plane-access.md records the
+  # invocation. So no infrastructure inherits blocky.
   override_local_dns: true
   nameservers:
     global:
