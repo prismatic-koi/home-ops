@@ -85,10 +85,6 @@ metadata:
     # memory -- silent divergence between a tailnet client and a LAN client,
     # which is the exact failure this deployment exists to avoid.
     #
-    # It also rolls the pod when cert-manager rewrites the wildcard Secret,
-    # which this pod needs for the same reason the LAN pair does: blocky reads
-    # the key pair once, at startup.
-    #
     # The cost is a short DNS gap for tailnet clients on every config edit,
     # because this is one replica with strategy: Recreate. That is accepted.
     # The gap is the single-replica exposure #3556 already tracks for this
@@ -111,16 +107,6 @@ spec:
         app.kubernetes.io/name: blocky-tailnet
     spec:
       serviceAccountName: blocky-tailnet
-      securityContext:
-        # Required for the wildcard-tls mount below, not cosmetic. The blocky
-        # image runs as UID 100 with no group, and Kubernetes writes a secret
-        # volume root:root unless fsGroup is set. Without this, UID 100 cannot
-        # read the key, tls.LoadX509KeyPair fails, and blocky exits.
-        #
-        # fsGroup does not touch the /dev/net/tun hostPath: the hostPath
-        # volume plugin reports its mount as unmanaged, so Kubernetes applies
-        # no ownership change to the host device node.
-        fsGroup: 100
       containers:
         - name: blocky
           image: ghcr.io/0xerr0r/blocky:v0.34.0@sha256:595136fb127f4c952b621113e668c09acdcf15ac054d96ee6d4c51a76c35f5fd
@@ -138,15 +124,6 @@ spec:
             - name: config
               mountPath: /app/config.yml
               subPath: config.yml
-              readOnly: true
-            # The shared config sets ports.tls, so blocky calls newTLSConfig
-            # at startup and a failed tls.LoadX509KeyPair is FATAL -- blocky
-            # exits rather than serving plaintext only. This instance answers
-            # no DoT traffic, but it must still be able to load the key pair
-            # to start at all. Read the fsGroup comment above before changing
-            # defaultMode; 0400 does NOT work.
-            - name: wildcard-tls
-              mountPath: /etc/ssl/wildcard
               readOnly: true
           livenessProbe:
             tcpSocket:
@@ -199,6 +176,14 @@ spec:
             # an inbound UDP DNS query to blocky.
             - name: TS_USERSPACE
               value: "false"
+            # nftables backend, not the legacy iptables binary. Read the
+            # SECURITY POSTURE block in the file header: the legacy iptables
+            # binary needs CAP_NET_RAW, which this pod does not grant, so it
+            # fails to program netfilter and tailscaled reports a degraded
+            # router. The nftables backend talks netlink and needs only
+            # CAP_NET_ADMIN. Do NOT add NET_RAW to make the legacy backend work.
+            - name: TS_DEBUG_FIREWALL_MODE
+              value: nftables
             - name: TS_AUTHKEY
               valueFrom:
                 secretKeyRef:
@@ -256,12 +241,6 @@ spec:
         - name: config
           configMap:
             name: blocky-config
-        - name: wildcard-tls
-          secret:
-            secretName: ${SECRET_PUBLIC_DOMAIN/./-}-tls
-            # Group-readable only. Read the fsGroup comment on the pod
-            # securityContext above before changing this.
-            defaultMode: 0440
         # tailscaled with TS_USERSPACE=false opens /dev/net/tun to create the
         # tun interface. Kubelet does not expose the device to an
         # unprivileged container, so it has to be mounted explicitly.
