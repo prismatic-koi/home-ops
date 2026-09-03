@@ -3,7 +3,8 @@
 ## Purpose
 
 The four k3s hosts join the headscale tailnet. This gives an operator two paths
-that do not depend on a public port-forward or a cloudflared tunnel:
+that do not depend on a public port-forward, or on the cloudflared tunnels that
+carried SSH to these hosts before #3579 and are now deleted:
 
 - The Kubernetes API server, through the control-plane VIP `10.87.42.2`.
 - SSH to each host, on port 22 (issue #3579).
