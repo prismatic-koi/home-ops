@@ -53,8 +53,10 @@ single point of failure. All were closed by mechanics, not by preference.
 | Direction | Deciding fact |
 |---|---|
 | Two A records / two tailnet identities behind one name | headscale will store two `extra_records` entries for one name, but the client-side resolver returns only the first `IPv4` match. The second entry is silently discarded before any OS resolver or app sees the answer. Nothing to fail over to. |
+| `RollingUpdate` with `maxSurge` (instead of `Recreate`) | Both pods would mount the same `TS_KUBE_SECRET` and load the same tailnet node key, so they resolve to a **single** headscale node, not two. The result is one flapping node — connection resets from two pods racing to overwrite each other's endpoints and DERP home — not a clean hand-off. This is a worse failure mode than the plain outage window `Recreate` already gives, not a milder one. |
 | Tailscale Kubernetes Operator / `ProxyGroup` | The operator authenticates via OAuth client credentials against `api.tailscale.com`. headscale serves no tailnet REST admin API for it to talk to — only OIDC user login and a gRPC/CLI plane keyed by API key. |
 | Tailscale Services / VIPService | Not implemented in headscale at the pinned version (v0.29.3). |
+| blocky `customDNS` pin for `prometheus.ts` (mirroring the `search` workaround) | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise of the #3466 pilot. `search` tolerates its pin because searxng is *meant* to serve LAN clients; `prometheus.ts` is not. |
 | HA subnet routers | headscale's control plane supports this (primary election, health probing). The datapath does not — see below. |
 
 ### HA subnet routers, in more detail
