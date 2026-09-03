@@ -72,21 +72,24 @@ spec:
       - --crd-source-apiversion=externaldns.k8s.io/v1alpha1
       - --crd-source-kind=DNSEndpoint
       - --cloudflare-proxied
-      - --source=gateway-httproute
-    rbac:
-      additionalPermissions:
-        - apiGroups: [""]
-          resources: ["namespaces"]
-          verbs: ["get","watch","list"]
-        - apiGroups: ["gateway.networking.k8s.io"]
-          resources: ["gateways","httproutes","tlsroutes","tcproutes","udproutes"] 
-          verbs: ["get","watch","list"]
     policy: sync
+    # EVERY enabled source is declared here, and nowhere else (#3598).
+    #
+    # The chart generates RBAC from this list. `gateway-httproute` in this list
+    # makes templates/clusterrole.yaml emit the gateways, httproutes and
+    # namespaces rules, so no manual rbac.additionalPermissions block is needed.
+    #
+    # A `--source=` argument in extraArgs enables the source and generates NO
+    # RBAC. The chart accepts both forms without an error. If a source sits in
+    # extraArgs, external-dns cannot read the objects it names, and under
+    # `policy: sync` it withdraws every record it owns. That is the #3522
+    # outage shape. Do NOT declare a source in extraArgs.
     sources:
       - ingress
       # Retained deliberately for a future DNSEndpoint (#3581) — see the
       # --crd-source-* args above.
       - crd
+      - gateway-httproute
     txtPrefix: "k8s."
     txtOwnerId: "default"
     domainFilters:
