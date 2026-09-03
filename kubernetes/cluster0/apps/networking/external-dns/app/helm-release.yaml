@@ -49,9 +49,15 @@ spec:
     #
     # --label-filter is GLOBAL: it applies to every source enabled below, not
     # only gateway-httproute. Consequences:
-    #   * DNSEndpoint objects need the label too. cloudflared/dns-endpoint.yaml
-    #     carries it, else tun.${SECRET_PUBLIC_DOMAIN} would be deleted.
+    #   * A DNSEndpoint needs the label too. The repo holds no DNSEndpoint
+    #     today, so the crd source publishes nothing. Add the label to the
+    #     first one someone writes, or external-dns never sees it.
     #   * Any future Ingress object needs the label to publish a record.
+    # Enumerate every enabled source before you change this flag. One review
+    # checked gateway-httproute alone and nearly deleted a live record from the
+    # crd source (#3518). That record went with the app that published it
+    # (#3581). The crd and ingress sources stay enabled below, so the same
+    # mistake is still available.
     #
     # `policy: sync` stays as it is, so removal of the label withdraws the
     # record on the next reconcile. Do NOT remove a label to make a service
@@ -59,6 +65,9 @@ spec:
     # PUBLIC DNS even on the LAN, so withdrawal must be paired with internal
     # resolution for that hostname. See AGENTS.md.
     extraArgs:
+      # The two --crd-source-* args are RETAINED DELIBERATELY for a future
+      # DNSEndpoint (#3581). With zero DNSEndpoint objects in the repo they are
+      # inert; keeping them means the next one works without re-plumbing.
       - --crd-source-apiversion=externaldns.k8s.io/v1alpha1
       - --crd-source-kind=DNSEndpoint
       - --cloudflare-proxied
@@ -75,6 +84,8 @@ spec:
     policy: sync
     sources:
       - ingress
+      # Retained deliberately for a future DNSEndpoint (#3581) — see the
+      # --crd-source-* args above.
       - crd
     txtPrefix: "k8s."
     txtOwnerId: "default"

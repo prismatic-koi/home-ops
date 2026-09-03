@@ -368,13 +368,16 @@ tailnet ACL, and no public record.
 The flag applies to **every** enabled source, not only `gateway-httproute`. The
 effective source set is `ingress`, `crd` and `gateway-httproute`. So:
 
-- `DNSEndpoint` objects need the label as well. See
-  `kubernetes/cluster0/apps/networking/cloudflared/app/dns-endpoint.yaml`,
-  which publishes `tun.${SECRET_PUBLIC_DOMAIN}` for the cloudflared tunnel.
+- A `DNSEndpoint` needs the label as well. The repository holds none today, so
+  the `crd` source publishes no record. Add the label to the first
+  `DNSEndpoint` someone writes, or external-dns never sees it.
 - Any future `Ingress` object needs the label to publish a record.
 
-Enumerate every active source before you touch this flag. Checking only
-`gateway-httproute` is what nearly deleted the cloudflared tunnel record.
+Enumerate every active source before you touch this flag. Do not check
+`gateway-httproute` alone. One review did, and it nearly deleted a live record
+that came from the `crd` source: `tun.${SECRET_PUBLIC_DOMAIN}`, published by the
+cloudflared app (#3518). That app and its record are gone (#3581). The `crd`
+and `ingress` sources stay enabled, so the same mistake is still available.
 
 ### Records external-dns does not own
 
@@ -469,7 +472,8 @@ Do not remove any of the three labels.
 # Every labelled route. Expect the full published set, not a subset.
 kubectl get httproute -A -l dns.home-ops/public=true
 
-# Expect cloudflared-tunnel.
+# Labelled DNSEndpoint objects. Expect no results: the repository holds none
+# since #3581. A result means someone added one — check that it is deliberate.
 kubectl get dnsendpoint -A -l dns.home-ops/public=true
 
 # Every route carries the label since #3519 (value true or false). Expect NO

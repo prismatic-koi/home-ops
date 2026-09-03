@@ -10,5 +10,4 @@ resources:
   - ./external-dns/ks.yaml
   - ./gateway-api/ks.yaml
   - ./traefik/ks.yaml
-  - ./cloudflared/ks.yaml
   - ./headscale/ks.yaml

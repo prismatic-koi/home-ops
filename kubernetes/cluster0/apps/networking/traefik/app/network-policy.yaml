@@ -106,31 +106,6 @@ spec:
         - port: 443
           protocol: TCP
 ---
-# Allow intra-ns ingress from cloudflared — the Cloudflare tunnel terminates
-# at Traefik via the local cluster network on :443.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: traefik-allow-cloudflared-ingress
-  namespace: networking
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: traefik
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: networking
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: cloudflared
-      ports:
-        - port: 443
-          protocol: TCP
----
 # Allow intra-pod ingress on :8080 from Traefik itself.
 # The `traefik-dashboard` Service in this namespace selects Traefik pods and
 # routes Service:80 → pod:8080 — the dashboard route terminates on the same
