@@ -27,6 +27,10 @@
 # under Cilium socket-LB) and the tag-from-preauth-key rule; both apply here
 # unchanged.
 #
+# This is a single-replica, Recreate-strategy proxy with no HA path (issue
+# #3556, accepted risk). See docs/runbooks/tailnet-web-proxy-outage.md for
+# the outage diagnosis and recovery runbook, and why HA was rejected.
+#
 # Tag from preauth key, NOT --advertise-tags:
 #   headscale 0.28+ hard-rejects registration when a PreAuthKey-authenticated
 #   node ALSO passes --advertise-tags. The preauth key committed in
