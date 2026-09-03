@@ -297,13 +297,54 @@ The chart renders that value as the `--label-filter` argument on the Deployment
 `labelFilter` is a named chart key, not a passthrough like the old `extraArgs`
 form. Chart 1.21.1 sets `additionalProperties: true`, so a dropped or renamed
 key renders **silently without the flag** — the fail-open regression #3597
-guards against. The CI job `external-dns label-filter lint`
-(`.github/workflows/external-dns-labelfilter-lint.yaml`, script at
-`scripts/lint-external-dns-labelfilter.py`) asserts the rendered external-dns
-Deployment carries exactly one `--label-filter=dns.home-ops/public=true`, and
-fails loudly if the Deployment is absent from the render (never a vacuous
-pass). This matches the #3361 and #3519 lints. If it fails after a chart bump,
-the fix is almost always to restore the `labelFilter` value above.
+guards against.
+
+The CI job `external-dns lint`
+(`.github/workflows/external-dns-lint.yaml`, script at
+`scripts/lint-external-dns.py`) runs two checks over one `flux-local build`
+render. It matches the #3361 and #3519 lints, and each check fails loudly if
+the object it needs is absent from the render, so a broken or empty render
+never passes vacuously.
+
+1. **label-filter (#3597).** Asserts the rendered external-dns Deployment
+   carries exactly one `--label-filter=dns.home-ops/public=true`. If it fails
+   after a chart bump, the fix is almost always to restore the `labelFilter`
+   value above.
+2. **source-to-RBAC (#3601).** For every `--source=<name>` argument on the
+   rendered Deployment, asserts the rendered ClusterRole grants that source's
+   RBAC exactly once — for example `--source=gateway-httproute` requires
+   `httproutes` in `gateway.networking.k8s.io`. The chart generates RBAC from
+   its `sources:` value, not from `extraArgs`, and accepts both forms without
+   an error (#3600). A source left in `extraArgs` renders a byte-identical
+   Deployment argument set with no RBAC, so external-dns cannot list the
+   objects it names and the Deployment crash-loops. This is fail-closed, not
+   the #3522 fail-open shape: it breaks the deploy, it does not withdraw
+   records. The fix is to declare the source in `sources:`, never in
+   `extraArgs`. A resource granted more than once (for example a stale manual
+   `rbac.additionalPermissions` block overlapping a chart-generated rule) also
+   fails. The source-to-resource mapping comes from chart 1.21.1
+   `templates/clusterrole.yaml` and the `external-dns.hasGatewaySources`
+   helper.
+
+The two checks were consolidated into one script and one workflow (#3601)
+because both read the same rendered external-dns objects, and a second
+full-tree `flux-local` render on every PR costs real minutes.
+
+#### Rendering `flux-local` output locally
+
+To reproduce the render these lints read (three sessions have rediscovered
+this):
+
+- podman on this host has no OCI runtime, so the CI
+  `ghcr.io/allenporter/flux-local` image will not run locally.
+- Install `flux-local` v8.4.0 from pip instead — the version
+  `.github/workflows/flux-local.yaml` pins.
+- Render from a non-worktree copy of the tree. GitPython cannot resolve a
+  worktree `.git` file, so `flux-local` fails inside a `git worktree`
+  checkout. Copy the tree out (for example `git archive HEAD | tar -x -C
+  <dir>`, then `git init` in that dir) and render there:
+  `flux-local build all --enable-helm --skip-secrets --skip-crds
+  --output-file rendered.yaml kubernetes/cluster0/flux`.
 
 An object without the label is invisible to external-dns. It gets **no** public
 A/CNAME record and **no** `k8s.` TXT ownership record.

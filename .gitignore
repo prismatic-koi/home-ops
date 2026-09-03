@@ -18,6 +18,9 @@ mrlesmithjr.zfs*
 geerlingguy.docker*
 geerlingguy.pip*
 .venv/
+# Python
+__pycache__/
+*.pyc
 # Terraform
 .terraform
 .terraform.tfstate*

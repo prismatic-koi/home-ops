@@ -1,0 +1,99 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: external-dns lint
+
+# Asserts two invariants of the rendered external-dns objects, from one
+# `flux-local build` render:
+#
+#   1. label-filter (#3597): the rendered Deployment carries exactly one
+#      `--label-filter=dns.home-ops/public=true`. That filter is the sole
+#      fail-closed control on public DNS publication (#3518). A dropped or
+#      renamed chart key renders SILENTLY without the flag (chart 1.21.1 sets
+#      `additionalProperties: true`), and `policy: sync` is live, so a lost
+#      filter republishes withheld hostnames unnoticed.
+#
+#   2. source-to-RBAC (#3601): for every `--source=<name>` argument on the
+#      rendered Deployment, the rendered ClusterRole grants that source's RBAC
+#      exactly once. The chart generates RBAC from its `sources:` value, NOT
+#      from `extraArgs`. A source left in `extraArgs` renders a byte-identical
+#      Deployment argument set with no RBAC, so external-dns cannot list the
+#      objects it names and the Deployment crash-loops (fail-closed).
+#
+# One workflow runs both checks against one render, because a second full-tree
+# `flux-local` render on every PR costs real minutes. See issues #3597, #3601
+# and AGENTS.md, "Public DNS is opt-in (external-dns)".
+#
+# Both checks read rendered manifests from `flux-local build`, because the
+# chart decides what renders — a text scan of the HelmRelease cannot see a
+# chart that drops an unrecognised key or generates no RBAC for a source
+# declared the wrong way. Each check asserts the object it needs is present
+# first, so an empty or broken render fails loudly instead of passing
+# vacuously.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-external-dns.py"
+      - ".github/workflows/external-dns-lint.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-external-dns.py"
+      - ".github/workflows/external-dns-lint.yaml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint external-dns
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Render manifests with flux-local
+        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0@sha256:c0be852e30f299ce6a220cc992b0c21a2a0b0684cc17713b9d718e18d9c8beff
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          args: >-
+            build all
+            --enable-helm
+            --skip-secrets
+            --skip-crds
+            --output-file /github/workspace/rendered-manifests.yaml
+            /github/workspace/kubernetes/cluster0/flux
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install PyYAML
+        run: python3 -m pip install --disable-pip-version-check "pyyaml==6.0.2"
+
+      - name: Run lint
+        run: >-
+          python3 scripts/lint-external-dns.py
+          --rendered rendered-manifests.yaml
+          --verbose
