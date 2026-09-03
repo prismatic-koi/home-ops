@@ -307,6 +307,36 @@ it carried `external-dns.alpha.kubernetes.io/controller: none`. A route added
 without that annotation got a public record silently. That is the defect the
 label fixes.
 
+### Same commit is not same time — use expand-then-contract
+
+A change that makes a controller **more selective** — a label filter, an
+annotation filter, a selector narrowing, a scope reduction — must land as two
+commits, not one:
+
+1. **Expand:** add the labels or annotations. No behaviour change. Wait for
+   Flux to reconcile, then verify every target object carries the marker on
+   the live cluster.
+2. **Contract:** enable the filter, in a later, separately-reconciled commit.
+
+Putting the marker and the filter in the same commit does not make them take
+effect at the same time. The controller's HelmRelease and the app
+Kustomizations reconcile independently, so the filter can go live before Flux
+has finished re-rendering every target object with its marker. In that
+window the controller acts on a partial view.
+
+This bit us in PR #3522 (the #3518 external-dns rollout): the label and the
+`--label-filter` landed in one commit, and the label took roughly 75-100
+seconds to render onto all HTTPRoutes. external-dns restarted with the
+filter active inside that gap, saw four routes still unlabelled, and
+withdrew 8 records (4 CNAMEs plus their `k8s.` TXT ownership records),
+causing a ~5 minute public DNS outage. It self-healed at the next 5-minute
+`--interval` reconcile, because `policy: sync` re-creates as readily as it
+deletes — a permanent render failure would have caused a permanent outage.
+
+Between the two commits, confirm every target object carries the marker on
+the live cluster before enabling the filter — do not rely on the commit
+having merged.
+
 ### The label means "published", not "should be public"
 
 #3518 changed the **mechanism** and kept the published set identical. Every
