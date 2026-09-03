@@ -32,8 +32,8 @@ spec:
             key: api-key
     # Public DNS publication is FAIL-CLOSED (#3518).
     #
-    # labelFilter renders --label-filter, which makes external-dns list only
-    # objects that carry the label dns.home-ops/public=true. Every other object
+    # The chart renders labelFilter as --label-filter, which makes external-dns
+    # list only objects that carry dns.home-ops/public=true. Every other object
     # is invisible to it, so a NEW HTTPRoute gets no public A/CNAME record and
     # no `k8s.` TXT ownership record until someone deliberately adds the label.
     # See AGENTS.md, section "Public DNS is opt-in (external-dns)".

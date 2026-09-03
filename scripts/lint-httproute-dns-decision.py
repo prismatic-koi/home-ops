@@ -7,8 +7,9 @@ Background
 ----------
 #3518 made public DNS publication fail-closed. external-dns publishes a record
 only for an object that carries `dns.home-ops/public: "true"`, enforced by
-`--label-filter=dns.home-ops/public=true` in
-`kubernetes/cluster0/apps/networking/external-dns/app/helm-release.yaml`.
+`labelFilter: dns.home-ops/public=true` in
+`kubernetes/cluster0/apps/networking/external-dns/app/helm-release.yaml`,
+which the chart renders as the `--label-filter` argument (#3525).
 
 That removed the silent-public-record failure mode and introduced a quieter
 one. Two different states look identical in the file:
