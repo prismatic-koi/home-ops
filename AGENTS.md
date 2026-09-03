@@ -284,13 +284,15 @@ label:
 dns.home-ops/public: "true"
 ```
 
-The flag that enforces it lives in
+The chart value that enforces it lives in
 `kubernetes/cluster0/apps/networking/external-dns/app/helm-release.yaml`:
 
 ```yaml
-extraArgs:
-  - --label-filter=dns.home-ops/public=true
+labelFilter: dns.home-ops/public=true
 ```
+
+The chart renders that value as the `--label-filter` argument on the Deployment
+(#3525).
 
 An object without the label is invisible to external-dns. It gets **no** public
 A/CNAME record and **no** `k8s.` TXT ownership record.
