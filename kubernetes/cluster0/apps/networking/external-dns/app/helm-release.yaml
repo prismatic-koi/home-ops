@@ -81,9 +81,9 @@ spec:
     #
     # A `--source=` argument in extraArgs enables the source and generates NO
     # RBAC. The chart accepts both forms without an error. If a source sits in
-    # extraArgs, external-dns cannot read the objects it names, and under
-    # `policy: sync` it withdraws every record it owns. That is the #3522
-    # outage shape. Do NOT declare a source in extraArgs.
+    # extraArgs, external-dns cannot list the objects it names, so the source
+    # fails to start and the Deployment crash-loops. Do NOT declare a source in
+    # extraArgs.
     sources:
       - ingress
       # Retained deliberately for a future DNSEndpoint (#3581) — see the
