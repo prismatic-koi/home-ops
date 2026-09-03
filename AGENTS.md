@@ -416,6 +416,12 @@ effective source set is `ingress`, `crd` and `gateway-httproute`. So:
   `DNSEndpoint` someone writes, or external-dns never sees it.
 - Any future `Ingress` object needs the label to publish a record.
 
+Since #3598 every source sits in one place: the chart value `sources:` in
+`kubernetes/cluster0/apps/networking/external-dns/app/helm-release.yaml`. No
+`--source=` argument remains in `extraArgs`. Declare a new source in that list.
+The chart generates the gateway RBAC from `sources:`, so a source declared
+through `extraArgs` has no permission to read the objects it names.
+
 Enumerate every active source before you touch this flag. Do not check
 `gateway-httproute` alone. One review did, and it nearly deleted a live record
 that came from the `crd` source: `tun.${SECRET_PUBLIC_DOMAIN}`, published by the
