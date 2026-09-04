@@ -85,6 +85,13 @@ dns:
       # OS match-domain list from Routes only, never from Hosts, so a pinned
       # name with no route is never sent to the tailscale resolver at all.
       search.${SECRET_PUBLIC_DOMAIN}: []
+      # Wave 1 phase 1 (#3608), expand phase. Leaf-scoped for the same reason
+      # as the search entry above -- each key equals its own leaf hostname,
+      # never the bare domain. Paired with the extra_records pins below.
+      changedetection-io.${SECRET_PUBLIC_DOMAIN}: []
+      uptime.${SECRET_PUBLIC_DOMAIN}: []
+      zigbee2mqtt.${SECRET_PUBLIC_DOMAIN}: []
+      octoprint.${SECRET_PUBLIC_DOMAIN}: []
   extra_records:
     # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
     # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
@@ -117,6 +124,21 @@ dns:
     # now load-bearing -- do not remove it as redundant. See AGENTS.md,
     # "Removing the label withdraws public DNS -- do not do it alone".
     - name: "search.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    # Wave 1 phase 1 (#3608), expand phase. Same shared ts-web proxy as the
+    # pins above. Paired with the split entries above -- read the notes
+    # there before you remove either half of any pair.
+    - name: "changedetection-io.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    - name: "uptime.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    - name: "zigbee2mqtt.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    - name: "octoprint.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
 
