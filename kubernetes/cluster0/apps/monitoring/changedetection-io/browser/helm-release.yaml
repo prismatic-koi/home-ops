@@ -32,7 +32,7 @@ spec:
               # Migrated 2026-05 from abandoned docker.io/browserless/chrome (v1, last published 2024-02)
               # to ghcr.io/browserless/chromium (v2). See issue #2998.
               repository: ghcr.io/browserless/chromium
-              tag: v2.56.2@sha256:3893ee0c0a10b2d38da5774616fc523f0f4551f27fa203236894c49d2355f00a
+              tag: v2.56.3@sha256:4a12700b8140396806958bc5622dbf1abb3c4a1025aadaabe8f03c570aa43c79
             env:
               # v2 defaults HOST to "localhost" — must bind 0.0.0.0 for in-cluster traffic.
               HOST: 0.0.0.0
