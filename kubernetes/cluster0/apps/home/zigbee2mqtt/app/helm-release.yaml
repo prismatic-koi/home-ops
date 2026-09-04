@@ -47,9 +47,14 @@ spec:
     route:
       app:
         labels:
-          # Public DNS opt-in (#3518). Removing this withdraws public DNS for
-          # the hostname — pair it with internal resolution. See AGENTS.md.
-          dns.home-ops/public: "true"
+          # Private DNS decision (#3519), not an omission. Withdrawn from
+          # public DNS in #3610: off-LAN access is tailnet-only by intent.
+          # Internal resolution stands in place of the public record — the
+          # headscale split entry plus extra_records pin (#3609) for a tailnet
+          # client, and the blocky customDNS pin (#3609) for a LAN client that
+          # is not on the tailnet. Both must stay, or the hostname stops
+          # resolving everywhere.
+          dns.home-ops/public: "false"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           - name: traefik-gateway
