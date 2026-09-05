@@ -48,6 +48,11 @@ spec:
       name: traefik-gateway
       namespace: networking
       sectionName: websecure
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecurepriv
   hostnames: ["octoprint.${SECRET_PUBLIC_DOMAIN}"]
   rules:
   - backendRefs:
