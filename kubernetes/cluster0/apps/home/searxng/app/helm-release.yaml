@@ -57,6 +57,9 @@ spec:
           - name: traefik-gateway
             namespace: networking
             sectionName: websecure
+          - name: traefik-gateway
+            namespace: networking
+            sectionName: websecurepriv
         rules:
           - backendRefs:
               - identifier: searxng
