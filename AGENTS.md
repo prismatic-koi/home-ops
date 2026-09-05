@@ -372,8 +372,8 @@ needed, and the change has no effect on our DNS. Hostnames are not secret:
 they appear in public certificate transparency logs.
 
 The control is the listener a route binds to, not the DNS record. See
-"The traefik-private Service and the websecurepriv listener" below for the
-mechanism that removes reachability.
+"Three exposure tiers: the listener routes, the Service exposes" below for
+the mechanism that removes reachability.
 
 ### Same commit is not same time — use expand-then-contract
 
@@ -445,14 +445,14 @@ The reason is the client resolver path, not the cluster:
 
 - headscale pushes `1.1.1.1` and `8.8.8.8` as the global resolvers, so a
   tailnet client resolves app hostnames through **public DNS even on the LAN**.
-- blocky pins only five names in `customDNS`
+- blocky pins only four names in `customDNS`
   (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi`,
-  `traefik`, `longhorn`, `auth`, `search`. Everything else falls through to the
-  public upstreams.
+  `traefik`, `longhorn`, `auth`. Everything else falls through to the public
+  upstreams.
 - coredns does not serve the public domain, and there is no wildcard, no
   `conditional` upstream block, and no k8s-gateway.
 
-So for any hostname outside those five pins, the public record **is** the only
+So for any hostname outside those four pins, the public record **is** the only
 resolution path today, LAN included.
 
 **Never remove the label as a bulk operation.** Withdraw a hostname one service
@@ -579,7 +579,7 @@ after its tailnet migration. No two are the same case:
 |---|---|---|---|
 | `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | `"false"` | Tailnet-only pilot (#3466). The `"false"` keeps it off public DNS. **Do not change it to `"true"`.** It also keeps `external-dns.alpha.kubernetes.io/controller: none` as defence in depth. |
 | `networking/httpsredirect` | No | `"false"` | It declares no hostnames, so it can never produce a record. The lint exempts a no-hostname route regardless; the label states the decision anyway. |
-| `home/searxng` | Yes, `search.…` | `"false"` | Withdrawn from public DNS in #3555, the contract half of an expand-then-contract migration. Two internal paths replace the public record: the headscale `nameservers.split` entry plus `extra_records` pin (#3553) for a tailnet client, and the blocky `customDNS` pin for a LAN client that is not on the tailnet. **Both are load-bearing — removing either breaks a client class.** Change the value to `"true"` only to roll the withdrawal back. |
+| `home/searxng` | Yes, `search.…` | `"false"` | Withdrawn from public DNS in #3555, the contract half of an expand-then-contract migration. The headscale `nameservers.split` entry plus the `extra_records` pin (#3553) are the only resolution path left: #3631 removed the blocky `customDNS` pin, and #3648 moved the route to the tier-3 `websecurets` listener, so the hostname has no LAN path at all. **That headscale pin is load-bearing — remove it and no client resolves the hostname.** Change the value to `"true"` only to roll the withdrawal back. |
 
 Do not remove any of the three labels.
 
@@ -626,23 +626,63 @@ widens access to the whole LAN, a wider set than the tailnet ACL admits.
 without asking why that pin existed. #3629 removed all five. Before you add a
 pin, confirm the hostname names one of the four infrastructure tools above.
 
-## The traefik-private Service and the websecurepriv listener
+## Three exposure tiers: the listener routes, the Service exposes
 
-A private route becomes unreachable from the public internet through listener
-binding, not through DNS withdrawal. See "Withdrawing the record reduces
-discoverability, not reachability" above.
+A route becomes unreachable through listener binding, not through DNS
+withdrawal. See "Withdrawing the record reduces discoverability, not
+reachability" above.
 
-Two objects make a route private:
+The **listener** decides routing. The **Service** decides exposure. One
+entrypoint can have more than one Service in front of it, and the Service type
+controls who can reach it. #3635 holds the full design.
 
-- `traefik-private`, a LoadBalancer Service. The gateway forwards no port to
-  it from outside the cluster.
-- `websecurepriv`, a Gateway listener bound to `traefik-private`. It carries
-  the same wildcard certificates as the public `websecure` listener.
+| Tier | Reachable from | Service | Listener |
+|---|---|---|---|
+| 1 Public | internet, LAN, tailnet | `traefik`, LoadBalancer. The gateway forwards 443 to it. | `websecure` |
+| 2 LAN fallback | LAN, tailnet. Not the internet. | `traefik-private`, LoadBalancer. The gateway forwards no port to it. | `websecurepriv` **and** `websecurets` |
+| 3 Tailnet only | tailnet only | `traefik-ts`, **ClusterIP** | `websecurets` |
 
-A private route sets `sectionName: websecurepriv` and no other listener. The
-public `websecure` listener then holds no route for that hostname. A
-`Host`-header request to the public listener does not reach the service,
-whatever the client resolves.
+All three listeners carry the same wildcard certificates, so a route serves the
+same certificates on any of them. The public `websecure` listener holds no
+route for a tier-2 or tier-3 hostname, so a `Host`-header request to the public
+address returns 404, whatever the client resolves.
+
+### How to select a tier
+
+- **Tier 1** — one `parentRefs` entry, `websecure`.
+- **Tier 2** — two `parentRefs` entries, `websecurepriv` and `websecurets`.
+  Break-glass needs both paths: the LAN one when tailscale is down, the tailnet
+  one when the operator is off the LAN.
+- **Tier 3** — one `parentRefs` entry, `websecurets`, and no other listener.
+
+**A tier-2 route is not private from the LAN.** `traefik-private` is a
+LoadBalancer, and the Cilium L2 announcement policy matches every node, so its
+address answers ARP across the whole LAN. Any LAN host reaches a tier-2 route
+with `curl --resolve`. A tier-2 route therefore keeps its `forwardauth-authelia`
+filter permanently: the filter is its identity control, not a migration step.
+
+**Tier 3 is private because no LAN address exists for its listener**, not
+because a rule denies access. `traefik-ts` is a ClusterIP Service, so the ts-web
+tailscale proxy is the only path in. There is no allow-list to misconfigure.
+`traefik-ts` must never become a LoadBalancer and must never take an address
+from the LB-IPAM pool. `expose.default` must stay `false` on both the
+`websecurepriv` and `websecurets` entrypoints, or the chart publishes them on
+the public address.
+
+Tier 3 is the default. Tier 2 is only for a tool you need to **repair** a broken
+cluster — ingress, storage, network, login, connectivity diagnosis. A tool that
+is merely useful during an outage fails that test and belongs in tier 3.
+
+### Membership today
+
+Six routes are tier 3: `changedetection-io`, `zigbee2mqtt`, `uptime`,
+`octoprint`, `search` and `prometheus.ts` (#3648). **No route binds
+`websecurepriv` today.** The tier-2 set — `traefik`, `longhorn`, `unifi`,
+`auth`, `hubble-ui` — is still on tier 1 and moves in waves 2 and 3 of #3607.
+
+Step 6 of #3635 renames `traefik-private` to `traefik-lan` and `websecurepriv`
+to `websecurelan`, so the object name states the tier. That rename has not
+landed, so the old names are still correct.
 
 ### `sectionName` fails silently
 
@@ -656,7 +696,7 @@ reachable on its intended path. Do not confirm only that it stopped being
 reachable on the old path — that check alone can pass while the route is
 attached to no listener at all.
 
-### An egress NetworkPolicy for a private route must name the container port
+### An egress NetworkPolicy for a tier-2 or tier-3 route must name the container port
 
 The kube-apiserver note above ("Pods accessing the Kubernetes API server")
 covers socket-LB address translation. The same mechanism translates the port.

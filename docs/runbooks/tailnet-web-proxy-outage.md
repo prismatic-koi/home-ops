@@ -27,23 +27,35 @@ not a rolling replacement. Budget for this window on every planned change.
 
 ## Who is affected
 
-Two hostnames route through ts-web today. Each has a different fallback:
+Six hostnames route through ts-web today. **None of them has a fallback.**
 
-| Hostname | Fallback when ts-web is down |
+| Hostname | Tier 3 since |
 |---|---|
-| `prometheus.ts.${SECRET_PUBLIC_DOMAIN}` | None, and never had one. Tailnet-only pilot (#3466). |
-| `search.${SECRET_PUBLIC_DOMAIN}` | LAN-not-tailnet clients only, via the blocky `customDNS` pin to `${TRAEFIK_IP}`, which does not traverse ts-web. A tailnet client has no fallback. |
+| `prometheus.ts.${SECRET_PUBLIC_DOMAIN}` | #3466. Tailnet-only pilot; never had a fallback. |
+| `search.${SECRET_PUBLIC_DOMAIN}` | #3648 |
+| `changedetection-io.${SECRET_PUBLIC_DOMAIN}` | #3648 |
+| `uptime.${SECRET_PUBLIC_DOMAIN}` | #3648 |
+| `zigbee2mqtt.${SECRET_PUBLIC_DOMAIN}` | #3648 |
+| `octoprint.${SECRET_PUBLIC_DOMAIN}` | #3648 |
+
+Until #3648 the five wave-1 hostnames were also bound to the tier-2
+`websecurepriv` listener, so a LAN client could reach them at the
+`traefik-private` address. Only `search` had a LAN name-resolution path to go
+with that, and #3631 removed the blocky `customDNS` pin that gave it one.
+#3648 removed the tier-2 binding itself. `traefik-ts` is a ClusterIP Service
+with no LAN address, so a ts-web outage now takes all six hostnames down, for
+every client class.
 
 ### Why a tailnet client has no fallback even when a public record exists
 
-`search.${SECRET_PUBLIC_DOMAIN}` has a public DNS path in principle, but a
-tailnet client does not use it. headscale's MagicDNS `extra_records`
-mechanism writes a Hosts-map entry for the name into the client's resolver.
-A Hosts pin **replaces** the resolution path; it does not sit behind the
-public record as a fallback. The client returns the Hosts-map answer and
-never queries public DNS at all. So for a tailnet client, ts-web being down
-means `search` is down — there is no second path to fall back to, whatever
-the public zone contains.
+A tailnet client does not fall back to public DNS, whatever the public zone
+contains. headscale's MagicDNS `extra_records` mechanism writes a Hosts-map
+entry for the name into the client's resolver. A Hosts pin **replaces** the
+resolution path; it does not sit behind the public record as a fallback. The
+client returns the Hosts-map answer and never queries public DNS at all. So
+for a tailnet client, ts-web being down means the hostname is down — there is
+no second path to fall back to. All six hostnames carry an `extra_records`
+pin, and none of the six has a public record today.
 
 ## Why this is accepted, not fixed
 
@@ -56,7 +68,7 @@ single point of failure. All were closed by mechanics, not by preference.
 | `RollingUpdate` with `maxSurge` (instead of `Recreate`) | Both pods would mount the same `TS_KUBE_SECRET` and load the same tailnet node key, so they resolve to a **single** headscale node, not two. The result is one flapping node — connection resets from two pods racing to overwrite each other's endpoints and DERP home — not a clean hand-off. This is a worse failure mode than the plain outage window `Recreate` already gives, not a milder one. |
 | Tailscale Kubernetes Operator / `ProxyGroup` | The operator authenticates via OAuth client credentials against `api.tailscale.com`. headscale serves no tailnet REST admin API for it to talk to — only OIDC user login and a gRPC/CLI plane keyed by API key. |
 | Tailscale Services / VIPService | Not implemented in headscale at the pinned version (v0.29.3). |
-| blocky `customDNS` pin for `prometheus.ts` (mirroring the `search` workaround) | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise of the #3466 pilot. `search` tolerates its pin because searxng is *meant* to serve LAN clients; `prometheus.ts` is not. |
+| blocky `customDNS` pin for a tier-3 hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for the four infrastructure names only, never for an ordinary application. |
 | HA subnet routers | headscale's control plane supports this (primary election, health probing). The datapath does not — see below. |
 
 ### HA subnet routers, in more detail
@@ -133,13 +145,12 @@ follow the normal traefik/backend triage instead.
   (Hosts-map entry does not depend on ts-web being up), but the TCP
   connection to it times out or is refused. This is the ts-web-down
   signature for a tailnet client.
-- **LAN, not-tailnet client**, for `search` only: unaffected, because the
-  blocky `customDNS` pin resolves straight to `${TRAEFIK_IP}` and never
-  touches ts-web. If a report of `search` being down comes from this client
-  class, ts-web is not the cause — look at traefik or the backend instead.
-- **LAN, not-tailnet client**, for `prometheus.ts`: no fallback exists.
-  Report reads the same as the tailnet case — the hostname is
-  `.ts.${SECRET_PUBLIC_DOMAIN}` and is only ever served via ts-web.
+- **LAN, not-tailnet client**, for any of the six: no path exists, and none
+  existed before the outage either. The hostname does not resolve, because it
+  has no public record and no blocky pin. `curl --resolve` does not help:
+  `traefik-ts` is a ClusterIP Service, so no LAN address serves the listener.
+  This client class cannot tell a ts-web outage from normal operation, so a
+  report from it is not evidence either way.
 
 ## Recovery
 
@@ -166,25 +177,59 @@ There is no failover target. Recovery is: get the single pod healthy again.
    kubectl -n networking logs deploy/tailscale-proxy-ts-web --tail=20
    ```
 
-### The `search` workaround, and its limit
+### No client class has a workaround
 
-A LAN client that is not on the tailnet keeps working throughout a ts-web
-outage, because blocky's `customDNS` pin resolves `search.${SECRET_PUBLIC_DOMAIN}`
-straight to `${TRAEFIK_IP}`, bypassing ts-web entirely. This covers only that
-one client class and only that one hostname. It does not help a tailnet
-client, and it does not help `prometheus.ts` under any client class — that
-hostname has no path other than ts-web.
+Every one of the six hostnames is served through ts-web and through nothing
+else. No client class keeps working during an outage, and there is no
+per-hostname workaround to reach for. `search` had one until #3631 removed its
+blocky `customDNS` pin and #3648 removed its tier-2 LAN binding. Earlier
+versions of this runbook described that workaround; it is gone. Recovery is
+the only path.
+
+## The trigger has fired, and the risk is still accepted
+
+#3648 took ts-web from two consumers to six and removed the last LAN path.
+Every rollout of this single-replica `Recreate` Deployment is now a full
+outage for six hostnames, where it was a partial outage for two. State that
+plainly: **step 4 of #3635 removed a fallback that existed.** It did not
+discover that the fallback was absent.
+
+The risk is still accepted, and the reason is the repair path, not the count:
+
+**Nothing behind ts-web is needed to repair a broken cluster.** The
+break-glass set — `traefik`, `longhorn`, `unifi`, `auth`, `hubble-ui` — is
+attached to the public `websecure` listener, not to ts-web. The tier test
+recorded on #3635 sorts on exactly this question, and all six ts-web consumers
+fail it: each is useful during an outage, none is required to end one. A
+ts-web outage costs convenience services. It costs nothing on the recovery
+path of any cluster fault, including a ts-web fault itself.
+
+`zigbee2mqtt` is the case worth stating, because the name suggests otherwise.
+Zigbee automation runs over MQTT and does not traverse the web UI. A ts-web
+outage costs administration of the Zigbee network, not its operation. Devices
+keep working.
+
+So this is an availability question about convenience services, not a
+recovery-path question. That is why the fired trigger did not block #3648.
+
+The design pass the trigger asks for is tracked in #3651. It is a design pass,
+not a bug: HA is one option, a second replica under a distinct hostname is
+another, and accepting the outage with a measured, documented recovery time is
+a third.
+
+The trigger will fire again. Waves 2 and 3 of #3607 add `seaweedfs` and
+`grafana` to tier 3, which takes ts-web to eight consumers.
 
 ## When to revisit this decision
 
 Revisit accept-and-document, rather than working around it in the moment,
 if either of these becomes true:
 
-- **A third service moves behind ts-web.** The current blast radius (one
-  pilot service with no fallback, one service with a partial fallback) was
-  the basis for accepting the risk. A third consumer changes that
-  calculation and should trigger a fresh design pass, not a repeat of this
-  runbook's justification.
+- **A third service moves behind ts-web. This has FIRED — see "The trigger
+  has fired, and the risk is still accepted" below.** The original blast
+  radius (one pilot service with no fallback, one service with a partial
+  fallback) was the basis for accepting the risk. Six consumers changes that
+  calculation.
 - **A live DSR datapath test gets funded.** The HA-subnet-router direction
   above is closed on an untested datapath question (whether LB DNAT, SNAT,
   and DSR source-encoding compose correctly for a forwarded `100.64.0.0/10`

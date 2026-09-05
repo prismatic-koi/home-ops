@@ -45,25 +45,23 @@ spec:
       searxng:
         labels:
           # Private DNS decision (#3519), not an omission. Withdrawn from
-          # public DNS in #3555: off-LAN access is tailnet-only by intent.
+          # public DNS in #3555: access is tailnet-only by intent.
           # The headscale split entry plus the extra_records pin (#3553) are
           # the resolution path for a tailnet client. This hostname gets no
           # blocky customDNS pin: #3631 removed it, because a pin is
           # break-glass bootstrap for infrastructure only (#3629).
           dns.home-ops/public: "false"
         hostnames: ["search.${SECRET_PUBLIC_DOMAIN}"]
-        # Tier-2 (websecurepriv) and tier-3 (websecurets) listeners, dual-bound
-        # (#3643, step 2 of #3635). The public websecure listener serves no
-        # route for this hostname, so a request to the public address returns
-        # 404 whatever the client resolves. The route is reachable from the LAN
-        # (the traefik-private address) and from the tailnet (the ts-web
-        # proxy), but not from the internet. It becomes tier-3 tailnet-only
-        # when step 4 unbinds websecurepriv. A websecure entry restores public
-        # reachability.
+        # Tier-3 (websecurets) listener only (#3648, step 4 of #3635). The
+        # route left the tier-2 websecurepriv listener, so the traefik-private
+        # LAN address no longer serves this hostname. websecurets sits behind
+        # traefik-ts, a ClusterIP Service with no LAN address, so the ts-web
+        # tailnet proxy is the only path to this hostname. The public
+        # websecure listener serves no route for it either, so a request to
+        # the public address returns 404 whatever the client resolves. A
+        # websecurepriv entry restores the LAN path; a websecure entry
+        # restores public reachability.
         parentRefs:
-          - name: traefik-gateway
-            namespace: networking
-            sectionName: websecurepriv
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurets
