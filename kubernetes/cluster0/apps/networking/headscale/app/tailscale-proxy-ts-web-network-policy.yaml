@@ -131,6 +131,15 @@ spec:
 # the Service port 443 never matches the translated traffic -- the same
 # failure mode AGENTS.md documents for the kube-apiserver rule below. Do not
 # remove :8443 as a "redundant" duplicate of :443.
+#
+# :9443 (issue #3643) is the CONTAINER port behind the tier-3 traefik-ts
+# ClusterIP Service's :443 (targetPort websecurets). It is pre-authorised
+# here, one step BEFORE step 3 repoints this proxy's TCPForward at
+# traefik-ts.networking.svc.cluster.local:443. Adding it in the repoint step
+# would repeat the #3624 outage, where the proxy was repointed at a Service
+# whose container port the egress policy did not permit and six tailnet
+# hostnames went down. It is inert until that repoint. Keep :80, :443, :8443
+# and :9443 all four.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -148,6 +157,8 @@ spec:
         - port: 443
           protocol: TCP
         - port: 8443
+          protocol: TCP
+        - port: 9443
           protocol: TCP
       to:
         - namespaceSelector:

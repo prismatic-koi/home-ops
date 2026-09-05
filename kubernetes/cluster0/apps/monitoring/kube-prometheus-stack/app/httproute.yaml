@@ -3,10 +3,12 @@
 # prometheus.ts.${SECRET_PUBLIC_DOMAIN} — tailnet-only web UI (pilot #3466)
 #
 # Routes the tailnet hostname prometheus.ts.${SECRET_PUBLIC_DOMAIN} to the
-# in-cluster prometheus Service on the traefik `websecurepriv` listener.
-# Reached only via the ts-web tailscale proxy (networking) -> the
-# traefik-private Service :443 -> here. TLS terminates on traefik with the
-# *.ts.${SECRET_PUBLIC_DOMAIN} cert.
+# in-cluster prometheus Service on the traefik `websecurepriv` (tier 2) and
+# `websecurets` (tier 3) listeners, dual-bound (#3643, step 2 of #3635).
+# Today it is reached via the ts-web tailscale proxy (networking) -> the
+# traefik-private Service :443 -> here, and also from the LAN at that private
+# address. TLS terminates on traefik with the *.ts.${SECRET_PUBLIC_DOMAIN}
+# cert.
 #
 # Lives in `monitoring` (same namespace as the backend Service) so the
 # backendRef needs no ReferenceGrant — same pattern as the hubble-ui and
@@ -26,7 +28,7 @@
 # networking/httpsredirect and home/searxng. They are NOT the same case.
 # httpsredirect declares no hostnames, so it can never produce a record and its
 # value is immaterial. searxng declares one and had a public record until #3555
-# withdrew it; a headscale pin and a blocky pin resolve it now. This route
+# withdrew it; a headscale pin resolves it now. This route
 # declares a hostname and never had a public record, so the label is the only
 # control. Every other route had a public record before #3518 and kept it.
 #
@@ -54,17 +56,25 @@ metadata:
 spec:
   hostnames:
     - prometheus.ts.${SECRET_PUBLIC_DOMAIN}
-  # Private listener only (#3617). The public listener serves no route for
-  # this hostname, so a request to the public address returns 404, whatever
-  # the client resolves. The tailnet path through the ts-web proxy is the only
-  # way in: this hostname carries no blocky pin, because it resolves through
-  # tailnet DNS. A websecure entry here restores public reachability.
+  # Tier-2 (websecurepriv) and tier-3 (websecurets) listeners, dual-bound
+  # (#3643, step 2 of #3635). The public websecure listener serves no route
+  # for this hostname, so a request to the public address returns 404,
+  # whatever the client resolves. The route is reachable from the LAN (the
+  # traefik-private address) and from the tailnet (the ts-web proxy), but not
+  # from the internet; it carries no blocky pin. It becomes tier-3
+  # tailnet-only when step 4 unbinds websecurepriv. A websecure entry restores
+  # public reachability.
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
       namespace: networking
       sectionName: websecurepriv
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecurets
   rules:
     - backendRefs:
         - group: ""
