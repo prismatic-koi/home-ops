@@ -361,6 +361,20 @@ it carried `external-dns.alpha.kubernetes.io/controller: none`. A route added
 without that annotation got a public record silently. That is the defect the
 label fixes.
 
+### Withdrawing the record reduces discoverability, not reachability
+
+Removing the label, and so withdrawing the public record, does not make a
+service unreachable from the internet. traefik routes by the HTTP `Host`
+header. Every hostname bound to a listener is served by that listener,
+whether or not a public record exists for it. A client sets its own name
+resolution, with `curl --resolve` or an `/etc/hosts` entry. No privilege is
+needed, and the change has no effect on our DNS. Hostnames are not secret:
+they appear in public certificate transparency logs.
+
+The control is the listener a route binds to, not the DNS record. See
+"The traefik-private Service and the websecurepriv listener" below for the
+mechanism that removes reachability.
+
 ### Same commit is not same time — use expand-then-contract
 
 A change that makes a controller **more selective** — a label filter, an
@@ -469,14 +483,27 @@ that came from the `crd` source: `tun.${SECRET_PUBLIC_DOMAIN}`, published by the
 cloudflared app (#3518). That app and its record are gone (#3581). The `crd`
 and `ingress` sources stay enabled, so the same mistake is still available.
 
-### Records external-dns does not own
+### external-dns deletes only a record it owns
 
-external-dns deletes only records for which it holds a `k8s.` TXT ownership
-record — `plan.calculateChanges` filters deletes through
-`FilterEndpointsByOwnerID`. Some names in the zone have no ownership TXT and are
-therefore outside its control entirely, whatever the label says. It logs them
-each loop as `missing owner label` or `owner id does not match`. Check the logs
-before you assume a record is managed here.
+Ownership is a TXT record, not the `dns.home-ops/public` label. Removing the
+label does not withdraw a record that external-dns does not own —
+`plan.calculateChanges` filters deletes through `FilterEndpointsByOwnerID`, so
+an unowned record stays in the zone whatever the label says.
+
+The ownership TXT record uses one of two naming schemes:
+
+- legacy: `k8s.<host>`
+- current: `k8s.<type>-<host>`, for example `k8s.cname-seaweedfs`
+
+Check both schemes. A check of only one scheme gives a false negative: it
+reports a record as unowned when the ownership TXT uses the other scheme.
+
+Before you rely on a label change to withdraw a record, check ownership for
+that hostname in Cloudflare. Most records in this zone hold no ownership TXT
+under either scheme, so most label flips are inert, and a manual delete in
+Cloudflare is the only way to withdraw the record. external-dns logs an
+unowned record each loop as `missing owner label` or `owner id does not
+match`. Check the logs before you assume a record is managed here.
 
 ### Worked example — publish a new hostname
 
@@ -575,6 +602,70 @@ kubectl -n networking logs deploy/external-dns --tail=500 \
   | grep "Endpoints generated from"
 ```
 
+
+## A blocky customDNS pin is break-glass infrastructure only
+
+A `customDNS` pin in
+`kubernetes/cluster0/apps/networking/blocky/app/config.yaml` exists to
+bootstrap **critical infrastructure** when the cluster is broken. It is not a
+general pattern for the internal resolution of an ordinary application.
+
+Only four hostnames get a pin, because each names a tool you need to repair
+the cluster:
+
+- `unifi` — network
+- `traefik` — ingress
+- `longhorn` — storage
+- `auth` — authelia; without it nothing else admits a login
+
+An ordinary application does not get a pin. Reach it through the tailnet, and
+let the headscale ACL act as its access control. A pin on an application
+widens access to the whole LAN, a wider set than the tailnet ACL admits.
+
+#3609 added pins for four ordinary applications by copying an earlier pin,
+without asking why that pin existed. #3629 removed all five. Before you add a
+pin, confirm the hostname names one of the four infrastructure tools above.
+
+## The traefik-private Service and the websecurepriv listener
+
+A private route becomes unreachable from the public internet through listener
+binding, not through DNS withdrawal. See "Withdrawing the record reduces
+discoverability, not reachability" above.
+
+Two objects make a route private:
+
+- `traefik-private`, a LoadBalancer Service. The gateway forwards no port to
+  it from outside the cluster.
+- `websecurepriv`, a Gateway listener bound to `traefik-private`. It carries
+  the same wildcard certificates as the public `websecure` listener.
+
+A private route sets `sectionName: websecurepriv` and no other listener. The
+public `websecure` listener then holds no route for that hostname. A
+`Host`-header request to the public listener does not reach the service,
+whatever the client resolves.
+
+### `sectionName` fails silently
+
+A route that names a listener which does not exist is not attached to the
+Gateway. It reports `Accepted=False reason=NoMatchingParent`, and nothing else
+surfaces the failure. `networking/httpsredirect` stayed in this state for a
+long time, masked by a redirect at the entrypoint.
+
+After you change a route's `sectionName`, confirm that the service is still
+reachable on its intended path. Do not confirm only that it stopped being
+reachable on the old path — that check alone can pass while the route is
+attached to no listener at all.
+
+### An egress NetworkPolicy for a private route must name the container port
+
+The kube-apiserver note above ("Pods accessing the Kubernetes API server")
+covers socket-LB address translation. The same mechanism translates the port.
+Cilium socket-LB rewrites a ClusterIP and its Service port to the backing
+pod's IP and container port, before egress policy evaluation. An egress
+`NetworkPolicy` `toPorts` rule must name the container port. A rule that
+names the Service port denies the translated traffic when the Service's
+`targetPort` differs from its `port`. This broke the tailnet path in #3623
+and was fixed in #3625.
 
 ## Cilium Helm chart minor/major upgrades
 
