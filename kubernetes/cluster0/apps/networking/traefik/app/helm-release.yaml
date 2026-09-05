@@ -88,6 +88,26 @@ spec:
             # wildcard and this ts. wildcard are served side by side.
             - kind: Secret
               name: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
+        # Private listener (#3617). Clients reach it on port 443 at
+        # TRAEFIK_PRIVATE_IP, through the standalone traefik-private Service.
+        # The LAN router forwards no port to that address, so the listener is
+        # not reachable from the internet.
+        #
+        # The chart renders listeners in key order. This name sorts after
+        # websecure, so the two public listeners keep their index.
+        #
+        # certificateRefs and namespacePolicy are identical to websecure, so a
+        # route serves the same certificates on either listener.
+        websecurepriv:
+          port: 8443
+          protocol: HTTPS
+          namespacePolicy:
+            from: All
+          certificateRefs:
+            - kind: Secret
+              name: "${SECRET_PUBLIC_DOMAIN/./-}-tls"
+            - kind: Secret
+              name: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
     additionalArguments:
       - "--api.insecure=true"
       - "--providers.kubernetesingress.ingressclass=traefik"
@@ -105,6 +125,20 @@ spec:
       websecure:
         port: 443
         exposedPort: 443
+        http:
+          tls:
+            enabled: true
+            options: "default"
+      # Entrypoint for the private Gateway listener (#3617). The container
+      # port must differ from 443: one pod serves both listeners.
+      #
+      # expose.default must stay false. A true value adds :8443 to the
+      # chart-managed Service, which publishes the private listener on the
+      # public address.
+      websecurepriv:
+        port: 8443
+        expose:
+          default: false
         http:
           tls:
             enabled: true

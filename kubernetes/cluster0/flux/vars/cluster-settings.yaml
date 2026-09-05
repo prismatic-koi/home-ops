@@ -18,6 +18,10 @@ data:
   LOADBALANCER_IP_POOL_START: "10.87.42.10"
   LOADBALANCER_IP_POOL_STOP: "10.87.42.31"
   TRAEFIK_IP:       "10.87.42.10"
+  # Second Traefik address, for the private Gateway listener. It sits inside
+  # the pool above, so it must not collide with any other address pinned in
+  # this file.
+  TRAEFIK_PRIVATE_IP: "10.87.42.16"
   PRIMARY_DNS_IP:   "10.87.42.11"
   PLEX_IP:          "10.87.42.12"
   SYNC_ENDPOINT:    "10.87.42.14"

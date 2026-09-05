@@ -106,6 +106,37 @@ spec:
         - port: 443
           protocol: TCP
 ---
+# Allow ingress on :8443, the container port of the private Gateway listener
+# (#3617).
+#
+# The two peers mirror the pair of rules above that permit :80 and :443: the
+# ipBlock peer matches external and host-network sources, the namespaceSelector
+# peer matches in-cluster pod identities, which Cilium kubeProxyReplacement
+# does not match by source IP (#2977).
+#
+# This rule does not make the listener private. The listener is private because
+# the LAN router forwards no port to its address, so only a LAN or tailnet
+# client reaches it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-private-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - namespaceSelector: {}
+      ports:
+        - port: 8443
+          protocol: TCP
+---
 # Allow intra-pod ingress on :8080 from Traefik itself.
 # The `traefik-dashboard` Service in this namespace selects Traefik pods and
 # routes Service:80 → pod:8080 — the dashboard route terminates on the same
