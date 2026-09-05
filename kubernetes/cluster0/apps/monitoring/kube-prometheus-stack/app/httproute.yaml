@@ -3,9 +3,10 @@
 # prometheus.ts.${SECRET_PUBLIC_DOMAIN} — tailnet-only web UI (pilot #3466)
 #
 # Routes the tailnet hostname prometheus.ts.${SECRET_PUBLIC_DOMAIN} to the
-# in-cluster prometheus Service on the traefik `websecure` listener. Reached
-# only via the ts-web tailscale proxy (networking) -> traefik :443 -> here.
-# TLS terminates on traefik with the *.ts.${SECRET_PUBLIC_DOMAIN} cert.
+# in-cluster prometheus Service on the traefik `websecurepriv` listener.
+# Reached only via the ts-web tailscale proxy (networking) -> the
+# traefik-private Service :443 -> here. TLS terminates on traefik with the
+# *.ts.${SECRET_PUBLIC_DOMAIN} cert.
 #
 # Lives in `monitoring` (same namespace as the backend Service) so the
 # backendRef needs no ReferenceGrant — same pattern as the hubble-ui and
@@ -53,12 +54,12 @@ metadata:
 spec:
   hostnames:
     - prometheus.ts.${SECRET_PUBLIC_DOMAIN}
+  # Private listener only (#3617). The public listener serves no route for
+  # this hostname, so a request to the public address returns 404, whatever
+  # the client resolves. The tailnet path through the ts-web proxy is the only
+  # way in: this hostname carries no blocky pin, because it resolves through
+  # tailnet DNS. A websecure entry here restores public reachability.
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: traefik-gateway
-      namespace: networking
-      sectionName: websecure
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway

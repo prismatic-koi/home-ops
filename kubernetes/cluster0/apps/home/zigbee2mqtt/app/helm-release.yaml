@@ -56,10 +56,13 @@ spec:
           # resolving everywhere.
           dns.home-ops/public: "false"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
+        # Private listener only (#3617). The public listener serves no route
+        # for this hostname, so a request to the public address returns 404,
+        # whatever the client resolves. A LAN client reaches it through the
+        # blocky pin to the private address; a tailnet client reaches it
+        # through the ts-web proxy. A websecure entry here restores public
+        # reachability.
         parentRefs:
-          - name: traefik-gateway
-            namespace: networking
-            sectionName: websecure
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurepriv

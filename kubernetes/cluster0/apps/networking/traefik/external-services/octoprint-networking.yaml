@@ -42,12 +42,12 @@ metadata:
     # or the hostname stops resolving everywhere.
     dns.home-ops/public: "false"
 spec:
+  # Private listener only (#3617). The public listener serves no route for this
+  # hostname, so a request to the public address returns 404, whatever the
+  # client resolves. A LAN client reaches it through the blocky pin to the
+  # private address; a tailnet client reaches it through the ts-web proxy. A
+  # websecure entry here restores public reachability.
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: traefik-gateway
-      namespace: networking
-      sectionName: websecure
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
