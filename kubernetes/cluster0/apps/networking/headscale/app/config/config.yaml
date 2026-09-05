@@ -118,11 +118,12 @@ dns:
     # there before you remove either.
     #
     # Contract phase (#3555): the public record is withdrawn. This pin is
-    # visible only to a MagicDNS-enabled tailnet client. A LAN client that is
-    # not on the tailnet reaches searxng through the blocky customDNS pin
-    # (kubernetes/cluster0/apps/networking/blocky/app/config.yaml), which is
-    # now load-bearing -- do not remove it as redundant. See AGENTS.md,
-    # "Removing the label withdraws public DNS -- do not do it alone".
+    # visible only to a MagicDNS-enabled tailnet client, and it is now the
+    # only resolution path for the hostname -- do not remove it as redundant.
+    # #3631 removed the blocky customDNS pin, and #3648 moved the route to
+    # the tier-3 websecurets listener, so no LAN path remains at all. See
+    # AGENTS.md, "Three exposure tiers: the listener routes, the Service
+    # exposes".
     - name: "search.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
