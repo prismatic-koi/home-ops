@@ -5,6 +5,7 @@ resources:
   - ./helm-release.yaml
   - ./httpsredirect.yaml
   - ./service-private.yaml
+  - ./service-ts.yaml
   - ./network-policy.yaml
   - ./cilium-network-policy.yaml
 labels:

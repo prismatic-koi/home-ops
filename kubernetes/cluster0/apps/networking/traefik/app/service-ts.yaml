@@ -1,0 +1,47 @@
+---
+# ClusterIP Service for the tailnet-only Gateway listener, tier 3 (#3635,
+# #3636).
+#
+# ==========================================================================
+# type: ClusterIP is the security property. Do not give this Service an
+# address.
+#
+# A route on the websecurets listener is unreachable from the LAN because no
+# LAN address exists for the listener -- not because a rule denies access.
+# There is no allow-list to misconfigure and nothing to leak.
+#
+# So this Service must never become type: LoadBalancer, must never carry an
+# io.cilium/lb-ipam-ips annotation, must never take an address from the
+# LB-IPAM pool, and must never gain loadBalancerSourceRanges. Any one of
+# those silently destroys the only property tier 3 has.
+#
+# Tier 2 shows the failure this avoids: traefik-private is a LoadBalancer on
+# TRAEFIK_PRIVATE_IP, Cilium announces that address on every node, and six
+# routes the plan called tailnet-only were reachable from any LAN host
+# (caught in review on #3634).
+# ==========================================================================
+#
+# The Traefik chart renders exactly one Service, so a second front end needs a
+# Service outside the chart. The selector is the chart's own label selector:
+# the instance value is `<release>-<namespace>`, not `traefik`. A selector of
+# `app.kubernetes.io/instance: traefik` matches no pod and the Service serves
+# nothing.
+#
+# Port 443 maps to the tier-3 entrypoint's container port, so an in-cluster
+# client uses the same port here as on the public address. The ts-web proxy
+# is repointed at this Service in step 3 of #3635, not in this PR.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-ts
+  namespace: networking
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/instance: traefik-networking
+  ports:
+    - name: websecurets
+      port: 443
+      targetPort: websecurets
+      protocol: TCP

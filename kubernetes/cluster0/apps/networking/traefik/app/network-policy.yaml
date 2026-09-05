@@ -137,6 +137,39 @@ spec:
         - port: 8443
           protocol: TCP
 ---
+# Allow ingress on :9443, the container port of the tailnet-only Gateway
+# listener, tier 3 (#3635, #3636).
+#
+# The two peers mirror traefik-allow-private-ingress above. The ipBlock peer
+# matches external and host-network sources. The namespaceSelector peer
+# matches in-cluster pod identities, which Cilium kubeProxyReplacement does
+# not match by source IP (#2977). The namespaceSelector peer is what the
+# ts-web proxy will match from step 3 of #3635, when it is repointed at the
+# traefik-ts ClusterIP Service. It does not use this path yet.
+#
+# This rule does not make the listener tailnet-only. The listener is
+# tailnet-only because its Service is ClusterIP, so no LAN address exists for
+# it. See service-ts.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-allow-ts-ingress
+  namespace: networking
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - namespaceSelector: {}
+      ports:
+        - port: 9443
+          protocol: TCP
+---
 # Allow intra-pod ingress on :8080 from Traefik itself.
 # The `traefik-dashboard` Service in this namespace selects Traefik pods and
 # routes Service:80 → pod:8080 — the dashboard route terminates on the same
