@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./dashboard-prism-fleet.yaml
+  - ./prometheusrule.yaml
   - ./secret.sops.yaml
   - ./probe.yaml
   - ./network-policy.yaml

@@ -1,0 +1,25 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: prism-fleet
+  namespace: monitoring
+spec:
+  groups:
+    - name: prism-fleet
+      rules:
+        # #3650: prism_bus_messages_pending is a gauge of a sub-second
+        # transient sampled at scrape time. It only ever produces a series
+        # when a message happens to be undelivered at the scrape instant, so
+        # it cannot drive a useful dashboard panel -- but a value sustained
+        # for several minutes means the bus is genuinely stuck, not just
+        # caught mid-delivery.
+        - alert: PrismBusMessagesPending
+          expr: prism_bus_messages_pending > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Prism bus backlog is not draining"
+            description: "prism_bus_messages_pending has been above 0 for more than 5 minutes ({{ $value }} pending, repo={{ $labels.repo }}). This metric is only ever non-zero as a sub-second transient, so a sustained value means the bus is stuck and messages are not being consumed."

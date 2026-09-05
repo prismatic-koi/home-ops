@@ -187,7 +187,7 @@ data:
           "title": "Merge queue depth by repo",
           "description": "prism_merge_queue_depth. Empty when no merges are queued.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 8 },
+          "gridPos": { "h": 7, "w": 24, "x": 0, "y": 8 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" },
@@ -202,31 +202,6 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "expr": "sum by (repo) (prism_merge_queue_depth{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"})",
-              "legendFormat": "{{repo}}"
-            }
-          ]
-        },
-        {
-          "type": "timeseries",
-          "id": 5,
-          "title": "Bus backlog by repo",
-          "description": "prism_bus_messages_pending. Stall signal: a floor that rises means messages are not consumed.",
-          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 8 },
-          "fieldConfig": {
-            "defaults": {
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" },
-              "unit": "short",
-              "min": 0
-            },
-            "overrides": []
-          },
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "sum by (repo) (prism_bus_messages_pending{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"})",
               "legendFormat": "{{repo}}"
             }
           ]
@@ -330,26 +305,20 @@ data:
           "panels": []
         },
         {
-          "type": "timeseries",
+          "type": "bargauge",
           "id": 21,
-          "title": "Spawn rate by role & profile",
-          "description": "rate(prism_spawns_total) by agent_role and profile.",
+          "title": "Spawns by role & profile (range total)",
+          "description": "increase(prism_spawns_total) by agent_role and profile.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
-          "fieldConfig": {
-            "defaults": {
-              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
-              "unit": "cps",
-              "min": 0
-            },
-            "overrides": []
-          },
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "fieldConfig": { "defaults": { "unit": "short", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
           "targets": [
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "sum by (agent_role, profile) (rate(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[$__rate_interval]))",
+              "instant": true,
+              "expr": "sum by (agent_role, profile) (increase(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[$__range]))",
               "legendFormat": "{{agent_role}} / {{profile}}"
             }
           ]
@@ -386,7 +355,7 @@ data:
           "type": "stat",
           "id": 23,
           "title": "Review pass rate",
-          "description": "rate(prism_review_verdicts_total{verdict=\"pass\"}) / rate(prism_review_verdicts_total).",
+          "description": "increase(prism_review_verdicts_total{verdict=\"pass\"}[$__range]) / increase(prism_review_verdicts_total[$__range]).",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
           "fieldConfig": {
@@ -404,7 +373,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "sum(rate(prism_review_verdicts_total{verdict=\"pass\"}[$__rate_interval])) / sum(rate(prism_review_verdicts_total[$__rate_interval]))",
+              "expr": "sum(increase(prism_review_verdicts_total{verdict=\"pass\"}[$__range])) / sum(increase(prism_review_verdicts_total[$__range]))",
               "legendFormat": "pass rate"
             }
           ]
