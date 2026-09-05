@@ -109,8 +109,8 @@ spec:
 # Allow ingress on :8443, the container port of the private Gateway listener
 # (#3617).
 #
-# The two peers mirror the pair of rules above that permit :80 and :443: the
-# ipBlock peer matches external and host-network sources, the namespaceSelector
+# The two peers mirror the pair of rules above that permit :80 and :443. The
+# ipBlock peer matches external and host-network sources. The namespaceSelector
 # peer matches in-cluster pod identities, which Cilium kubeProxyReplacement
 # does not match by source IP (#2977).
 #
