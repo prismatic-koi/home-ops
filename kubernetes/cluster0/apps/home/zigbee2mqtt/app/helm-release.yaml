@@ -47,35 +47,31 @@ spec:
     route:
       app:
         labels:
-          # Private DNS decision (#3519), not an omission. Withdrawn from
-          # public DNS in #3610: off-LAN access is tailnet-only by intent.
-          # Internal resolution stands in place of the public record — the
-          # headscale split entry plus extra_records pin (#3609) for a tailnet
-          # client, and the blocky customDNS pin (#3609) for a LAN client that
-          # is not on the tailnet. Both must stay, or the hostname stops
-          # resolving everywhere.
+          # Private DNS decision (#3519), not an omission. Off-LAN access is
+          # tailnet-only by intent. The headscale split entry plus the
+          # extra_records pin (#3609) are the only resolution path for this
+          # hostname. Both must stay, or the hostname stops resolving. This
+          # hostname gets no blocky customDNS pin: a pin is break-glass
+          # bootstrap for infrastructure only (#3629).
           dns.home-ops/public: "false"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         # Private listener only (#3617). The public listener serves no route
         # for this hostname, so a request to the public address returns 404,
-        # whatever the client resolves. A LAN client reaches it through the
-        # blocky pin to the private address; a tailnet client reaches it
-        # through the ts-web proxy. A websecure entry here restores public
+        # whatever the client resolves. A tailnet client reaches it through
+        # the ts-web proxy. A websecure entry here restores public
         # reachability.
         parentRefs:
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurepriv
+        # NO forwardauth-authelia middleware (#3633): access control is the
+        # tailnet ACL (ben@ -> tag:ts-web in headscale policy.hujson). The
+        # tailnet is the only path to this route. Restore the filter before
+        # you bind this route to the public websecure listener again.
         rules:
           - backendRefs:
               - identifier: app
                 port: *port
-            filters:
-              - type: 'ExtensionRef'
-                extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
-                  name: 'forwardauth-authelia'
     networkpolicies:
       default-deny:
         controller: main
