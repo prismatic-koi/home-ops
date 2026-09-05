@@ -33,14 +33,14 @@ data:
         traefik.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
         longhorn.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
         auth.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        search.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
+        search.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_PRIVATE_IP}
         # Wave 1 phase 1 (#3608), expand phase. LAN-only fallback for a client
         # that is not on the tailnet -- see the headscale split/extra_records
         # pair for the tailnet path. Load-bearing; do not remove as redundant.
-        changedetection-io.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        uptime.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        zigbee2mqtt.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        octoprint.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
+        changedetection-io.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_PRIVATE_IP}
+        uptime.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_PRIVATE_IP}
+        zigbee2mqtt.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_PRIVATE_IP}
+        octoprint.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_PRIVATE_IP}
 
     blocking:
       loading:
