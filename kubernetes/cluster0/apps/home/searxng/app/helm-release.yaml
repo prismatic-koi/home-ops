@@ -46,23 +46,27 @@ spec:
         labels:
           # Private DNS decision (#3519), not an omission. Withdrawn from
           # public DNS in #3555: off-LAN access is tailnet-only by intent.
-          # Internal resolution stands in place of the public record — the
-          # headscale split entry plus extra_records pin (#3553) for a tailnet
-          # client, and the blocky customDNS pin for a LAN client that is not
-          # on the tailnet. Both must stay, or the hostname stops resolving
-          # everywhere.
+          # The headscale split entry plus the extra_records pin (#3553) are
+          # the resolution path for a tailnet client. This hostname gets no
+          # blocky customDNS pin: #3631 removed it, because a pin is
+          # break-glass bootstrap for infrastructure only (#3629).
           dns.home-ops/public: "false"
         hostnames: ["search.${SECRET_PUBLIC_DOMAIN}"]
-        # Private listener only (#3617). The public listener serves no route
-        # for this hostname, so a request to the public address returns 404,
-        # whatever the client resolves. A LAN client reaches it through the
-        # blocky pin to the private address; a tailnet client reaches it
-        # through the ts-web proxy. A websecure entry here restores public
+        # Tier-2 (websecurepriv) and tier-3 (websecurets) listeners, dual-bound
+        # (#3643, step 2 of #3635). The public websecure listener serves no
+        # route for this hostname, so a request to the public address returns
+        # 404 whatever the client resolves. The route is reachable from the LAN
+        # (the traefik-private address) and from the tailnet (the ts-web
+        # proxy), but not from the internet. It becomes tier-3 tailnet-only
+        # when step 4 unbinds websecurepriv. A websecure entry restores public
         # reachability.
         parentRefs:
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurepriv
+          - name: traefik-gateway
+            namespace: networking
+            sectionName: websecurets
         rules:
           - backendRefs:
               - identifier: searxng
