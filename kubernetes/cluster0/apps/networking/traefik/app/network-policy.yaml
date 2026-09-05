@@ -143,8 +143,9 @@ spec:
 # The two peers mirror traefik-allow-private-ingress above. The ipBlock peer
 # matches external and host-network sources. The namespaceSelector peer
 # matches in-cluster pod identities, which Cilium kubeProxyReplacement does
-# not match by source IP (#2977). The ts-web proxy reaches this port as an
-# in-cluster pod, through the traefik-ts ClusterIP Service.
+# not match by source IP (#2977). The namespaceSelector peer is what the
+# ts-web proxy will match from step 3 of #3635, when it is repointed at the
+# traefik-ts ClusterIP Service. It does not use this path yet.
 #
 # This rule does not make the listener tailnet-only. The listener is
 # tailnet-only because its Service is ClusterIP, so no LAN address exists for
