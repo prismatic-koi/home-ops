@@ -108,6 +108,27 @@ spec:
               name: "${SECRET_PUBLIC_DOMAIN/./-}-tls"
             - kind: Secret
               name: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
+        # Tailnet-only listener, tier 3 (#3635, #3636). The only Service in
+        # front of it is traefik-ts, which is ClusterIP. No LoadBalancer
+        # address exists for this listener, so a route bound here is
+        # reachable through the ts-web tailnet proxy only.
+        #
+        # The chart renders listeners in key order. This name sorts after
+        # websecurepriv, so web, websecure and websecurepriv keep their index.
+        #
+        # certificateRefs and namespacePolicy are identical to websecure and
+        # websecurepriv, so a route serves the same certificates on any of the
+        # three listeners.
+        websecurets:
+          port: 9443
+          protocol: HTTPS
+          namespacePolicy:
+            from: All
+          certificateRefs:
+            - kind: Secret
+              name: "${SECRET_PUBLIC_DOMAIN/./-}-tls"
+            - kind: Secret
+              name: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
     additionalArguments:
       - "--api.insecure=true"
       - "--providers.kubernetesingress.ingressclass=traefik"
@@ -137,6 +158,21 @@ spec:
       # public address.
       websecurepriv:
         port: 8443
+        expose:
+          default: false
+        http:
+          tls:
+            enabled: true
+            options: "default"
+      # Entrypoint for the tailnet-only Gateway listener, tier 3 (#3636). The
+      # container port must differ from 443 and from the tier-2 8443: one pod
+      # serves all three listeners.
+      #
+      # expose.default must stay false. A true value adds :9443 to the
+      # chart-managed Service, which publishes the tailnet-only listener on the
+      # public address.
+      websecurets:
+        port: 9443
         expose:
           default: false
         http:
