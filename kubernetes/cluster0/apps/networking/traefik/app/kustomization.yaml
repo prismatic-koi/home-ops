@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./httpsredirect.yaml
+  - ./service-private.yaml
   - ./network-policy.yaml
   - ./cilium-network-policy.yaml
 labels:
