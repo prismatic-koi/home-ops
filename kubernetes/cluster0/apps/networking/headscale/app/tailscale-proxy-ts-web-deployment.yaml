@@ -7,8 +7,9 @@
 #
 # Unlike tailscale-proxy-prometheus / -loki / -metrics-ingest, this proxy is
 # NOT bound to one backend Service. It is a dumb L4 pipe: it TCPForwards
-# inbound tailnet TCP :443 straight to the in-cluster traefik gateway on
-# :443, and (since issue #3471) inbound tailnet TCP :80 to traefik on :80
+# inbound tailnet TCP :443 straight to the in-cluster traefik-private
+# gateway Service on :443 (phase 3, #3622; #3617), and (since issue #3471)
+# inbound tailnet TCP :80 to the public traefik Service on :80
 # for the HTTP->HTTPS redirect -- traefik's web entrypoint 308s every
 # request to websecure, so no application content is ever served in
 # plaintext. Traefik terminates TLS on the *.ts.${SECRET_PUBLIC_DOMAIN} cert
@@ -44,8 +45,9 @@ metadata:
   name: tailscale-proxy-ts-web-serve
   namespace: networking
 data:
-  # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP on
-  # ports 80 and 443 to the traefik gateway Service by DNS name. TCPForward
+  # ipn.ServeConfig — TCP handler that TCPForwards inbound tailnet TCP :443
+  # to the traefik-private gateway Service and :80 to the public traefik
+  # Service, by DNS name (phase 3, #3622; #3617). TCPForward
   # does a standard net.Dial (fresh outbound socket) per accepted connection;
   # it does NOT proxy packets and does NOT terminate TLS. Target is the
   # Service DNS name, not a pinned ClusterIP: no /32 pin drift when the
@@ -59,7 +61,7 @@ data:
           "TCPForward": "traefik.networking.svc.cluster.local:80"
         },
         "443": {
-          "TCPForward": "traefik.networking.svc.cluster.local:443"
+          "TCPForward": "traefik-private.networking.svc.cluster.local:443"
         }
       }
     }
