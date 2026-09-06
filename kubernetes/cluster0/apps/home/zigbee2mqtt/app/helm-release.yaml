@@ -68,16 +68,16 @@ spec:
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurets
+        # NO forwardauth-authelia middleware: access control is the headscale
+        # ACL grant (ben@ -> tag:ts-web:443 in policy.hujson). The ts-web
+        # tailnet proxy is the only path to this route. The frontend has no
+        # auth_token, and its UI pairs devices, pushes OTA firmware and shows
+        # the Zigbee network key. Add the filter back before you bind this
+        # route to a listener that has a LAN or a public address.
         rules:
           - backendRefs:
               - identifier: app
                 port: *port
-            filters:
-              - type: 'ExtensionRef'
-                extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
-                  name: 'forwardauth-authelia'
     networkpolicies:
       default-deny:
         controller: main
