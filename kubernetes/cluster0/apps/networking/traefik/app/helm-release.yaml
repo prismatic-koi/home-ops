@@ -168,7 +168,6 @@ spec:
       # Entrypoint for the tailnet-only Gateway listener, tier 3 (#3636). The
       # container port must differ from 443 and from the tier-2 8443: one pod
       # serves all three listeners.
-      # serves all three listeners.
       #
       # expose.default must stay false. A true value adds :9443 to the
       # chart-managed Service, which publishes the tailnet-only listener on the
