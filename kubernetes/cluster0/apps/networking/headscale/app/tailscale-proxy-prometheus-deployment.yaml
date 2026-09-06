@@ -87,6 +87,26 @@ spec:
             capabilities:
               drop: [ALL]
             allowPrivilegeEscalation: false
+            # runAsUser is mandatory, not decoration. The image declares no
+            # USER, so runAsNonRoot on its own makes the kubelet refuse the
+            # container with CreateContainerConfigError. 65534 is `nobody`,
+            # which the image carries in both /etc/passwd and /etc/group.
+            #
+            # Non-root holds only while TS_USERSPACE stays "true".
+            # containerboot reaches its root-only setup — mknod
+            # /dev/net/tun, sysctl net.ipv4.ip_forward — only when userspace
+            # mode is off. tailscaled then writes just its statedir and its
+            # socket, both under /tmp (mode 1777 in the image); node state
+            # goes to the Secret over the Kubernetes API, not to disk.
+            #
+            # No fsGroup: the kubelet mounts the /var/run/tailscale emptyDir
+            # as a tmpfs and passes no mode option, so the kernel default of
+            # 1777 applies and any UID can write it.
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
           env:
             # Persist tailnet node state (machine key, node key, ...) into
             # this Secret. The RBAC in tailscale-proxy-prometheus-rbac.yaml
