@@ -96,6 +96,21 @@ spec:
             capabilities:
               drop: [ALL]
             allowPrivilegeEscalation: false
+            # See tailscale-proxy-prometheus-deployment.yaml for why
+            # runAsUser is mandatory here, why the UID is 65534, and why no
+            # fsGroup is needed.
+            #
+            # The tailnet-side :80 and :443 handlers need no
+            # CAP_NET_BIND_SERVICE. Under TS_USERSPACE they are netstack
+            # endpoints inside tailscaled, dispatched from acceptTCP over the
+            # WireGuard socket, not host sockets. Do not add the capability:
+            # `drop: [ALL]` already empties the capability set for UID 0, and
+            # these handlers have always served under it.
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
           env:
             # Persist tailnet node state (machine key, node key, ...) into
             # this Secret. The RBAC in tailscale-proxy-ts-web-rbac.yaml pins
