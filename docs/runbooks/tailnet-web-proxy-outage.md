@@ -25,6 +25,30 @@ pod — a manifest edit, an image bump, a node drain, a crash — produces a ful
 outage window between the old pod's termination and the new pod's readiness,
 not a rolling replacement. Budget for this window on every planned change.
 
+### Measured window: roughly 15 to 20 seconds
+
+A `kubectl rollout restart` of `tailscale-proxy-ts-web` was measured on the
+live cluster. Pod-side timings, counted from new pod creation:
+
+| Event | Δ from new pod creation |
+|---|---|
+| Container Ready | +9s |
+| `serve proxy: applying serve config` — proxy serving | +14s |
+
+Add the old pod's termination, which `Recreate` completes before the new pod
+is created, and the client-visible window is roughly **15 to 20 seconds**.
+Treat this as the recovery-time budget for any planned change that restarts
+the pod.
+
+This figure is one sample, reconstructed from pod events and the
+containerboot log rather than measured from a client. Treat it as an
+estimate, not a guarantee.
+
+The short window depends on the node key persisting in the
+`tailscale-proxy-ts-web-state` Secret. Because the key persists, the proxy
+re-registers on restart rather than re-authenticating. If that Secret is
+lost or rotated, expect a longer window while the proxy re-authenticates.
+
 ## Who is affected
 
 Six hostnames route through ts-web today. **None of them has a fallback.**

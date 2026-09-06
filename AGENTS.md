@@ -345,6 +345,14 @@ this):
   <dir>`, then `git init` in that dir) and render there:
   `flux-local build all --enable-helm --skip-secrets --skip-crds
   --output-file rendered.yaml kubernetes/cluster0/flux`.
+- If the host has no pip, pipx, or uv available directly, use a venv: it is
+  the route that worked when other install methods failed.
+  ```bash
+  python3 -m venv <dir>
+  <dir>/bin/pip install flux-local==8.4.0
+  ```
+  This needs `helm`, `kustomize`, and `flux` already on `PATH`. It prints a
+  sunset deprecation warning; the render still works.
 
 An object without the label is invisible to external-dns. It gets **no** public
 A/CNAME record and **no** `k8s.` TXT ownership record.
@@ -779,6 +787,47 @@ see PR #3521, where fixing the lower bound of the Cilium LB-IPAM pool first
 introduced a new upper-bound overreach into the node IPs and NAS0_IP, caught only
 by a human second pass after two review rounds passed it. State the reserved
 addresses you checked, and the result, in the PR description.
+
+## Renaming a LoadBalancer Service orphans its Cilium L2 announcement
+
+Renaming a LoadBalancer Service deletes the old object and creates a new
+one. Cilium drops the old `cilium-l2announce-*` lease for that Service and
+does not create one for the new Service.
+
+The result is silent, and every ordinary check looks healthy:
+
+- The Service exists, with `type: LoadBalancer`.
+- LB-IPAM has assigned the address, and `status.loadBalancer.ingress` shows
+  it.
+- EndpointSlices are populated and the backend pods are ready.
+- The NetworkPolicy permits the port.
+- `kubectl get svc` looks entirely normal.
+
+The address answers nothing, because it is never ARP-announced, so no LAN
+client can reach it.
+
+**The direct signal is the absence of a lease**, not a failed connection
+check:
+
+```bash
+kubectl -n kube-system get lease | grep l2announce
+```
+
+After you rename a LoadBalancer Service, run this check. Do not rely on a
+connection test alone to confirm the rename worked.
+
+**Do not diagnose this with ping.** The traefik ingress NetworkPolicies
+permit TCP only, so ICMP fails for a working address as well as a broken
+one. In one investigation, `ping` reported 100% loss for a healthy address.
+Use a TCP probe instead, and compare against a known-good address:
+`curl` returning `000` means unreachable, and `404` means reachable with no
+route matched.
+
+**Recovery:** delete the Service and let Flux recreate it. The create event
+makes Cilium claim a new lease. In one case, the lease appeared within 30
+seconds and the address answered about a minute later, once the router's
+ARP entry refreshed. Rolling the cilium agent DaemonSet also works, but it
+is far heavier — that action affects the CNI for the whole cluster.
 
 ## Init Containers
 
