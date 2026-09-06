@@ -15,8 +15,8 @@
 # LB-IPAM pool, and must never gain loadBalancerSourceRanges. Any one of
 # those silently destroys the only property tier 3 has.
 #
-# Tier 2 shows the failure this avoids: traefik-private is a LoadBalancer on
-# TRAEFIK_PRIVATE_IP, Cilium announces that address on every node, and six
+# Tier 2 shows the failure this avoids: traefik-lan is a LoadBalancer on
+# TRAEFIK_LAN_IP, Cilium announces that address on every node, and six
 # routes the plan called tailnet-only were reachable from any LAN host
 # (caught in review on #3634).
 # ==========================================================================

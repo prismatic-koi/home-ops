@@ -43,12 +43,12 @@ metadata:
     dns.home-ops/public: "false"
 spec:
   # Tier-3 (websecurets) listener only (#3648, step 4 of #3635). The route left
-  # the tier-2 websecurepriv listener, so the traefik-private LAN address no
+  # the tier-2 websecurelan listener, so the traefik-lan LAN address no
   # longer serves this hostname. websecurets sits behind traefik-ts, a
   # ClusterIP Service with no LAN address, so the ts-web tailnet proxy is the
   # only path to this hostname. The public websecure listener serves no route
   # for it either, so a request to the public address returns 404 whatever the
-  # client resolves. A websecurepriv entry restores the LAN path; a websecure
+  # client resolves. A websecurelan entry restores the LAN path; a websecure
   # entry restores public reachability.
   parentRefs:
     - group: gateway.networking.k8s.io
