@@ -345,14 +345,6 @@ this):
   <dir>`, then `git init` in that dir) and render there:
   `flux-local build all --enable-helm --skip-secrets --skip-crds
   --output-file rendered.yaml kubernetes/cluster0/flux`.
-- If the host has no pip, pipx, or uv available directly, use a venv: it is
-  the route that worked when other install methods failed.
-  ```bash
-  python3 -m venv <dir>
-  <dir>/bin/pip install flux-local==8.4.0
-  ```
-  This needs `helm`, `kustomize`, and `flux` already on `PATH`. It prints a
-  sunset deprecation warning; the render still works.
 
 An object without the label is invisible to external-dns. It gets **no** public
 A/CNAME record and **no** `k8s.` TXT ownership record.
