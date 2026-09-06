@@ -335,10 +335,24 @@ full-tree `flux-local` render on every PR costs real minutes.
 To reproduce the render these lints read (three sessions have rediscovered
 this):
 
-- podman on this host has no OCI runtime, so the CI
-  `ghcr.io/allenporter/flux-local` image will not run locally.
-- Install `flux-local` v8.4.0 from pip instead — the version
-  `.github/workflows/flux-local.yaml` pins.
+- `flux-local` 8.4.0 is on PATH already. nixos-config provides it, in
+  `modules/programs/kubetools.nix`. There is no install step. Do not install
+  `flux-local` with pip, pipx, uv, or a venv.
+- `flux-local` is self-contained. nixos-config wraps `helm`, `kustomize` and
+  `flux` onto its PATH.
+- If the command is not found, the host needs a NixOS rebuild. The package
+  reaches a session only after the next rebuild, not at merge time.
+- The version matches the pin in `.github/workflows/flux-local.yaml`, so a
+  local render checks what CI checks. Do not substitute a different version
+  or a different renderer — that equivalence is the point.
+- Upstream has sunset `flux-local`. 8.4.0 is the final release. Migration to
+  `flate` is under assessment in issue #3659. Do not render locally with
+  `flate` before CI moves to it — a render from a tool CI does not use
+  proves nothing.
+- A repo devshell cannot put a tool in front of an agent. A prism session
+  inherits the user's home-manager PATH; it has no `nix develop` or direnv
+  hook. A tool an agent needs belongs in home-manager, by way of
+  nixos-config, not in a devshell in this repo.
 - Render from a non-worktree copy of the tree. GitPython cannot resolve a
   worktree `.git` file, so `flux-local` fails inside a `git worktree`
   checkout. Copy the tree out (for example `git archive HEAD | tar -x -C
