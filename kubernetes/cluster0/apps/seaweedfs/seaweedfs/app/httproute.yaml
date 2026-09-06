@@ -17,6 +17,14 @@ spec:
       name: traefik-gateway
       namespace: networking
       sectionName: websecure
+    # Tier-3 dual-bind (#3664, step 1 of #3607). Additive: the route is served
+    # on the tailnet-only websecurets listener as well as websecure. Unbinding
+    # from websecure is step 2. See AGENTS.md "Three exposure tiers".
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecurets
   rules:
     - backendRefs:
         - group: ""
