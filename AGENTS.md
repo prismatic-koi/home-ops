@@ -639,7 +639,7 @@ controls who can reach it. #3635 holds the full design.
 | Tier | Reachable from | Service | Listener |
 |---|---|---|---|
 | 1 Public | internet, LAN, tailnet | `traefik`, LoadBalancer. The gateway forwards 443 to it. | `websecure` |
-| 2 LAN fallback | LAN, tailnet. Not the internet. | `traefik-private`, LoadBalancer. The gateway forwards no port to it. | `websecurepriv` **and** `websecurets` |
+| 2 LAN fallback | LAN, tailnet. Not the internet. | `traefik-lan`, LoadBalancer. The gateway forwards no port to it. | `websecurelan` **and** `websecurets` |
 | 3 Tailnet only | tailnet only | `traefik-ts`, **ClusterIP** | `websecurets` |
 
 All three listeners carry the same wildcard certificates, so a route serves the
@@ -650,12 +650,12 @@ address returns 404, whatever the client resolves.
 ### How to select a tier
 
 - **Tier 1** — one `parentRefs` entry, `websecure`.
-- **Tier 2** — two `parentRefs` entries, `websecurepriv` and `websecurets`.
+- **Tier 2** — two `parentRefs` entries, `websecurelan` and `websecurets`.
   Break-glass needs both paths: the LAN one when tailscale is down, the tailnet
   one when the operator is off the LAN.
 - **Tier 3** — one `parentRefs` entry, `websecurets`, and no other listener.
 
-**A tier-2 route is not private from the LAN.** `traefik-private` is a
+**A tier-2 route is not private from the LAN.** `traefik-lan` is a
 LoadBalancer, and the Cilium L2 announcement policy matches every node, so its
 address answers ARP across the whole LAN. Any LAN host reaches a tier-2 route
 with `curl --resolve`. A tier-2 route therefore keeps its `forwardauth-authelia`
@@ -666,7 +666,7 @@ because a rule denies access. `traefik-ts` is a ClusterIP Service, so the ts-web
 tailscale proxy is the only path in. There is no allow-list to misconfigure.
 `traefik-ts` must never become a LoadBalancer and must never take an address
 from the LB-IPAM pool. `expose.default` must stay `false` on both the
-`websecurepriv` and `websecurets` entrypoints, or the chart publishes them on
+`websecurelan` and `websecurets` entrypoints, or the chart publishes them on
 the public address.
 
 Tier 3 is the default. Tier 2 is only for a tool you need to **repair** a broken
@@ -677,12 +677,12 @@ is merely useful during an outage fails that test and belongs in tier 3.
 
 Six routes are tier 3: `changedetection-io`, `zigbee2mqtt`, `uptime`,
 `octoprint`, `search` and `prometheus.ts` (#3648). **No route binds
-`websecurepriv` today.** The tier-2 set — `traefik`, `longhorn`, `unifi`,
+`websecurelan` today.** The tier-2 set — `traefik`, `longhorn`, `unifi`,
 `auth`, `hubble-ui` — is still on tier 1 and moves in waves 2 and 3 of #3607.
 
-Step 6 of #3635 renames `traefik-private` to `traefik-lan` and `websecurepriv`
-to `websecurelan`, so the object name states the tier. That rename has not
-landed, so the old names are still correct.
+Step 6 of #3635 renamed `traefik-private` to `traefik-lan` and `websecurepriv`
+to `websecurelan`, so the object name states the tier (#3654). The rename has
+landed, so `traefik-lan` and `websecurelan` are the current names.
 
 ### `sectionName` fails silently
 

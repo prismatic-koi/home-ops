@@ -39,8 +39,9 @@ Six hostnames route through ts-web today. **None of them has a fallback.**
 | `octoprint.${SECRET_PUBLIC_DOMAIN}` | #3648 |
 
 Until #3648 the five wave-1 hostnames were also bound to the tier-2
-`websecurepriv` listener, so a LAN client could reach them at the
-`traefik-private` address. Only `search` had a LAN name-resolution path to go
+`websecurelan` listener (named `websecurepriv` before #3654), so a LAN client
+could reach them at the `traefik-lan` address (named `traefik-private` before
+#3654). Only `search` had a LAN name-resolution path to go
 with that, and #3631 removed the blocky `customDNS` pin that gave it one.
 #3648 removed the tier-2 binding itself. `traefik-ts` is a ClusterIP Service
 with no LAN address, so a ts-web outage now takes all six hostnames down, for

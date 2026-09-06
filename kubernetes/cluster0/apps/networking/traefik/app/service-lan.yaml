@@ -1,5 +1,5 @@
 ---
-# LoadBalancer for the private Gateway listener (#3617).
+# LoadBalancer for the tier-2 LAN Gateway listener (#3617, renamed #3654).
 #
 # The Traefik chart renders exactly one Service, so a second address needs a
 # Service outside the chart. The selector is the chart's own label selector:
@@ -10,22 +10,22 @@
 # The annotation requests the address. Without it Cilium LB-IPAM hands out the
 # next free address in the pool, which changes on re-create.
 #
-# Port 443 maps to the private entrypoint's container port, so a client uses
+# Port 443 maps to the LAN entrypoint's container port, so a client uses
 # the same port here as on the public address.
 apiVersion: v1
 kind: Service
 metadata:
-  name: traefik-private
+  name: traefik-lan
   namespace: networking
   annotations:
-    io.cilium/lb-ipam-ips: ${TRAEFIK_PRIVATE_IP}
+    io.cilium/lb-ipam-ips: ${TRAEFIK_LAN_IP}
 spec:
   type: LoadBalancer
   selector:
     app.kubernetes.io/name: traefik
     app.kubernetes.io/instance: traefik-networking
   ports:
-    - name: websecurepriv
+    - name: websecurelan
       port: 443
-      targetPort: websecurepriv
+      targetPort: websecurelan
       protocol: TCP

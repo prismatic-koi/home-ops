@@ -88,8 +88,8 @@ spec:
             # wildcard and this ts. wildcard are served side by side.
             - kind: Secret
               name: "ts-${SECRET_PUBLIC_DOMAIN/./-}-tls"
-        # Private listener (#3617). Clients reach it on port 443 at
-        # TRAEFIK_PRIVATE_IP, through the standalone traefik-private Service.
+        # Tier-2 LAN listener (#3617, renamed #3654). Clients reach it on port
+        # 443 at TRAEFIK_LAN_IP, through the standalone traefik-lan Service.
         # The LAN router forwards no port to that address, so the listener is
         # not reachable from the internet.
         #
@@ -98,7 +98,7 @@ spec:
         #
         # certificateRefs and namespacePolicy are identical to websecure, so a
         # route serves the same certificates on either listener.
-        websecurepriv:
+        websecurelan:
           port: 8443
           protocol: HTTPS
           namespacePolicy:
@@ -115,10 +115,10 @@ spec:
         # the ts-web proxy at traefik-ts, which makes that the tailnet path.
         #
         # The chart renders listeners in key order. This name sorts after
-        # websecurepriv, so web, websecure and websecurepriv keep their index.
+        # websecurelan, so web, websecure and websecurelan keep their index.
         #
         # certificateRefs and namespacePolicy are identical to websecure and
-        # websecurepriv, so a route serves the same certificates on any of the
+        # websecurelan, so a route serves the same certificates on any of the
         # three listeners.
         websecurets:
           port: 9443
@@ -151,13 +151,13 @@ spec:
           tls:
             enabled: true
             options: "default"
-      # Entrypoint for the private Gateway listener (#3617). The container
-      # port must differ from 443: one pod serves both listeners.
+      # Entrypoint for the tier-2 LAN Gateway listener (#3617, renamed #3654).
+      # The container port must differ from 443: one pod serves both listeners.
       #
       # expose.default must stay false. A true value adds :8443 to the
-      # chart-managed Service, which publishes the private listener on the
+      # chart-managed Service, which publishes the LAN listener on the
       # public address.
-      websecurepriv:
+      websecurelan:
         port: 8443
         expose:
           default: false
@@ -167,6 +167,7 @@ spec:
             options: "default"
       # Entrypoint for the tailnet-only Gateway listener, tier 3 (#3636). The
       # container port must differ from 443 and from the tier-2 8443: one pod
+      # serves all three listeners.
       # serves all three listeners.
       #
       # expose.default must stay false. A true value adds :9443 to the

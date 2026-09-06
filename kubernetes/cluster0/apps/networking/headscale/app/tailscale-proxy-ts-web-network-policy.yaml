@@ -123,9 +123,9 @@ spec:
 # egress policy evaluation, so this podSelector rule matches the translated
 # target.
 #
-# :8443 (issue #3624) is the CONTAINER port behind the traefik-private
-# Service's :443 (targetPort websecurepriv), used since #3623 repointed this
-# proxy's TCPForward at traefik-private.networking.svc.cluster.local:443.
+# :8443 (issue #3624) is the CONTAINER port behind the traefik-lan
+# Service's :443 (targetPort websecurelan), used since #3623 repointed this
+# proxy's TCPForward at traefik-lan.networking.svc.cluster.local:443.
 # With kubeProxyReplacement=true, Cilium socket-LB rewrites the destination
 # to the pod's :8443 BEFORE egress policy evaluation, so a rule naming only
 # the Service port 443 never matches the translated traffic -- the same
