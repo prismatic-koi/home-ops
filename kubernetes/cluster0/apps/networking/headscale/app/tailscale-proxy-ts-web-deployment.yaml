@@ -96,6 +96,14 @@ spec:
             capabilities:
               drop: [ALL]
             allowPrivilegeEscalation: false
+            # See tailscale-proxy-prometheus-deployment.yaml for why
+            # runAsUser is mandatory here, why the UID is 65534, and why no
+            # fsGroup is needed.
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
           env:
             # Persist tailnet node state (machine key, node key, ...) into
             # this Secret. The RBAC in tailscale-proxy-ts-web-rbac.yaml pins
