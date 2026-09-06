@@ -16,6 +16,18 @@ spec:
       name: traefik-gateway
       namespace: networking
       sectionName: websecure
+    # Tier-2 phase 1 (#3672): add LAN and tailnet listener paths alongside
+    # the existing public one. Additive; no client behaviour changes yet.
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecurelan
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecurets
   rules:
     - backendRefs:
       - group: ""
