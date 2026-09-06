@@ -5,21 +5,23 @@ metadata:
   name: seaweedfs-console
   namespace: seaweedfs
   labels:
-    # Public DNS opt-in (#3518). Removing this withdraws public DNS for the
-    # hostname — pair it with internal resolution. See AGENTS.md.
-    dns.home-ops/public: "true"
+    # Private DNS decision (#3519), not an omission. This hostname is
+    # tailnet-only by intent: it is served on the tier-3 websecurets listener
+    # alone. external-dns owns this record (k8s.cname-seaweedfs), so "false"
+    # withdraws it on the next reconcile. A tailnet client then resolves the
+    # hostname only through a headscale split entry and extra_records pin --
+    # see networking/headscale config.yaml.
+    dns.home-ops/public: "false"
 spec:
   hostnames:
     - seaweedfs.${SECRET_PUBLIC_DOMAIN}
+  # Tier-3 (websecurets) listener only (step 2 of #3607, design in #3635). The
+  # public websecure listener serves no route for this hostname, so a request
+  # to the public address returns 404 whatever the client resolves. websecurets
+  # sits behind traefik-ts, a ClusterIP Service with no LAN address, so the
+  # ts-web tailnet proxy is the only path to this route. A websecure entry
+  # restores public reachability; a websecurelan entry adds a LAN path.
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: traefik-gateway
-      namespace: networking
-      sectionName: websecure
-    # Tier-3 dual-bind (#3664, step 1 of #3607). Additive: the route is served
-    # on the tailnet-only websecurets listener as well as websecure. Unbinding
-    # from websecure is step 2. See AGENTS.md "Three exposure tiers".
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
