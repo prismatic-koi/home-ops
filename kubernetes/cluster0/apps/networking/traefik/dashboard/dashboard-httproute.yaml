@@ -22,20 +22,23 @@ metadata:
   name: traefik-dashboard
   namespace: networking
   labels:
-    # Public DNS opt-in (#3518). Removing this withdraws public DNS for the
-    # hostname — pair it with internal resolution. See AGENTS.md.
-    dns.home-ops/public: "true"
+    # Private DNS decision (#3519), not an omission. This hostname is tier 2
+    # (#3635): reachable from the LAN and the tailnet, not from the internet.
+    # A tier-2 route is LAN-reachable by design, so the forwardauth-authelia
+    # filter below is its identity control and stays permanently.
+    # external-dns does not own this record, so "false" is inert for it and
+    # the record needs a manual Cloudflare delete (#3607). A LAN client
+    # resolves the hostname through the blocky customDNS pin; a tailnet client
+    # through the headscale split entry and extra_records pin (#3677).
+    dns.home-ops/public: "false"
 spec:
   hostnames: 
   - "traefik.${SECRET_PUBLIC_DOMAIN}"
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: traefik-gateway
-      namespace: networking
-      sectionName: websecure
-    # Tier-2 phase 1 (#3672): add LAN and tailnet listener paths alongside
-    # the existing public one. Additive; no client behaviour changes yet.
+    # Tier 2 (#3635, #3678): the LAN and tailnet listeners only. The public
+    # websecure listener holds no route for this hostname, so a request to the
+    # public address returns 404. Both entries are load-bearing -- the LAN one
+    # when tailscale is down, the tailnet one when the operator is off-LAN.
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
