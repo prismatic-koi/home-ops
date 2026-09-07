@@ -23,11 +23,10 @@
 # the value "false" (#3519), which is what keeps the hostname tailnet-only. Do
 # not change it to "true".
 #
-# Two HTTPRoutes on the cluster are private: this one and home/searxng. They
-# are NOT the same case. searxng declares a hostname and had a public record
-# until #3555 withdrew it; a headscale pin resolves it now. This route
-# declares a hostname and never had a public record, so the label is the only
-# control. Every other route had a public record before #3518 and kept it.
+# This route declares a hostname and never had a public record, so the label
+# is the only control keeping it off public DNS — unlike a route that had a
+# public record before #3518 and kept it, where the label change alone did not
+# withdraw anything.
 #
 # external-dns.alpha.kubernetes.io/controller: none is KEPT as a second,
 # independent layer (#3466). It is no longer the primary control, but it costs
