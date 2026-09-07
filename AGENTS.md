@@ -584,18 +584,29 @@ add. The usual fix is to add that one line.
 
 ### Count of unlabelled routes: zero
 
-Since #3519 no HTTPRoute is unlabelled. Three routes carry
-`dns.home-ops/public: "false"`, a recorded private decision. Two of them are the
-routes that once had no label; the third is a hostname withdrawn from public DNS
-after its tailnet migration. No two are the same case:
+Since #3519 no HTTPRoute is unlabelled: every route carries
+`dns.home-ops/public` set to `"true"` or `"false"`. The count of each value
+drifts with every migration — do not write a count here, check it live:
+
+```bash
+kubectl get httproute -A -o json \
+  | jq -r '.items[] | .metadata.labels["dns.home-ops/public"]' \
+  | sort | uniq -c
+```
+
+For most `"false"` routes the reason is already on record elsewhere: it is
+tier 3 (see "Three exposure tiers" below), and no route on tier 3 needs a row
+here. A route earns a row in the table below only when its privacy reason is
+not already explained by its tier:
 
 | Route | Declares a hostname? | Value | Why it is private |
 |---|---|---|---|
 | `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | `"false"` | Tailnet-only pilot (#3466). The `"false"` keeps it off public DNS. **Do not change it to `"true"`.** It also keeps `external-dns.alpha.kubernetes.io/controller: none` as defence in depth. |
-| `networking/httpsredirect` | No | `"false"` | It declares no hostnames, so it can never produce a record. The lint exempts a no-hostname route regardless; the label states the decision anyway. |
+| `networking/httpsredirect` | No | `"false"` | It declares no hostnames, so it can never produce a record. The lint exempts a no-hostname route regardless; the label states the decision anyway. It is also the subject of #3675. |
 | `home/searxng` | Yes, `search.…` | `"false"` | Withdrawn from public DNS in #3555, the contract half of an expand-then-contract migration. The headscale `nameservers.split` entry plus the `extra_records` pin (#3553) are the only resolution path left: #3631 removed the blocky `customDNS` pin, and #3648 moved the route to the tier-3 `websecurets` listener, so the hostname has no LAN path at all. **That headscale pin is load-bearing — remove it and no client resolves the hostname.** Change the value to `"true"` only to roll the withdrawal back. |
 
-Do not remove any of the three labels.
+Do not remove any of these labels, and do not add a row for a route whose
+privacy reason is already covered by its tier.
 
 ### Verify
 
@@ -624,13 +635,18 @@ A `customDNS` pin in
 bootstrap **critical infrastructure** when the cluster is broken. It is not a
 general pattern for the internal resolution of an ordinary application.
 
-Only four hostnames get a pin, because each names a tool you need to repair
-the cluster:
+Only five hostnames get a pin, because each names a tool you need to repair
+the cluster. The pin address also marks the hostname's tier — `unifi` and
+`auth` pin to the tier-1 (public listener) address; `traefik`, `longhorn` and
+`hubble` pin to the tier-2 (LAN) address:
 
-- `unifi` — network
-- `traefik` — ingress
-- `longhorn` — storage
-- `auth` — authelia; without it nothing else admits a login
+- `unifi` — network (tier 1)
+- `traefik` — ingress (tier 2)
+- `longhorn` — storage (tier 2)
+- `auth` — authelia; without it nothing else admits a login (tier 1)
+- `hubble` — hubble-ui; the tool for diagnosing a connectivity fault, and
+  gating it behind the tailnet is circular when the fault is the network
+  (#3607, #3687) (tier 2)
 
 An ordinary application does not get a pin. Reach it through the tailnet, and
 let the headscale ACL act as its access control. A pin on an application
@@ -638,7 +654,7 @@ widens access to the whole LAN, a wider set than the tailnet ACL admits.
 
 #3609 added pins for four ordinary applications by copying an earlier pin,
 without asking why that pin existed. #3629 removed all five. Before you add a
-pin, confirm the hostname names one of the four infrastructure tools above.
+pin, confirm the hostname names one of the five infrastructure tools above.
 
 ## Three exposure tiers: the listener routes, the Service exposes
 
@@ -689,10 +705,17 @@ is merely useful during an outage fails that test and belongs in tier 3.
 
 ### Membership today
 
-Six routes are tier 3: `changedetection-io`, `zigbee2mqtt`, `uptime`,
-`octoprint`, `search` and `prometheus.ts` (#3648). **No route binds
-`websecurelan` today.** The tier-2 set — `traefik`, `longhorn`, `unifi`,
-`auth`, `hubble-ui` — is still on tier 1 and moves in waves 2 and 3 of #3607.
+Tier 3 today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
+`octoprint`, `search`, `prometheus.ts`, `grafana` and `seaweedfs` (#3648,
+#3665, #3667). `traefik`, `longhorn` and `hubble-ui` are tier 2, dual-bound to
+`websecurelan` and `websecurets` (#3672, #3689). `unifi` and `auth` are still
+on tier 1 and move in later waves of #3607. Check live membership rather than
+trusting this list — it drifts with every migration wave:
+
+```bash
+kubectl -n networking get gateway traefik-gateway \
+  -o jsonpath='{range .status.listeners[*]}{.name}{"\t"}{.attachedRoutes}{"\n"}{end}'
+```
 
 Step 6 of #3635 renamed `traefik-private` to `traefik-lan` and `websecurepriv`
 to `websecurelan`, so the object name states the tier (#3654). The rename has
