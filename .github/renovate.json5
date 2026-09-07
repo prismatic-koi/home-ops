@@ -88,9 +88,29 @@
       // #3237–#3242 and #3244 all had to be merged manually because of
       // this.
       //
-      // Docker Hub publishes releaseTimestamp on tag pushes, so the gate
-      // works correctly there — and all three incidents that motivated
-      // the 24h hold in the first place were Docker Hub: seaweedfs #2862
+      // Docker Hub does NOT publish a releaseTimestamp on every tag
+      // push, and digest updates never carry one. Under the default
+      // minimumReleaseAgeBehaviour=timestamp-required such a release is
+      // never treated stable, so the renovate/stability-days check pends
+      // FOREVER: the update opens no PR, and on an existing branch it
+      // cannot clear its own pending check, because internalChecksFilter
+      // 'strict' refuses to update a branch whose internal check is
+      // pending — the branch deadlocks. Evidence (#3684):
+      //     DEBUG: Marking 1 release(s) as pending, as they do not have a
+      //       releaseTimestamp and we're running with
+      //       minimumReleaseAgeBehaviour=timestamp-required
+      //       "depName": "grafana/grafana", "versions": ["13.2.1"]
+      // grafana/grafana 13.2.1 is a Docker Hub TAG update, not a digest,
+      // and pended permanently with no PR. PR #3614 (valkey/valkey
+      // 9.1.2-alpine digest) sat pending for 3 days and had to be merged
+      // by hand. Fix: minimumReleaseAgeBehaviour=timestamp-optional on
+      // this rule treats a missing timestamp as stable, so the check
+      // passes and the PR opens instead of pending forever. A release
+      // that DOES carry a timestamp is still held the full 24h, so the
+      // phantom-tag defence is unchanged for those.
+      //
+      // All three incidents that motivated the 24h hold in the first
+      // place were Docker Hub: seaweedfs #2862
       // + #3093, rancher/system-upgrade-controller #3178 (broke CI for 2
       // days), and grafana 13.0.0 (retroactive Docker Hub tag delete
       // after the bump merged). The defence stays exactly where the
@@ -121,10 +141,11 @@
       // Tier 1/2 auto-merge carve-outs in .github/renovate/automerge.json5
       // are the enforcement point for "a human always eyeballs this before
       // it lands" and are unaffected by this change.
-      description: 'Hold Docker Hub docker updates for 24h (phantom-tag defence). Non-Hub registries (ghcr.io, quay.io, lscr.io, registry.k8s.io, …) are excluded because they publish no releaseTimestamp and minimumReleaseAgeBehaviour=timestamp-required would pend them forever.',
+      description: 'Hold Docker Hub docker updates for 24h (phantom-tag defence), with minimumReleaseAgeBehaviour=timestamp-optional so a Docker Hub release that carries no releaseTimestamp (some tag pushes, all digest updates) is treated as stable and does not pend forever (#3684). Non-Hub registries (ghcr.io, quay.io, lscr.io, registry.k8s.io, …) stay excluded from this rule so they open a PR immediately as they do today.',
       matchDatasources: ['docker'],
       matchPackageNames: ['/^([^/]+$|[^./:]+/|docker\\.io/)/'],
       minimumReleaseAge: '24h',
+      minimumReleaseAgeBehaviour: 'timestamp-optional',
       internalChecksFilter: 'strict',
     },
     {
