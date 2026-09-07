@@ -35,9 +35,12 @@ data:
       # their access control -- they do not get a pin here (#3629, #3617).
       mapping: # some useful defaults
         unifi.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        traefik.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        longhorn.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
+        traefik.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_LAN_IP}
+        longhorn.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_LAN_IP}
         auth.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
+        # Tier 2 phase 2 (#3677, parent #3607). hubble-ui has no pin today;
+        # this is its first.
+        hubble.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_LAN_IP}
 
     blocking:
       loading:
