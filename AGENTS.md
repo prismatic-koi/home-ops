@@ -597,12 +597,12 @@ kubectl get httproute -A -o json \
 For most `"false"` routes the reason is already on record elsewhere: it is
 tier 3 (see "Three exposure tiers" below), and no route on tier 3 needs a row
 here. A route earns a row in the table below only when its privacy reason is
-not already explained by its tier:
+not already explained by its tier — both rows below carry mechanism detail
+recorded nowhere else:
 
 | Route | Declares a hostname? | Value | Why it is private |
 |---|---|---|---|
 | `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | `"false"` | Tailnet-only pilot (#3466). The `"false"` keeps it off public DNS. **Do not change it to `"true"`.** It also keeps `external-dns.alpha.kubernetes.io/controller: none` as defence in depth. |
-| `networking/httpsredirect` | No | `"false"` | It declares no hostnames, so it can never produce a record. The lint exempts a no-hostname route regardless; the label states the decision anyway. It is also the subject of #3675. |
 | `home/searxng` | Yes, `search.…` | `"false"` | Withdrawn from public DNS in #3555, the contract half of an expand-then-contract migration. The headscale `nameservers.split` entry plus the `extra_records` pin (#3553) are the only resolution path left: #3631 removed the blocky `customDNS` pin, and #3648 moved the route to the tier-3 `websecurets` listener, so the hostname has no LAN path at all. **That headscale pin is load-bearing — remove it and no client resolves the hostname.** Change the value to `"true"` only to roll the withdrawal back. |
 
 Do not remove any of these labels, and do not add a row for a route whose
@@ -726,7 +726,9 @@ landed, so `traefik-lan` and `websecurelan` are the current names.
 A route that names a listener which does not exist is not attached to the
 Gateway. It reports `Accepted=False reason=NoMatchingParent`, and nothing else
 surfaces the failure. `networking/httpsredirect` stayed in this state for a
-long time, masked by a redirect at the entrypoint.
+long time, masked by a redirect at the entrypoint — the route was deleted in
+#3675 once this was noticed, since the entrypoint redirect made the route dead
+weight.
 
 After you change a route's `sectionName`, confirm that the service is still
 reachable on its intended path. Do not confirm only that it stopped being
