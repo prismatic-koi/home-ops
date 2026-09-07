@@ -87,10 +87,12 @@ spec:
             capabilities:
               drop: [ALL]
             allowPrivilegeEscalation: false
-            # runAsUser is mandatory, not decoration. The image declares no
-            # USER, so runAsNonRoot on its own makes the kubelet refuse the
-            # container with CreateContainerConfigError. 65534 is `nobody`,
-            # which the image carries in both /etc/passwd and /etc/group.
+            # runAsUser is mandatory, not decoration. ghcr.io/tailscale/tailscale
+            # declares no USER, so runAsNonRoot on its own makes the kubelet
+            # refuse the container with CreateContainerConfigError. 65534 is
+            # `nobody`, which the image carries in both /etc/passwd and
+            # /etc/group. These are facts about the image, invisible in any
+            # Renovate diff -- see #3662.
             #
             # Non-root holds only while TS_USERSPACE stays "true".
             # containerboot reaches its root-only setup — mknod

@@ -87,6 +87,18 @@
       "matchUpdateTypes": ["major", "minor"],
       "automerge": false
     },
+    // Never auto-merge ghcr.io/tailscale/tailscale (any update type). Four
+    // Deployments pin runAsUser/runAsGroup to 65534 on this image, a decision
+    // that depends on facts internal to the image (no USER directive, nobody
+    // at uid/gid 65534, /tmp mode 1777). ghcr.io images are excluded from the
+    // minimumReleaseAge rule in renovate.json5, so without this carve-out a
+    // bump opens and auto-merges immediately. See #3662.
+    {
+      "description": "Never auto-merge ghcr.io/tailscale/tailscale (image-internal uid/gid assumptions, #3662)",
+      "matchPackageNames": ["ghcr.io/tailscale/tailscale"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
+      "automerge": false
+    },
     // Disable automerge for databases
     {
       "description": "Disable auto-merge for databases",

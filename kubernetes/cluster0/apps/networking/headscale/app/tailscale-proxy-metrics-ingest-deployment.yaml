@@ -69,9 +69,11 @@ spec:
             capabilities:
               drop: [ALL]
             allowPrivilegeEscalation: false
-            # See tailscale-proxy-prometheus-deployment.yaml for why
-            # runAsUser is mandatory here, why the UID is 65534, and why no
-            # fsGroup is needed.
+            # runAsUser is mandatory: ghcr.io/tailscale/tailscale declares no
+            # USER, nobody exists at uid/gid 65534 in /etc/passwd and
+            # /etc/group, and /tmp is mode 1777. See
+            # tailscale-proxy-prometheus-deployment.yaml for why no fsGroup
+            # is needed. #3662.
             runAsNonRoot: true
             runAsUser: 65534
             runAsGroup: 65534
