@@ -23,11 +23,9 @@
 # the value "false" (#3519), which is what keeps the hostname tailnet-only. Do
 # not change it to "true".
 #
-# Three HTTPRoutes on the cluster are private: this one,
-# networking/httpsredirect and home/searxng. They are NOT the same case.
-# httpsredirect declares no hostnames, so it can never produce a record and its
-# value is immaterial. searxng declares one and had a public record until #3555
-# withdrew it; a headscale pin resolves it now. This route
+# Two HTTPRoutes on the cluster are private: this one and home/searxng. They
+# are NOT the same case. searxng declares a hostname and had a public record
+# until #3555 withdrew it; a headscale pin resolves it now. This route
 # declares a hostname and never had a public record, so the label is the only
 # control. Every other route had a public record before #3518 and kept it.
 #
