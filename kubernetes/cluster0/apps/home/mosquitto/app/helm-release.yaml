@@ -122,7 +122,6 @@ spec:
         enabled: true
         data:
           mosquitto.conf: |
-            # TEMP flate diff-comment demo (#3697) -- reverted before merge
             listener 1883
             allow_anonymous false
             password_file /mosquitto/secret/passwd
