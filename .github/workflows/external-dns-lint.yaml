@@ -3,7 +3,7 @@
 name: external-dns lint
 
 # Asserts two invariants of the rendered external-dns objects, from one
-# `flux-local build` render:
+# `flate build` render:
 #
 #   1. label-filter (#3597): the rendered Deployment carries exactly one
 #      `--label-filter=dns.home-ops/public=true`. That filter is the sole
