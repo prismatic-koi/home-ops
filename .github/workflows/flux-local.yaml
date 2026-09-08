@@ -46,17 +46,15 @@ jobs:
           persist-credentials: false
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Run flux-local test
-        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0@sha256:c0be852e30f299ce6a220cc992b0c21a2a0b0684cc17713b9d718e18d9c8beff
+      - name: Install flate
+        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        with:
+          version: "0.6.5"
+
+      - name: Run flate test
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        with:
-          args: >-
-            test
-            --all-namespaces
-            --enable-helm
-            --path /github/workspace/kubernetes/cluster0/flux
-            --verbose
+        run: flate test all --path kubernetes/cluster0/flux
 
   diff:
     if: ${{ needs.filter.outputs.changed-files != '[]' }}
