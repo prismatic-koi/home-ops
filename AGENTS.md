@@ -301,7 +301,7 @@ guards against.
 
 The CI job `external-dns lint`
 (`.github/workflows/external-dns-lint.yaml`, script at
-`scripts/lint-external-dns.py`) runs two checks over one `flux-local build`
+`scripts/lint-external-dns.py`) runs two checks over one `flate build`
 render. It matches the #3361 and #3519 lints, and each check fails loudly if
 the object it needs is absent from the render, so a broken or empty render
 never passes vacuously.
@@ -342,13 +342,14 @@ this):
   `flux` onto its PATH.
 - If the command is not found, the host needs a NixOS rebuild. The package
   reaches a session only after the next rebuild, not at merge time.
-- The version matches the pin in `.github/workflows/flux-local.yaml`, so a
-  local render checks what CI checks. Do not substitute a different version
-  or a different renderer — that equivalence is the point.
-- Upstream has sunset `flux-local`. 8.4.0 is the final release. Migration to
-  `flate` is under assessment in issue #3659. Do not render locally with
-  `flate` before CI moves to it — a render from a tool CI does not use
-  proves nothing.
+- CI no longer renders with `flux-local`. CI renders with `flate` 0.6.5;
+  agents render locally with `flux-local` 8.4.0, because `flate` cannot render
+  from a linked worktree. A local render is therefore an approximation of the
+  CI check, not the same check. #3659 measured both renderers against this
+  tree and found the object sets equivalent for both lints, which is why the
+  approximation is acceptable today. Do not use `flate` for a local render: in
+  a worktree it renders in part, blocks about 62 kustomizations, and never
+  exits.
 - A repo devshell cannot put a tool in front of an agent. A prism session
   inherits the user's home-manager PATH; it has no `nix develop` or direnv
   hook. A tool an agent needs belongs in home-manager, by way of
@@ -576,7 +577,7 @@ metadata:
 `.github/workflows/httproute-dns-decision-lint.yaml`
 (`scripts/lint-httproute-dns-decision.py`) fails a pull request when a rendered
 HTTPRoute declares a hostname and carries no valid `dns.home-ops/public` label.
-It lints `flux-local build` output, so it also catches a route a chart emits
+It lints `flate build` output, so it also catches a route a chart emits
 with no repository-side `route:` block. The value must be the string `"true"`
 or `"false"`; an unquoted boolean or any other value fails. The failure message
 names the namespace, the route, the source file, and the exact label line to

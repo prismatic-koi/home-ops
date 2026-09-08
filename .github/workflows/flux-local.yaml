@@ -102,43 +102,72 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Run flux-local diff
-        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0@sha256:c0be852e30f299ce6a220cc992b0c21a2a0b0684cc17713b9d718e18d9c8beff
+      - name: Install flate
+        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        with:
+          version: "0.6.5"
+
+      - name: Run flate diff
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        with:
-          args: >-
-            diff ${{ matrix.resource }}
-            --unified 6
-            --path /github/workspace/pull/kubernetes/cluster0/flux
-            --path-orig /github/workspace/default/kubernetes/cluster0/flux
-            --strip-attrs "helm.sh/chart,checksum/config,app.kubernetes.io/version,chart"
-            --limit-bytes 10000
-            --all-namespaces
-            --sources "home-ops-cluster0"
-            --output-file diff.patch
+          # The install step exports FLATE_BASE=main into every later step, for
+          # its git-rev changed-only mode. This job supplies the baseline a
+          # different way: the `default/` checkout of the default branch, passed
+          # as --path-orig. flate treats --base and --path-orig as mutually
+          # exclusive, so FLATE_BASE must be cleared here or flate errors with
+          # "--path-orig and --base are mutually exclusive". The diff still has a
+          # base -- it is the `default/` tree, not a rev -- so this is NOT the
+          # "no base needed" case that the test/lint steps clear FLATE_BASE for.
+          FLATE_BASE: ""
+        # Flag map from the retired flux-local diff:
+        #   --path / --path-orig       -> same (changed-only mode; the baseline).
+        #   --strip-attrs "a,b,c"      -> repeatable --strip-attr (flate default
+        #                                 set kept explicit; `checksum/` is a
+        #                                 prefix so it covers old `checksum/config`).
+        #   --output-file diff.patch   -> stdout redirect.
+        #   --all-namespaces           -> flate default (every namespace).
+        # No flate equivalent (named in the PR description):
+        #   --unified 6                -> flate diff context width is fixed.
+        #   --limit-bytes 10000        -> reproduced in the next step by byte
+        #                                 truncation against GitHub's comment cap.
+        #   --sources home-ops-cluster0-> flate discovers the single source under
+        #                                 --path; this repo has one.
+        run: |-
+          flate diff ${{ matrix.resource }} \
+            --no-progress \
+            --path pull/kubernetes/cluster0/flux \
+            --path-orig default/kubernetes/cluster0/flux \
+            --strip-attr helm.sh/chart \
+            --strip-attr checksum/ \
+            --strip-attr app.kubernetes.io/version \
+            --strip-attr chart \
+            --output github > diff.patch
 
       - name: Generate Diff
         id: diff
         run: |-
+          # GitHub rejects a PR comment body over 65536 characters. Truncate the
+          # rendered diff below that, leaving headroom for the ```diff fences and
+          # the truncation notice, and state in-band that it was truncated. This
+          # replaces flux-local's --limit-bytes flag, which flate does not have.
+          MAX_BYTES=60000
+          if [ -f diff.patch ] && [ "$(wc -c < diff.patch)" -gt "$MAX_BYTES" ]; then
+            head -c "$MAX_BYTES" diff.patch > diff.patch.tmp
+            printf '\n... diff truncated: exceeded %s bytes (GitHub comment limit)\n' "$MAX_BYTES" >> diff.patch.tmp
+            mv diff.patch.tmp diff.patch
+          fi
+
           echo 'diff<<EOF' >> $GITHUB_OUTPUT
           cat diff.patch 2>/dev/null >> $GITHUB_OUTPUT || true
           echo 'EOF' >> $GITHUB_OUTPUT
-          
-          # Check if diff contains actual changes (ignoring "no objects found" messages)
-          if [ -f diff.patch ] && [ -s diff.patch ]; then
-            # grep returns 0 if match found, 1 if not
-            if grep -q "no .* objects found" diff.patch; then
-              # Check if the file contains ANYTHING ELSE besides the "no ... objects found" line (ignoring whitespace)
-              # If it has other lines, treat as real changes
-              if [ $(grep -v "no .* objects found" diff.patch | grep -v "^[[:space:]]*$" | wc -l) -gt 0 ]; then
-                 echo "has_changes=true" >> $GITHUB_OUTPUT
-              else
-                 echo "has_changes=false" >> $GITHUB_OUTPUT
-              fi
-            else
-              echo "has_changes=true" >> $GITHUB_OUTPUT
-            fi
+
+          # A change is present when flate wrote any non-whitespace output. In
+          # changed-only mode flate emits nothing when no Kustomization or
+          # HelmRelease differs, so an empty (or whitespace-only) file means no
+          # diff and no comment. This reads flate's own output; it does not grep
+          # for any flux-local marker text.
+          if [ -f diff.patch ] && [ -n "$(tr -d '[:space:]' < diff.patch)" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
