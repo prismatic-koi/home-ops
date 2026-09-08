@@ -348,5 +348,23 @@
       datasourceTemplate: 'github-releases',
       versioningTemplate: 'semver',
     },
+    {
+      // Tracks the flate CLI version pinned in the render/test workflows
+      // that replaced flux-local (#3696). Keeps the `version:` input on
+      // the `home-operations/flate/action` step in step with the pinned
+      // action SHA's release tag, the same way the github-actions manager
+      // already tracks the SHA and its `# vX.Y.Z` comment.
+      customType: 'regex',
+      description: 'Process flate CLI version pin',
+      managerFilePatterns: [
+        '/^\\.github\\/workflows\\/.+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'home-operations/flate/action@\\S+\\s*#\\s*v(?<currentValue>[\\w\\d.\\-_]+)\\n(\\s*with:\\n)?\\s*version:\\s*"[\\w\\d.\\-_]+"',
+      ],
+      depNameTemplate: 'home-operations/flate',
+      datasourceTemplate: 'github-releases',
+      versioningTemplate: 'semver',
+    },
   ],
 }

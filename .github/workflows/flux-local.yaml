@@ -25,7 +25,9 @@ jobs:
         id: changed-files
         uses: bjw-s-labs/action-changed-files@a9a36fb08ce06db9b02fbd8026cc2c0945eb9841 # v0.6.0
         with:
-          patterns: kubernetes/**/*
+          patterns: |-
+            kubernetes/**/*
+            .github/workflows/flux-local.yaml
 
   test:
     if: ${{ needs.filter.outputs.changed-files != '[]' }}
@@ -46,17 +48,22 @@ jobs:
           persist-credentials: false
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Run flux-local test
-        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0@sha256:c0be852e30f299ce6a220cc992b0c21a2a0b0684cc17713b9d718e18d9c8beff
+      - name: Install flate
+        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        with:
+          version: "0.6.5"
+
+      - name: Run flate test
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        with:
-          args: >-
-            test
-            --all-namespaces
-            --enable-helm
-            --path /github/workspace/kubernetes/cluster0/flux
-            --verbose
+          # The install step exports FLATE_BASE=main into every later step's
+          # environment (for changed-only mode). This job checks out a single
+          # branch at default depth, so no origin/main ref exists on disk and
+          # flate fails to resolve it. A plain `test` needs no base — only
+          # `diff` does — so the fix is to stop FLATE_BASE reaching this step,
+          # not to fetch full history.
+          FLATE_BASE: ""
+        run: flate test all --path kubernetes/cluster0/flux
 
   diff:
     if: ${{ needs.filter.outputs.changed-files != '[]' }}

@@ -20,10 +20,10 @@ name: external-dns lint
 #      objects it names and the Deployment crash-loops (fail-closed).
 #
 # One workflow runs both checks against one render, because a second full-tree
-# `flux-local` render on every PR costs real minutes. See issues #3597, #3601
+# `flate` render on every PR costs real minutes. See issues #3597, #3601
 # and AGENTS.md, "Public DNS is opt-in (external-dns)".
 #
-# Both checks read rendered manifests from `flux-local build`, because the
+# Both checks read rendered manifests from `flate build`, because the
 # chart decides what renders — a text scan of the HelmRelease cannot see a
 # chart that drops an unrecognised key or generates no RBAC for a source
 # declared the wrong way. Each check asserts the object it needs is present
@@ -71,18 +71,23 @@ jobs:
           persist-credentials: false
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Render manifests with flux-local
-        uses: docker://ghcr.io/allenporter/flux-local:v8.4.0@sha256:c0be852e30f299ce6a220cc992b0c21a2a0b0684cc17713b9d718e18d9c8beff
+      - name: Install flate
+        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        with:
+          version: "0.6.5"
+
+      - name: Render manifests with flate
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        with:
-          args: >-
-            build all
-            --enable-helm
-            --skip-secrets
-            --skip-crds
-            --output-file /github/workspace/rendered-manifests.yaml
-            /github/workspace/kubernetes/cluster0/flux
+          # The install step exports FLATE_BASE=main into every later step's
+          # environment (for changed-only mode). This job checks out a single
+          # branch at default depth, so no origin/main ref exists on disk and
+          # flate fails to resolve it: "could not resolve --base=\"main\": not
+          # found locally or as origin/main". A plain `build` needs no base —
+          # only `diff` does — so the fix is to stop FLATE_BASE reaching this
+          # step, not to fetch full history with fetch-depth: 0.
+          FLATE_BASE: ""
+        run: flate build all --path kubernetes/cluster0/flux > rendered-manifests.yaml
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
