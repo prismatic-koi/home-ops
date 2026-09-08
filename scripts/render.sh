@@ -66,8 +66,13 @@ fi
 git -C "${clone_dir}" remote set-url origin "${ORIGIN_URL}"
 
 # 3. Copy the caller's working-tree content, including uncommitted changes,
-#    over the clone. Exclude .git so the clone's own git metadata is
-#    untouched — this must render as an ordinary clone, not a worktree.
+#    over the clone. `tar` extraction only adds and overwrites — it never
+#    deletes a file that is absent from the source — so a file the caller
+#    deleted or renamed would otherwise survive from the clone's default-
+#    branch content and appear in the render as extra or duplicated objects.
+#    Clear the clone's tracked content first (keeping .git) so the copy
+#    below produces an exact copy of the caller's tree, not a union with it.
+find "${clone_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 tar --exclude=.git -C "${toplevel}" -cf - . | tar -C "${clone_dir}" -xf -
 
 # 4. Render, under a timeout. Do not set FLATE_ALLOW_WORKTREE: this renders

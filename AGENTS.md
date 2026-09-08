@@ -349,6 +349,10 @@ python3 scripts/lint-httproute-dns-decision.py --rendered "$rendered"
 python3 scripts/lint-external-dns.py --rendered "$rendered"
 ```
 
+The script leaves the render file in place on exit — it does not delete it. The
+script cannot know when you are done reading it, so cleanup is yours: remove
+the file yourself once you have finished with it.
+
 `flate` cannot open a linked worktree, where `.git` is a pointer file: it
 treats the source as remote, fails on the absent deploy key, blocks about 62
 kustomizations, and never exits (#3659, #3700). Three agents lost real time
