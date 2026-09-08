@@ -54,6 +54,13 @@ jobs:
       - name: Run flate test
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # The install step exports FLATE_BASE=main into every later step's
+          # environment (for changed-only mode). This job checks out a single
+          # branch at default depth, so no origin/main ref exists on disk and
+          # flate fails to resolve it. A plain `test` needs no base — only
+          # `diff` does — so the fix is to stop FLATE_BASE reaching this step,
+          # not to fetch full history.
+          FLATE_BASE: ""
         run: flate test all --path kubernetes/cluster0/flux
 
   diff:

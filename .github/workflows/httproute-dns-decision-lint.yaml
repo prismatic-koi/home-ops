@@ -62,6 +62,14 @@ jobs:
       - name: Render manifests with flate
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # The install step exports FLATE_BASE=main into every later step's
+          # environment (for changed-only mode). This job checks out a single
+          # branch at default depth, so no origin/main ref exists on disk and
+          # flate fails to resolve it: "could not resolve --base=\"main\": not
+          # found locally or as origin/main". A plain `build` needs no base —
+          # only `diff` does — so the fix is to stop FLATE_BASE reaching this
+          # step, not to fetch full history with fetch-depth: 0.
+          FLATE_BASE: ""
         run: flate build all --path kubernetes/cluster0/flux > rendered-manifests.yaml
 
       - name: Set up Python
