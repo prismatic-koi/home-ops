@@ -73,6 +73,23 @@ git -C "${clone_dir}" remote set-url origin "${ORIGIN_URL}"
 #    Clear the clone's tracked content first (keeping .git) so the copy
 #    below produces an exact copy of the caller's tree, not a union with it.
 find "${clone_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+
+# Invariant check: the clear above must never remove .git itself. If it did,
+# the wrapper's worktree guard would pass (no .git at all is the legitimate
+# outside-a-repo case, not a refusal case), flate would then fail to match
+# the checkout to the GitRepository, and the failure would surface 300s later
+# as a wrapper timeout — pointing at the wrong place entirely. Catch it here,
+# immediately, instead.
+if [ ! -d "${clone_dir}/.git" ]; then
+	err "internal error: ${clone_dir}/.git is missing or not a directory after clearing the clone."
+	exit 1
+fi
+clone_origin="$(git -C "${clone_dir}" remote get-url origin 2>/dev/null)" || clone_origin=""
+if [ "${clone_origin}" != "${ORIGIN_URL}" ]; then
+	err "internal error: clone origin is '${clone_origin}', expected '${ORIGIN_URL}'."
+	exit 1
+fi
+
 tar --exclude=.git -C "${toplevel}" -cf - . | tar -C "${clone_dir}" -xf -
 
 # 4. Render, under a timeout. Do not set FLATE_ALLOW_WORKTREE: this renders
