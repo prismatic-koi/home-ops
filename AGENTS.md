@@ -330,36 +330,63 @@ The two checks were consolidated into one script and one workflow (#3601)
 because both read the same rendered external-dns objects, and a second
 full-tree `flux-local` render on every PR costs real minutes.
 
-#### Rendering `flux-local` output locally
+#### Rendering `flate` output locally
 
-To reproduce the render these lints read (three sessions have rediscovered
-this):
+CI renders with `flate` 0.6.5 (#3696, #3697). Use `scripts/render.sh` to get
+the same render locally — the script and CI both use `flate`, so the local
+render is no longer an approximation:
 
-- `flux-local` 8.4.0 is on PATH already. nixos-config provides it, in
-  `modules/programs/kubetools.nix`. There is no install step. Do not install
-  `flux-local` with pip, pipx, uv, or a venv.
-- `flux-local` is self-contained. nixos-config wraps `helm`, `kustomize` and
-  `flux` onto its PATH.
-- If the command is not found, the host needs a NixOS rebuild. The package
-  reaches a session only after the next rebuild, not at merge time.
-- CI no longer renders with `flux-local`. CI renders with `flate` 0.6.5;
-  agents render locally with `flux-local` 8.4.0, because `flate` cannot render
-  from a linked worktree. A local render is therefore an approximation of the
-  CI check, not the same check. #3659 measured both renderers against this
-  tree and found the object sets equivalent for both lints, which is why the
-  approximation is acceptable today. Do not use `flate` for a local render: in
-  a worktree it renders in part, blocks about 62 kustomizations, and never
-  exits.
-- A repo devshell cannot put a tool in front of an agent. A prism session
-  inherits the user's home-manager PATH; it has no `nix develop` or direnv
-  hook. A tool an agent needs belongs in home-manager, by way of
-  nixos-config, not in a devshell in this repo.
-- Render from a non-worktree copy of the tree. GitPython cannot resolve a
-  worktree `.git` file, so `flux-local` fails inside a `git worktree`
-  checkout. Copy the tree out (for example `git archive HEAD | tar -x -C
-  <dir>`, then `git init` in that dir) and render there:
-  `flux-local build all --enable-helm --skip-secrets --skip-crds
-  --output-file rendered.yaml kubernetes/cluster0/flux`.
+```bash
+scripts/render.sh
+```
+
+It prints the path to the rendered manifest on stdout, and nothing else on
+stdout. Feed that path to either lint script:
+
+```bash
+rendered=$(scripts/render.sh)
+python3 scripts/lint-httproute-dns-decision.py --rendered "$rendered"
+python3 scripts/lint-external-dns.py --rendered "$rendered"
+```
+
+`flate` cannot open a linked worktree, where `.git` is a pointer file: it
+treats the source as remote, fails on the absent deploy key, blocks about 62
+kustomizations, and never exits (#3659, #3700). Three agents lost real time
+to this hang during the migration. `scripts/render.sh` works around it by
+cloning `.bare` into a throwaway ordinary clone, pointing that clone's origin
+at the exact `ssh://` URL the cluster's `GitRepository` uses, copying the
+caller's working-tree content — including uncommitted changes — into the
+clone, and rendering from inside the clone. **Never run `flate` directly
+against a linked worktree** — always go through the script.
+
+The script makes no commit, no push, and no change of any kind to your
+worktree or to `.bare`. It cleans up its temporary directory on success, on
+failure, and on interrupt.
+
+##### Fallback: `flux-local`
+
+If `flate` or the script is unavailable, `flux-local` 8.4.0 remains on PATH
+as a fallback, wired in via nixos-config's `modules/programs/kubetools.nix`.
+Do not install `flux-local` with pip, pipx, uv, or a venv — it is already
+self-contained and wraps `helm`, `kustomize` and `flux` onto its PATH. If the
+command is not found, the host needs a NixOS rebuild; the package reaches a
+session only after the next rebuild, not at merge time.
+
+`flux-local` has the same worktree limitation as `flate`, but fails fast
+rather than hanging: GitPython cannot resolve a worktree `.git` file, so
+`flux-local` errors out in under a second inside a `git worktree` checkout.
+Copy the tree out and render there instead:
+
+```bash
+git archive HEAD | tar -x -C <dir>
+cd <dir> && git init
+flux-local build all --enable-helm --skip-secrets --skip-crds \
+  --output-file rendered.yaml kubernetes/cluster0/flux
+```
+
+#3659 measured `flate` and `flux-local` against this tree and found the
+object sets equivalent for both lints, which is why the `flux-local` fallback
+remains acceptable when `flate` is not available.
 
 An object without the label is invisible to external-dns. It gets **no** public
 A/CNAME record and **no** `k8s.` TXT ownership record.
