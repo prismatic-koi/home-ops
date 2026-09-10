@@ -498,7 +498,7 @@ The reason is the client resolver path, not the cluster:
 - coredns does not serve the public domain, and there is no wildcard, no
   `conditional` upstream block, and no k8s-gateway.
 
-So for any hostname outside those two pins, the public record **is** the only
+So for any hostname outside that one pin, the public record **is** the only
 resolution path today, LAN included.
 
 **Never remove the label as a bulk operation.** Withdraw a hostname one service
