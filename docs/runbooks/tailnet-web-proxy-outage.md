@@ -51,15 +51,18 @@ lost or rotated, expect a longer window while the proxy re-authenticates.
 
 ## Who is affected
 
-Twenty hostnames route through ts-web today. **Nineteen of them have no
+Twenty-one hostnames route through ts-web today. **Nineteen of them have no
 fallback over the network.** Three of those nineteen have an off-network
 repair path — see "The port-forward workaround" below.
 
-`auth` is the twentieth and it is the only one with a fallback. Its blocky
-pin serves one client class: a client that is not on the tailnet. A tailnet
-client reaches `auth` through ts-web alone, because an `extra_records` pin
-replaces the resolution path. See "authelia login depends on ts-web for a
-tailscale-up client" below.
+Two keep a fallback: `auth`, and — through the expand phase of #3722 only —
+`unifi`. Each keeps a blocky pin that serves one client class, a client that
+is not on the tailnet, and a live route on the public `websecure` listener.
+A tailnet client reaches each through ts-web alone, because an
+`extra_records` pin replaces the resolution path. See "authelia login depends
+on ts-web for a tailscale-up client" below. The wave E contract PR (#3722)
+removes the public bind and the blocky pin from `unifi`, which moves it to
+tier 3.
 
 | Hostname | Tier 3 since |
 |---|---|
@@ -83,15 +86,17 @@ tailscale-up client" below.
 | `sonarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
 | `feed.${SECRET_PUBLIC_DOMAIN}` | #3721 |
 | `nas0.${SECRET_PUBLIC_DOMAIN}` | #3721 |
+| `unifi.${SECRET_PUBLIC_DOMAIN}` | #3722 expand. **Not tier 3 yet.** Dual-bound to `websecure` and `websecurets`, and keeps its blocky pin, through the expand phase only. The contract PR moves it to tier 3. |
 
-Nineteen of the twenty are bound to no listener that has a LAN address.
+Nineteen of the twenty-one are bound to no listener that has a LAN address.
 `traefik-ts` is a ClusterIP Service, so a ts-web outage takes those nineteen
 down over the network, for every client class. Tier 2 holds no route, and the
 `websecurelan` listener serves nothing until #3723 deletes it.
 
 `auth` is bound to `websecure` as well, so the public traefik address still
-serves it. A tailnet client does not use that address, for the reason in the
-next subsection.
+serves it. `unifi` is bound to `websecure` too through the expand phase, so
+the same holds for it until the contract PR. A tailnet client does not use
+that address, for the reason in the next subsection.
 
 ### Why a tailnet client has no fallback even when a public record exists
 
@@ -101,22 +106,26 @@ entry for the name into the client's resolver. A Hosts pin **replaces** the
 resolution path; it does not sit behind the public record as a fallback. The
 client returns the Hosts-map answer and never queries public DNS at all. So
 for a tailnet client, ts-web being down means the hostname is down — there is
-no second path to fall back to. All twenty hostnames carry an
+no second path to fall back to. All twenty-one hostnames carry an
 `extra_records` pin.
 
-Fourteen of them have no public record. Six do: `auth`, four of the six
-*arr hostnames, and `nas0`. external-dns holds no ownership TXT for
+Fourteen of them have no public record. Seven do: `auth`, four of the six
+*arr hostnames, `nas0`, and `unifi`. external-dns holds no ownership TXT for
 `lidarr`, `qbittorrent`, `radarr`, `sonarr` or `nas0` under either naming
 scheme, so the `dns.home-ops/public: "false"` flip on each of those leaves
 the record in Cloudflare, and only a manual delete withdraws it. external-dns
 owns the `prowlarr`, `sabnzbd` and `feed` records — `feed`'s ownership TXT is
 `k8s.cname-feed` — and withdraws all three on the `"false"` flip (#3721).
+`unifi` still carries `dns.home-ops/public: "true"` through the expand phase —
+that flip is the contract PR's job.
 
-None of the six is a fallback. A tailnet client never queries public DNS
+None of the seven is a fallback. A tailnet client never queries public DNS
 for a pinned name. For a client that is not on the tailnet, the four *arr
 records and the `nas0` record are Cloudflare-proxied: the client reaches the
 Cloudflare edge, the edge forwards to the origin, and traefik holds no route
-for those hostnames on the public listener. The client gets a 404.
+for those hostnames on the public listener. The client gets a 404. `unifi`
+still holds a live route on `websecure` during the expand phase, so a
+non-tailnet client reaches it there, same as `auth`.
 
 A `dig` mid-outage returns a Cloudflare address, not `TRAEFIK_IP`. That is
 normal for a proxied record and it is not evidence of a fault.
@@ -272,7 +281,7 @@ There is no failover target. Recovery is: get the single pod healthy again.
 
 ### The port-forward workaround
 
-Nineteen of the twenty hostnames are served through ts-web and through
+Nineteen of the twenty-one hostnames are served through ts-web and through
 nothing else, so no client class keeps working over the network during an
 outage. There is no per-hostname network workaround for those nineteen: no
 blocky pin and no listener with a LAN address. Five of them keep an unowned
@@ -280,7 +289,11 @@ public CNAME (the four *arr hostnames named above, plus `nas0`), and it
 reaches an address that answers 404, so it is not a workaround either.
 
 `auth` is the exception. Its workaround is to disconnect tailscale, which
-drops the `extra_records` pin and restores the blocky answer.
+drops the `extra_records` pin and restores the blocky answer. Through the
+expand phase of #3722, `unifi` has the same workaround: it keeps its blocky
+pin and its public `websecure` route until the contract PR, so disconnecting
+tailscale restores the blocky answer for it too. The contract PR removes
+both.
 
 `kubectl port-forward` is the one path that survives, because it needs a
 working kubeconfig and nothing else — no name resolution, no ts-web, and no
@@ -296,10 +309,10 @@ kubectl -n kube-system port-forward svc/hubble-ui 8082:80
 Browse the traefik dashboard at `http://localhost:8080/dashboard/`. The route
 rewrites that prefix and a port-forward does not.
 
-The same command works for any of the other seventeen hostnames — name that
+The same command works for any of the other eighteen hostnames — name that
 service's own Service instead. For `auth` that is `svc/authelia` in the
 `auth` namespace. It is the standard path for a convenience service, not a
-documented break-glass step, because none of the seventeen sits on a repair
+documented break-glass step, because none of the eighteen sits on a repair
 path.
 
 Recovery of ts-web itself is still the path back to normal service.
@@ -308,12 +321,12 @@ port-forward restores access to one service at a time for one operator.
 ## The trigger has fired, and the risk is still accepted
 
 Every rollout of this single-replica `Recreate` Deployment is a full outage
-for twenty hostnames. #3648 was the step that made it so: it took ts-web
+for twenty-one hostnames. #3648 was the step that made it so: it took ts-web
 from two consumers to six and removed the last LAN path. State that plainly:
 **step 4 of #3635 removed a fallback that existed.** It did not discover that
-the fallback was absent. #3667, #3719, #3720 and #3721 each widened the same
-blast radius further, to eight, then to eleven, then to eighteen, then to
-twenty.
+the fallback was absent. #3667, #3719, #3720, #3721 and #3722 each widened the
+same blast radius further, to eight, then to eleven, then to eighteen, then to
+twenty, then to twenty-one.
 
 The risk is still accepted, and the reason is the repair path, not the count:
 
@@ -359,11 +372,12 @@ not a bug: HA is one option, a second replica under a distinct hostname is
 another, and accepting the outage with a measured, documented recovery time is
 a third.
 
-The trigger will fire again. Wave E of #3718 moves `unifi` to tier 3, which
-takes ts-web to twenty-one consumers. `unifi` is the one to watch: it is a
-repair tool, so its move leaves `auth` as the only break-glass name on a
-listener with a LAN address, and only for a client that is not on the
-tailnet.
+The trigger will fire again. The expand phase of wave E (#3722) has pinned
+`unifi` to ts-web, taking ts-web to twenty-one consumers; the contract PR
+removes its public bind and its blocky pin, which moves it to tier 3. `unifi`
+is the one to watch: it is a repair tool, so its move leaves `auth` as the
+only break-glass name on a listener with a LAN address, and only for a client
+that is not on the tailnet.
 
 ## When to revisit this decision
 
@@ -373,7 +387,7 @@ if either of these becomes true:
 - **A third service moves behind ts-web. This has FIRED — see "The trigger
   has fired, and the risk is still accepted" above.** The original blast
   radius (one pilot service with no fallback, one service with a partial
-  fallback) was the basis for accepting the risk. Twenty consumers changes
+  fallback) was the basis for accepting the risk. Twenty-one consumers changes
   that calculation.
 - **A live DSR datapath test gets funded.** The HA-subnet-router direction
   above is closed on an untested datapath question (whether LB DNAT, SNAT,
