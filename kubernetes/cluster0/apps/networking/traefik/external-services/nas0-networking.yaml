@@ -39,11 +39,20 @@ metadata:
     dns.home-ops/public: "true"
 spec:
   parentRefs:
+    # Expand phase of #3721 (wave D of #3718). websecurets is added beside
+    # the public listener, so the tailnet path is live before the next
+    # commit removes websecure. #3522 records the outage that follows when
+    # those two steps collapse into one.
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
       namespace: networking
       sectionName: websecure
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik-gateway
+      namespace: networking
+      sectionName: websecurets
   hostnames: ["nas0.${SECRET_PUBLIC_DOMAIN}"]
   rules:
   - backendRefs:

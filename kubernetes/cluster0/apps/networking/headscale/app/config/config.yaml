@@ -125,6 +125,12 @@ dns:
       # TRAEFIK_IP, a LAN address that no tailnet subnet route covers. Paired
       # with the auth pin below.
       auth.${SECRET_PUBLIC_DOMAIN}: []
+      # Wave D (#3721, parent #3718), expand phase. Leaf-scoped for the same
+      # reason as the search entry above -- each key equals its own leaf
+      # hostname, never the bare domain. Paired with the extra_records pins
+      # below.
+      feed.${SECRET_PUBLIC_DOMAIN}: []
+      nas0.${SECRET_PUBLIC_DOMAIN}: []
   extra_records:
     # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
     # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
@@ -229,6 +235,15 @@ dns:
     # LAN. If ts-web is down, disconnect tailscale to restore the blocky
     # answer. docs/runbooks/tailnet-web-proxy-outage.md records this.
     - name: "auth.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    # Wave D (#3721, parent #3718), expand phase. Same shared ts-web proxy as
+    # the pins above. Paired with the split entries above -- read the notes
+    # there before you remove either half of any pair.
+    - name: "feed.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    - name: "nas0.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
 
