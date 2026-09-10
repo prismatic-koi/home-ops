@@ -131,6 +131,11 @@ dns:
       # below.
       feed.${SECRET_PUBLIC_DOMAIN}: []
       nas0.${SECRET_PUBLIC_DOMAIN}: []
+      # Wave E (#3722, parent #3718), expand phase. Leaf-scoped for the same
+      # reason as the search entry above -- each key equals its own leaf
+      # hostname, never the bare domain. Paired with the extra_records pin
+      # below.
+      unifi.${SECRET_PUBLIC_DOMAIN}: []
   extra_records:
     # Pins the pilot hostname to the tailscale-proxy-ts-web node's assigned
     # tailnet IP (read from its tailscale-proxy-ts-web-state Secret:
@@ -244,6 +249,12 @@ dns:
       type: "A"
       value: "100.64.0.3"
     - name: "nas0.${SECRET_PUBLIC_DOMAIN}"
+      type: "A"
+      value: "100.64.0.3"
+    # Wave E (#3722, parent #3718), expand phase. Same shared ts-web proxy as
+    # the pins above. Paired with the split entry above -- read the notes
+    # there before you remove either half of the pair.
+    - name: "unifi.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
 
