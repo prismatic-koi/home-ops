@@ -491,13 +491,14 @@ The reason is the client resolver path, not the cluster:
 
 - headscale pushes `1.1.1.1` and `8.8.8.8` as the global resolvers, so a
   tailnet client resolves app hostnames through **public DNS even on the LAN**.
-- blocky pins only two names in `customDNS`
-  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi` and
-  `auth`. Everything else falls through to the public upstreams.
+- blocky pins only one name in `customDNS`
+  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `auth`
+  (`unifi` lost its pin in wave E, #3722). Everything else falls through to
+  the public upstreams.
 - coredns does not serve the public domain, and there is no wildcard, no
   `conditional` upstream block, and no k8s-gateway.
 
-So for any hostname outside those two pins, the public record **is** the only
+So for any hostname outside that one pin, the public record **is** the only
 resolution path today, LAN included.
 
 **Never remove the label as a bulk operation.** Withdraw a hostname one service
@@ -666,11 +667,13 @@ A `customDNS` pin in
 bootstrap **critical infrastructure** when the cluster is broken. It is not a
 general pattern for the internal resolution of an ordinary application.
 
-Two hostnames get a pin. Both name the tier-1 public listener address
+One hostname gets a pin. It names the tier-1 public listener address
 (`TRAEFIK_IP`):
 
-- `unifi` — network
 - `auth` — authelia; without it nothing else admits a login
+
+`unifi` held the second pin until wave E (#3722) moved it to tier 3 and
+removed the pin. `auth` is the last pin left; #3724 removes it.
 
 The `auth` pin serves a client that is not on the tailnet, and no other class.
 An `extra_records` pin sends a client with tailscale up to the ts-web proxy
@@ -695,14 +698,23 @@ kubectl -n kube-system port-forward svc/hubble-ui 8082:80
 The operator accepted that tradeoff in #3718: no hostname resolves on the LAN
 for these three, and the tailnet is the only browser path.
 
+`port-forward` works for those three because each is a Service with a real pod
+behind it. It does NOT work for a selectorless external-service route, whose
+Service has no pod for `port-forward` to attach to. Two such routes exist:
+`unifi` and `nas0`. `unifi` is tier 3 as well (since #3722), but its
+break-glass path is a direct LAN browse to the physical UniFi controller at
+`UNIFI_IP` (`svc/unifi` proxies to that box; it has no pod). `nas0` is the same
+shape, reached at `NAS0_IP`. Neither is a `kubectl port-forward` target — do
+not document one for them.
+
 An ordinary application does not get a pin. Reach it through the tailnet, and
 let the headscale ACL act as its access control. A pin on an application
 widens access to the whole LAN, a wider set than the tailnet ACL admits.
 
 #3609 added pins for four ordinary applications by copying an earlier pin,
 without asking why that pin existed. #3629 removed all five. Before you add a
-pin, confirm the hostname names one of the two infrastructure tools above, and
-confirm its route binds a listener that has a LAN address.
+pin, confirm the hostname names the infrastructure tool above, and confirm its
+route binds a listener that has a LAN address.
 
 ## Three exposure tiers: the listener routes, the Service exposes
 
@@ -784,10 +796,10 @@ serves no route until #3723 deletes it.
 Tier 3 today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
 `octoprint`, `search`, `prometheus.ts`, `grafana`, `seaweedfs`, `traefik`,
 `longhorn`, `hubble-ui`, `lidarr`, `prowlarr`, `qbittorrent`, `radarr`,
-`sabnzbd`, `sonarr`, `feed` (miniflux) and `nas0` (#3648, #3665, #3667,
-#3719, #3720, #3721). Tier 2 is empty. `unifi` is still on tier 1 and moves
-in a later wave of #3718. `auth` stays on tier 1 and also binds
-`websecurets` — read the dual-bind note above before you touch its route.
+`sabnzbd`, `sonarr`, `feed` (miniflux), `nas0` and `unifi` (#3648, #3665,
+#3667, #3719, #3720, #3721, #3722). Tier 2 is empty. `auth` stays on tier 1
+and also binds `websecurets` — read the dual-bind note above before you touch
+its route.
 Check live membership rather than trusting this list — it drifts with every
 migration wave:
 

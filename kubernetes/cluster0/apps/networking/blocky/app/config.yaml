@@ -34,14 +34,18 @@ data:
       # tailnet, and the headscale ACL is their access control -- they do not
       # get a pin here (#3629, #3617).
       #
-      # Both pins name TRAEFIK_IP, the tier-1 public listener address. No pin
-      # names TRAEFIK_LAN_IP: tier 2 holds no route (#3718), so that address
-      # answers 404 for every hostname and a pin to it resolves to a dead end.
-      # traefik, longhorn and hubble each bind the websecurets listener alone,
-      # and kubectl port-forward is their break-glass path. A pin for any of
-      # the three belongs here only if its route is bound back to websecurelan.
+      # The one remaining pin names TRAEFIK_IP, the tier-1 public listener
+      # address. No pin names TRAEFIK_LAN_IP: tier 2 holds no route (#3718), so
+      # that address answers 404 for every hostname and a pin to it resolves to
+      # a dead end. traefik, longhorn and hubble each bind the websecurets
+      # listener alone, and kubectl port-forward is their break-glass path. A
+      # pin for any of the three belongs here only if its route is bound back
+      # to websecurelan.
+      #
+      # unifi lost its pin in wave E (#3722): it is tier 3 now, and its
+      # break-glass path is a direct LAN browse to the physical controller at
+      # UNIFI_IP, not a pin here. auth is the last pin left; #3724 removes it.
       mapping: # some useful defaults
-        unifi.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
         auth.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
 
     blocking:
