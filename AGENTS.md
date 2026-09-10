@@ -734,6 +734,24 @@ address returns 404, whatever the client resolves.
   route selects this tier. Do not add one.
 - **Tier 3** — one `parentRefs` entry, `websecurets`, and no other listener.
 
+**A route can carry `websecure` and `websecurets` together. That shape is not
+a tier, and it is not tier 2.** Two things use it:
+
+- **The expand phase of a migration.** A route gains `websecurets` before it
+  loses `websecure`, so the tailnet path is live before the public path goes.
+  #3522 records the outage that follows when those two steps land together.
+  The shape is temporary: the next commit removes `websecure`.
+- **`auth`, for as long as authelia exists (#3720).** Every route that
+  carries the `forwardauth-authelia` filter redirects to the `auth`
+  hostname. A tailnet client resolves that name to the ts-web proxy through an
+  `extra_records` pin, so the redirect needs a target on `websecurets`. The
+  `websecure` entry stays because a LAN client that is not on the tailnet
+  resolves `auth` to `TRAEFIK_IP` through its blocky pin.
+
+**Do not normalise the `auth` route to the tier-1 shape.** Delete its
+`websecurets` entry and every tier-3 route behind the filter loses its login,
+for every client that is off the LAN. #3724 deletes the route with authelia.
+
 **A tier-2 route is not private from the LAN.** `traefik-lan` is a
 LoadBalancer, and the Cilium L2 announcement policy matches every node, so its
 address answers ARP across the whole LAN. Any LAN host reaches a tier-2 route
@@ -758,9 +776,10 @@ serves no route until #3723 deletes it.
 Tier 3 today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
 `octoprint`, `search`, `prometheus.ts`, `grafana`, `seaweedfs`, `traefik`,
 `longhorn` and `hubble-ui` (#3648, #3665, #3667, #3719). Tier 2 is empty.
-`unifi` and `auth` are still on tier 1 and move in later waves of #3718. Check
-live membership rather than trusting this list — it drifts with every migration
-wave:
+`unifi` is still on tier 1 and moves in a later wave of #3718. `auth` stays on
+tier 1 and also binds `websecurets` — read the dual-bind note above before you
+touch its route. Check live membership rather than trusting this list — it
+drifts with every migration wave:
 
 ```bash
 kubectl -n networking get gateway traefik-gateway \
