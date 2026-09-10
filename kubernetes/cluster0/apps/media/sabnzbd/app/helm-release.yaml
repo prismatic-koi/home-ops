@@ -57,18 +57,26 @@ spec:
     route:
       app:
         labels:
-          # Public DNS opt-in (#3518). Removing this withdraws public DNS for
-          # the hostname — pair it with internal resolution. See AGENTS.md.
-          dns.home-ops/public: "true"
+          # Private DNS decision (#3519), not an omission. This hostname is
+          # tier 3 (#3720, parent #3718): the websecurets listener serves it
+          # and nothing else does. The headscale split entry and the
+          # extra_records pin are a pair, and together they are the only
+          # resolution path that reaches this service. There is no blocky
+          # customDNS pin. Remove either half and no client reaches it.
+          # external-dns owns this record: k8s.cname-<host> carries
+          # owner=default. "false" withdraws the public CNAME on the next
+          # reconcile, so the pair above becomes the only way to reach the
+          # hostname.
+          dns.home-ops/public: "false"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
-          # Expand phase of #3720 (wave C of #3718). websecurets is added
-          # beside the public listener, so the tailnet path is live before the
-          # next commit removes websecure. #3522 records the outage that
-          # follows when those two steps collapse into one.
-          - name: traefik-gateway
-            namespace: networking
-            sectionName: websecure
+          # Tier 3 (#3635): the websecurets listener alone. websecurets sits
+          # behind traefik-ts, a ClusterIP Service with no LAN address, so the
+          # ts-web tailnet proxy is the only path to this route. Neither the
+          # public websecure listener nor the LAN websecurelan listener holds
+          # a route for this hostname, so a request to either address returns
+          # 404. Tier 2 holds no route, and kubectl port-forward is the
+          # break-glass path (#3718).
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurets
@@ -76,6 +84,11 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+            # Keep this filter until #3726 closes. The route is tier 3, so
+            # the headscale ACL gates the network path, but this
+            # application's own authentication mode is unverified: the
+            # setting lives on a Longhorn PVC, not in this tree. authelia is
+            # the only proven identity control on this route.
             filters:
               - type: 'ExtensionRef'
                 extensionRef:
