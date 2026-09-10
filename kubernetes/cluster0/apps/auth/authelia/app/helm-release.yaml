@@ -96,9 +96,26 @@ spec:
           dns.home-ops/public: "true"
         hostnames: ["auth.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
+          # Dual-bind, not a tier change. auth stays tier 1 on websecure: it
+          # keeps its public record and its blocky pin to TRAEFIK_IP, which is
+          # the break-glass path for a LAN client that is not on the tailnet.
+          #
+          # websecurets exists because every route that carries the
+          # forwardauth-authelia filter redirects to auth.${SECRET_PUBLIC_DOMAIN},
+          # and a tailnet client resolves that name through blocky-tailnet to
+          # TRAEFIK_IP, a LAN address that no tailnet subnet route covers. Only
+          # 10.87.42.2/32 is approved in policy.hujson. Without this entry the
+          # redirect dead-ends for a client that is off the LAN, so no tier-3
+          # route that keeps the filter can complete a login (#3720).
+          #
+          # Remove this entry and the auth extra_records pin together, or a
+          # tailnet client resolves auth to ts-web and reaches no route.
           - name: traefik-gateway
             namespace: networking
             sectionName: websecure
+          - name: traefik-gateway
+            namespace: networking
+            sectionName: websecurets
         rules:
           - backendRefs:
               - identifier: app
