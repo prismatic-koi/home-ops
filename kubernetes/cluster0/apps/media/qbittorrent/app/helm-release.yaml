@@ -87,9 +87,18 @@ spec:
     route:
       app:
         labels:
-          # Public DNS opt-in (#3518). Removing this withdraws public DNS for
-          # the hostname — pair it with internal resolution. See AGENTS.md.
-          dns.home-ops/public: "true"
+          # Private DNS decision (#3519), not an omission. This hostname is
+          # tier 3 (#3720, parent #3718): the websecurets listener serves it
+          # and nothing else does. The headscale split entry and the
+          # extra_records pin are a pair, and together they are the only
+          # resolution path that reaches this service. There is no blocky
+          # customDNS pin. Remove either half and no client reaches it.
+          # external-dns holds no ownership TXT for this hostname under
+          # either naming scheme, so "false" is inert for it: the public
+          # CNAME stays in Cloudflare until someone deletes it by hand. The
+          # public address answers 404 meanwhile, because no route names the
+          # websecure listener.
+          dns.home-ops/public: "false"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           # Tier 3 (#3635): the websecurets listener alone. websecurets sits
