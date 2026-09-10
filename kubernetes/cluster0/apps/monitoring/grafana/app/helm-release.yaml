@@ -48,7 +48,7 @@ spec:
         # the client resolves. websecurets sits behind traefik-ts, a ClusterIP
         # Service with no LAN address, so the ts-web tailnet proxy is the only
         # path to this route. A websecure entry restores public reachability;
-        # a websecurelan entry adds a LAN path.
+        # there is no LAN-only tier any more (#3739).
         parentRefs:
           - name: traefik-gateway
             namespace: networking

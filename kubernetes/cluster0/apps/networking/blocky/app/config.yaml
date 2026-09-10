@@ -35,12 +35,11 @@ data:
       # get a pin here (#3629, #3617).
       #
       # The one remaining pin names TRAEFIK_IP, the tier-1 public listener
-      # address. No pin names TRAEFIK_LAN_IP: tier 2 holds no route (#3718), so
-      # that address answers 404 for every hostname and a pin to it resolves to
-      # a dead end. traefik, longhorn and hubble each bind the websecurets
+      # address. There is no LAN-only tier any more (#3739), so no pin names a
+      # LAN address. traefik, longhorn and hubble each bind the websecurets
       # listener alone, and kubectl port-forward is their break-glass path. A
       # pin for any of the three belongs here only if its route is bound back
-      # to websecurelan.
+      # to the public websecure listener.
       #
       # unifi lost its pin in wave E (#3722): it is tier 3 now, and its
       # break-glass path is a direct LAN browse to the physical controller at

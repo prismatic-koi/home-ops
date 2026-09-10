@@ -20,7 +20,7 @@ spec:
   # to the public address returns 404 whatever the client resolves. websecurets
   # sits behind traefik-ts, a ClusterIP Service with no LAN address, so the
   # ts-web tailnet proxy is the only path to this route. A websecure entry
-  # restores public reachability; a websecurelan entry adds a LAN path.
+  # restores public reachability; there is no LAN-only tier any more (#3739).
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
