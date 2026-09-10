@@ -312,7 +312,7 @@ rewrites that prefix and a port-forward does not.
 The same command works for any of the other eighteen hostnames — name that
 service's own Service instead. For `auth` that is `svc/authelia` in the
 `auth` namespace. It is the standard path for a convenience service, not a
-documented break-glass step, because none of the seventeen sits on a repair
+documented break-glass step, because none of the eighteen sits on a repair
 path.
 
 Recovery of ts-web itself is still the path back to normal service.
