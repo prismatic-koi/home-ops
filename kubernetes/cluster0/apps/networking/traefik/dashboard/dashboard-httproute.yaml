@@ -47,17 +47,17 @@ spec:
       name: traefik-gateway
       namespace: networking
       sectionName: websecurets
+  # NO forwardauth-authelia middleware on either rule. Access control is the
+  # headscale ACL grant (ben@ -> tag:ts-web tcp:443 in policy.hujson), because
+  # the ts-web tailnet proxy is the only path to this route. The traefik
+  # dashboard has no authentication of its own and its /api rule exposes the
+  # whole routing table, so restore the filter on BOTH rules before you bind
+  # this route to a listener that has a LAN or a public address.
   rules:
   - matches:
       - path:
           type: PathPrefix
           value: /api
-    filters:
-      - type: ExtensionRef
-        extensionRef:
-          group: traefik.io
-          kind: Middleware
-          name: forwardauth-authelia
     backendRefs:
       - group: ""
         kind: Service
@@ -74,11 +74,6 @@ spec:
           path:
             type: ReplacePrefixMatch
             replacePrefixMatch: /dashboard/
-      - type: ExtensionRef
-        extensionRef:
-          group: traefik.io
-          kind: Middleware
-          name: forwardauth-authelia
     backendRefs:
       - group: ""
         kind: Service

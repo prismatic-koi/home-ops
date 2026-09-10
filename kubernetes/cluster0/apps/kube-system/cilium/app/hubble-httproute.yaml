@@ -29,6 +29,11 @@ spec:
       name: traefik-gateway
       namespace: networking
       sectionName: websecurets
+  # NO forwardauth-authelia middleware. Access control is the headscale ACL
+  # grant (ben@ -> tag:ts-web tcp:443 in policy.hujson), because the ts-web
+  # tailnet proxy is the only path to this route. hubble-ui has no
+  # authentication of its own, so restore the filter before you bind this route
+  # to a listener that has a LAN or a public address.
   rules:
     - backendRefs:
       - group: ""
@@ -36,12 +41,6 @@ spec:
         name: hubble-ui
         namespace: kube-system
         port: 80
-      filters:
-      - extensionRef:
-          group: traefik.io
-          kind: Middleware
-          name: forwardauth-authelia
-        type: ExtensionRef
       matches:                                                                                                                                                                                                                                                  
       - path:                                                                                                                                                                                                                                                   
           type: PathPrefix                                                                                                                                                                                                                                      
