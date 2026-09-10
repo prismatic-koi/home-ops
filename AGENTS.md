@@ -491,14 +491,13 @@ The reason is the client resolver path, not the cluster:
 
 - headscale pushes `1.1.1.1` and `8.8.8.8` as the global resolvers, so a
   tailnet client resolves app hostnames through **public DNS even on the LAN**.
-- blocky pins only four names in `customDNS`
-  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi`,
-  `traefik`, `longhorn`, `auth`. Everything else falls through to the public
-  upstreams.
+- blocky pins only two names in `customDNS`
+  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi` and
+  `auth`. Everything else falls through to the public upstreams.
 - coredns does not serve the public domain, and there is no wildcard, no
   `conditional` upstream block, and no k8s-gateway.
 
-So for any hostname outside those four pins, the public record **is** the only
+So for any hostname outside those two pins, the public record **is** the only
 resolution path today, LAN included.
 
 **Never remove the label as a bulk operation.** Withdraw a hostname one service
