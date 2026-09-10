@@ -672,6 +672,10 @@ Two hostnames get a pin. Both name the tier-1 public listener address
 - `unifi` — network
 - `auth` — authelia; without it nothing else admits a login
 
+The `auth` pin serves a client that is not on the tailnet, and no other class.
+An `extra_records` pin sends a client with tailscale up to the ts-web proxy
+instead, even on the LAN (#3720). To use the pin, disconnect tailscale.
+
 No pin names the tier-2 LAN address (`TRAEFIK_LAN_IP`). Tier 2 holds no route
 (#3718, #3719), so that address answers 404 for every hostname, and a pin to it
 resolves to a dead end.

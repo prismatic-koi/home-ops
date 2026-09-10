@@ -304,6 +304,18 @@ The risk is still accepted, and the reason is the repair path, not the count:
 which retired tier 2. The other two, `unifi` and `auth`, stay on the public
 `websecure` listener and keep their blocky pins.
 
+The `auth` pin no longer serves every client. Since #3720 it serves a client
+that is not on the tailnet, and no other class: the `extra_records` Hosts
+entry is exact, so a client with tailscale up resolves `auth` to ts-web even
+on the LAN. See "authelia login depends on ts-web for a tailscale-up client"
+above. The recovery is to disconnect tailscale, which needs no kubeconfig and
+no name resolution.
+
+That does not change the sentence in bold. No repair tool sits behind the
+`forwardauth-authelia` filter: `unifi` never carried it, and `traefik`,
+`longhorn` and `hubble-ui` lost theirs in wave A. The six routes that still
+carry it are the *arr applications, and none of them repairs a cluster.
+
 The three that moved did not lose their repair path; they changed it.
 `kubectl port-forward` reaches each one directly, and it depends on a working
 kubeconfig alone — not on ts-web, not on traefik, and not on name resolution.
