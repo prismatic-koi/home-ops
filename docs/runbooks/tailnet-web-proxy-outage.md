@@ -74,7 +74,7 @@ tailscale-up client" below.
 | `traefik.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 | `longhorn.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 | `hubble.${SECRET_PUBLIC_DOMAIN}` | #3719 |
-| `auth.${SECRET_PUBLIC_DOMAIN}` | #3720. **Not tier 3.** Dual-bound to `websecure` and `websecurets`. Its LAN fallback survives for a non-tailnet client only. |
+| `auth.${SECRET_PUBLIC_DOMAIN}` | #3720. **Not tailnet-only.** Dual-bound to `websecure` and `websecurets`. Its LAN fallback survives for a non-tailnet client only. |
 | `lidarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
 | `prowlarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
 | `qbittorrent.${SECRET_PUBLIC_DOMAIN}` | #3720 |
@@ -87,8 +87,8 @@ tailscale-up client" below.
 
 Twenty of the twenty-one are bound to no listener that has a LAN address.
 `traefik-ts` is a ClusterIP Service, so a ts-web outage takes those twenty
-down over the network, for every client class. Tier 2 holds no route, and the
-`websecurelan` listener serves nothing until #3723 deletes it.
+down over the network, for every client class. The LAN tier held no route, and
+#3723 deleted the `websecurelan` listener and the `traefik-lan` Service.
 
 `auth` is bound to `websecure` as well, so the public traefik address still
 serves it. A tailnet client does not use that address, for the reason in the
@@ -159,7 +159,7 @@ single point of failure. All were closed by mechanics, not by preference.
 | `RollingUpdate` with `maxSurge` (instead of `Recreate`) | Both pods would mount the same `TS_KUBE_SECRET` and load the same tailnet node key, so they resolve to a **single** headscale node, not two. The result is one flapping node — connection resets from two pods racing to overwrite each other's endpoints and DERP home — not a clean hand-off. This is a worse failure mode than the plain outage window `Recreate` already gives, not a milder one. |
 | Tailscale Kubernetes Operator / `ProxyGroup` | The operator authenticates via OAuth client credentials against `api.tailscale.com`. headscale serves no tailnet REST admin API for it to talk to — only OIDC user login and a gRPC/CLI plane keyed by API key. |
 | Tailscale Services / VIPService | Not implemented in headscale at the pinned version (v0.29.3). |
-| blocky `customDNS` pin for a tier-3 hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for an infrastructure name only, never for an ordinary application. `unifi` lost its pin in wave E (#3722); `auth` is now the only pin left, and it names the tier-1 public listener address. #3724 removes it. |
+| blocky `customDNS` pin for a tailnet-only hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for an infrastructure name only, never for an ordinary application. `unifi` lost its pin in wave E (#3722); `auth` is now the only pin left, and it names the public listener address. #3724 removes it. |
 | HA subnet routers | headscale's control plane supports this (primary election, health probing). The datapath does not — see below. |
 
 ### HA subnet routers, in more detail
@@ -348,8 +348,8 @@ The risk is still accepted, and the reason is the repair path, not the count:
 **No repair path depends on ts-web.** Four of the break-glass set —
 `traefik`, `longhorn`, `hubble-ui` and `unifi` — no longer bind the public
 `websecure` listener. `traefik`, `longhorn` and `hubble-ui` sit behind ts-web
-alone since #3719, which retired tier 2, and their repair path is `kubectl
-port-forward`. `unifi` moved behind ts-web in #3722, but its repair path is
+alone since #3719, which moved them off the LAN tier, and their repair path is
+`kubectl port-forward`. `unifi` moved behind ts-web in #3722, but its repair path is
 neither ts-web nor port-forward: it administers the physical LAN through a
 controller at `10.87.1.1`, reached by a direct LAN browse that needs no
 cluster. `auth` is the last of the set still on `websecure`, and it keeps the
@@ -398,7 +398,7 @@ another, and accepting the outage with a measured, documented recovery time is
 a third.
 
 Wave E (#3722) was the widening this section anticipated: `unifi` moved to
-tier 3, taking ts-web to twenty-one consumers. `unifi` was the one to watch,
+the tailnet tier, taking ts-web to twenty-one consumers. `unifi` was the one to watch,
 because it is a repair tool. But its repair path never depended on ts-web or
 on the cluster: the physical UniFi controller answers a direct LAN browse at
 `10.87.1.1`, which needs no cluster, no kube-apiserver, no DNS and no tailnet.

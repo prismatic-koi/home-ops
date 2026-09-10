@@ -66,12 +66,12 @@ metadata:
     dns.home-ops/public: "false"
 spec:
   parentRefs:
-    # Tier 3 (#3635): the websecurets listener alone. websecurets sits behind
-    # traefik-ts, a ClusterIP Service with no LAN address, so the ts-web
-    # tailnet proxy is the only in-cluster path to this route. Neither the
-    # public websecure listener nor the LAN websecurelan listener holds a
-    # route for this hostname, so a request to either address returns 404.
-    # Tier 2 holds no route. This route proxies to the physical UniFi
+    # Tailnet-only (#3635): the websecurets listener alone. websecurets sits
+    # behind traefik-ts, a ClusterIP Service with no LAN address, so the ts-web
+    # tailnet proxy is the only in-cluster path to this route. The public
+    # websecure listener holds no route for this hostname, so a request to the
+    # public address returns 404. The LAN tier was retired (#3718, #3723).
+    # This route proxies to the physical UniFi
     # controller at UNIFI_IP, so its break-glass path is not kubectl
     # port-forward (the Service is selectorless and has no pod) but a direct
     # LAN browse to that controller address (#3722).
