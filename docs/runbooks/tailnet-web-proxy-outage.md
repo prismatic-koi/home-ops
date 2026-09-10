@@ -105,14 +105,18 @@ no second path to fall back to. All eighteen hostnames carry an
 Thirteen of them have no public record. Five do: `auth`, and four of the six
 *arr hostnames. external-dns holds no ownership TXT for `lidarr`,
 `qbittorrent`, `radarr` or `sonarr` under either naming scheme, so the
-`dns.home-ops/public: "false"` flip in #3720 left those records in
-Cloudflare, and only a manual delete withdraws them. It owned the `prowlarr`
-and `sabnzbd` records and withdrew both.
+`dns.home-ops/public: "false"` flip in #3720 leaves those records in
+Cloudflare, and only a manual delete withdraws them. external-dns owns the
+`prowlarr` and `sabnzbd` records and withdraws both.
 
 None of the five is a fallback. A tailnet client never queries public DNS for
-a pinned name. A client that is not on the tailnet resolves the four *arr
-records to the public traefik address, which holds no route for those
-hostnames and answers 404.
+a pinned name. For a client that is not on the tailnet, the four *arr records
+are Cloudflare-proxied: the client reaches the Cloudflare edge, the edge
+forwards to the origin, and traefik holds no route for those hostnames on the
+public listener. The client gets a 404.
+
+A `dig` mid-outage returns a Cloudflare address, not `TRAEFIK_IP`. That is
+normal for a proxied record and it is not evidence of a fault.
 
 ### authelia login depends on ts-web for a tailscale-up client
 
