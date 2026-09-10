@@ -62,13 +62,13 @@ spec:
           dns.home-ops/public: "true"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
-          # Expand phase of #3720 (wave C of #3718). websecurets is added
-          # beside the public listener, so the tailnet path is live before the
-          # next commit removes websecure. #3522 records the outage that
-          # follows when those two steps collapse into one.
-          - name: traefik-gateway
-            namespace: networking
-            sectionName: websecure
+          # Tier 3 (#3635): the websecurets listener alone. websecurets sits
+          # behind traefik-ts, a ClusterIP Service with no LAN address, so the
+          # ts-web tailnet proxy is the only path to this route. Neither the
+          # public websecure listener nor the LAN websecurelan listener holds
+          # a route for this hostname, so a request to either address returns
+          # 404. Tier 2 holds no route, and kubectl port-forward is the
+          # break-glass path (#3718).
           - name: traefik-gateway
             namespace: networking
             sectionName: websecurets
