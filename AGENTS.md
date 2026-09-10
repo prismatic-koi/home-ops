@@ -756,6 +756,10 @@ a tier, and it is not tier 2.** Two things use it:
 `websecurets` entry and every tier-3 route behind the filter loses its login,
 for every client that is off the LAN. #3724 deletes the route with authelia.
 
+**A tier-3 route can still carry a `forwardauth-authelia` filter.** The six
+*arr routes do, because #3726 blocks the removal. Do not read the filter on a
+tier-3 route as an oversight — read the comment in the file.
+
 **A tier-2 route is not private from the LAN.** `traefik-lan` is a
 LoadBalancer, and the Cilium L2 announcement policy matches every node, so its
 address answers ARP across the whole LAN. Any LAN host reaches a tier-2 route
@@ -779,7 +783,8 @@ serves no route until #3723 deletes it.
 
 Tier 3 today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
 `octoprint`, `search`, `prometheus.ts`, `grafana`, `seaweedfs`, `traefik`,
-`longhorn` and `hubble-ui` (#3648, #3665, #3667, #3719). Tier 2 is empty.
+`longhorn`, `hubble-ui`, `lidarr`, `prowlarr`, `qbittorrent`, `radarr`,
+`sabnzbd` and `sonarr` (#3648, #3665, #3667, #3719, #3720). Tier 2 is empty.
 `unifi` is still on tier 1 and moves in a later wave of #3718. `auth` stays on
 tier 1 and also binds `websecurets` — read the dual-bind note above before you
 touch its route. Check live membership rather than trusting this list — it

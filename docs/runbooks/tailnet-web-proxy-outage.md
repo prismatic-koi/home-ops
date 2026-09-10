@@ -51,16 +51,15 @@ lost or rotated, expect a longer window while the proxy re-authenticates.
 
 ## Who is affected
 
-Eighteen hostnames route through ts-web today. **Eleven of them have no
-fallback over the network.** Three of those eleven have an off-network repair
-path — see "The port-forward workaround" below.
+Eighteen hostnames route through ts-web today. **Seventeen of them have no
+fallback over the network.** Three of those seventeen have an off-network
+repair path — see "The port-forward workaround" below.
 
-The other seven keep a fallback, and it serves one client class only: a
-client that is not on the tailnet. `auth` keeps its blocky pin, and the six
-*arr hostnames keep their public bind until #3727 removes it. A tailnet
-client reaches none of the seven by any other path, because an
-`extra_records` pin replaces the resolution path. For `auth`, see "authelia
-login depends on ts-web for a tailscale-up client" below.
+`auth` is the eighteenth and it is the only one with a fallback. Its blocky
+pin serves one client class: a client that is not on the tailnet. A tailnet
+client reaches `auth` through ts-web alone, because an `extra_records` pin
+replaces the resolution path. See "authelia login depends on ts-web for a
+tailscale-up client" below.
 
 | Hostname | Tier 3 since |
 |---|---|
@@ -76,21 +75,21 @@ login depends on ts-web for a tailscale-up client" below.
 | `longhorn.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 | `hubble.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 | `auth.${SECRET_PUBLIC_DOMAIN}` | #3720. **Not tier 3.** Dual-bound to `websecure` and `websecurets`. Its LAN fallback survives for a non-tailnet client only. |
-| `lidarr.${SECRET_PUBLIC_DOMAIN}` | #3720 expand. **Not tier 3 yet.** Pinned to ts-web for a tailnet client; keeps its public bind until #3727. |
-| `prowlarr.${SECRET_PUBLIC_DOMAIN}` | #3720 expand. **Not tier 3 yet.** Pinned to ts-web for a tailnet client; keeps its public bind until #3727. |
-| `qbittorrent.${SECRET_PUBLIC_DOMAIN}` | #3720 expand. **Not tier 3 yet.** Pinned to ts-web for a tailnet client; keeps its public bind until #3727. |
-| `radarr.${SECRET_PUBLIC_DOMAIN}` | #3720 expand. **Not tier 3 yet.** Pinned to ts-web for a tailnet client; keeps its public bind until #3727. |
-| `sabnzbd.${SECRET_PUBLIC_DOMAIN}` | #3720 expand. **Not tier 3 yet.** Pinned to ts-web for a tailnet client; keeps its public bind until #3727. |
-| `sonarr.${SECRET_PUBLIC_DOMAIN}` | #3720 expand. **Not tier 3 yet.** Pinned to ts-web for a tailnet client; keeps its public bind until #3727. |
+| `lidarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
+| `prowlarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
+| `qbittorrent.${SECRET_PUBLIC_DOMAIN}` | #3720 |
+| `radarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
+| `sabnzbd.${SECRET_PUBLIC_DOMAIN}` | #3720 |
+| `sonarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
 
-Eleven of the eighteen are bound to no listener that has a LAN address.
-`traefik-ts` is a ClusterIP Service, so a ts-web outage takes those eleven
+Seventeen of the eighteen are bound to no listener that has a LAN address.
+`traefik-ts` is a ClusterIP Service, so a ts-web outage takes those seventeen
 down over the network, for every client class. Tier 2 holds no route, and the
 `websecurelan` listener serves nothing until #3723 deletes it.
 
-The other seven are bound to `websecure` as well, so the public traefik
-address still serves them. A tailnet client does not use that address, for
-the reason in the next subsection.
+`auth` is bound to `websecure` as well, so the public traefik address still
+serves it. A tailnet client does not use that address, for the reason in the
+next subsection.
 
 ### Why a tailnet client has no fallback even when a public record exists
 
@@ -101,9 +100,19 @@ resolution path; it does not sit behind the public record as a fallback. The
 client returns the Hosts-map answer and never queries public DNS at all. So
 for a tailnet client, ts-web being down means the hostname is down — there is
 no second path to fall back to. All eighteen hostnames carry an
-`extra_records` pin. Eleven of them have no public record. `auth` and the six
-*arr hostnames do, and a tailnet client cannot use those records, because the
-pin replaces the resolution path before public DNS is ever queried.
+`extra_records` pin.
+
+Thirteen of them have no public record. Five do: `auth`, and four of the six
+*arr hostnames. external-dns holds no ownership TXT for `lidarr`,
+`qbittorrent`, `radarr` or `sonarr` under either naming scheme, so the
+`dns.home-ops/public: "false"` flip in #3720 left those records in
+Cloudflare, and only a manual delete withdraws them. It owned the `prowlarr`
+and `sabnzbd` records and withdrew both.
+
+None of the five is a fallback. A tailnet client never queries public DNS for
+a pinned name. A client that is not on the tailnet resolves the four *arr
+records to the public traefik address, which holds no route for those
+hostnames and answers 404.
 
 ### authelia login depends on ts-web for a tailscale-up client
 
@@ -217,14 +226,14 @@ follow the normal traefik/backend triage instead.
   (Hosts-map entry does not depend on ts-web being up), but the TCP
   connection to it times out or is refused. This is the ts-web-down
   signature for a tailnet client.
-- **LAN, not-tailnet client**, for any of the eleven: no path exists, and none
-  existed before the outage either. The hostname does not resolve, because it
-  has no public record and no blocky pin. `curl --resolve` does not help:
-  `traefik-ts` is a ClusterIP Service, so no LAN address serves the listener.
-  This client class cannot tell a ts-web outage from normal operation, so a
-  report from it is not evidence either way. The other seven are the
-  exception: this client keeps the blocky pin for `auth` and the public
-  record for the six *arr hostnames, and reaches all seven throughout.
+- **LAN, not-tailnet client**, for any of the seventeen: no path exists, and
+  none existed before the outage either. The hostname either does not
+  resolve, or resolves to a public address that answers 404. `curl --resolve`
+  does not help: `traefik-ts` is a ClusterIP Service, so no LAN address
+  serves the listener. This client class cannot tell a ts-web outage from
+  normal operation, so a report from it is not evidence either way. `auth` is
+  the exception: this client keeps its blocky pin and reaches the login page
+  throughout.
 - **LAN, tailnet client**, for `auth`: the login page does not load, even
   though `10.87.42.10` answers. See "authelia login depends on ts-web for a
   tailscale-up client" above. Disconnect tailscale to recover.
@@ -256,14 +265,15 @@ There is no failover target. Recovery is: get the single pod healthy again.
 
 ### The port-forward workaround
 
-Eleven of the eighteen hostnames are served through ts-web and through
+Seventeen of the eighteen hostnames are served through ts-web and through
 nothing else, so no client class keeps working over the network during an
-outage. There is no per-hostname network workaround for those eleven: no
-blocky pin, no public record, and no listener with a LAN address.
+outage. There is no per-hostname network workaround for those seventeen: no
+blocky pin and no listener with a LAN address. Four of them keep an unowned
+public CNAME, and it reaches an address that answers 404, so it is not a
+workaround either.
 
-The other seven have one workaround, and it is the same for all of them:
-disconnect tailscale. That drops the `extra_records` pin and restores the
-blocky answer for `auth`, and the public record for the six *arr hostnames.
+`auth` is the exception. Its workaround is to disconnect tailscale, which
+drops the `extra_records` pin and restores the blocky answer.
 
 `kubectl port-forward` is the one path that survives, because it needs a
 working kubeconfig and nothing else — no name resolution, no ts-web, and no
@@ -341,11 +351,11 @@ not a bug: HA is one option, a second replica under a distinct hostname is
 another, and accepting the outage with a measured, documented recovery time is
 a third.
 
-The trigger will fire again. The contract half of wave C moves the six *arr
-apps, and waves D and E move `feed`, `nas0` and `unifi`, which takes ts-web
-to twenty-one consumers. `unifi` is the one to watch: it is a repair tool, so
-its move leaves `auth` as the only break-glass name on a listener with a LAN
-address, and only for a client that is not on the tailnet.
+The trigger will fire again. Waves D and E of #3718 move `feed`, `nas0` and
+`unifi` to tier 3, which takes ts-web to twenty-one consumers. `unifi` is the
+one to watch: it is a repair tool, so its move leaves `auth` as the only
+break-glass name on a listener with a LAN address, and only for a client that
+is not on the tailnet.
 
 ## When to revisit this decision
 
