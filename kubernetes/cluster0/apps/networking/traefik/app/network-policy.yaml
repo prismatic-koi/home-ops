@@ -106,46 +106,14 @@ spec:
         - port: 443
           protocol: TCP
 ---
-# Allow ingress on :8443, the container port of the tier-2 LAN Gateway listener
-# (#3617, renamed #3654).
+# Allow ingress on :9443, the container port of the tailnet-only Gateway
+# listener (#3635, #3636).
 #
 # The two peers mirror the pair of rules above that permit :80 and :443. The
 # ipBlock peer matches external and host-network sources. The namespaceSelector
-# peer matches in-cluster pod identities, which Cilium kubeProxyReplacement
-# does not match by source IP (#2977).
-#
-# This rule does not make the listener LAN-only. The listener is LAN-only
-# because the LAN router forwards no port to its address, so only a LAN or
-# tailnet client reaches it.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: traefik-allow-lan-ingress
-  namespace: networking
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: traefik
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-        - namespaceSelector: {}
-      ports:
-        - port: 8443
-          protocol: TCP
----
-# Allow ingress on :9443, the container port of the tailnet-only Gateway
-# listener, tier 3 (#3635, #3636).
-#
-# The two peers mirror traefik-allow-lan-ingress above. The ipBlock peer
-# matches external and host-network sources. The namespaceSelector peer
-# matches in-cluster pod identities, which Cilium kubeProxyReplacement does
+# peer matches in-cluster pod identities, which Cilium kubeProxyReplacement does
 # not match by source IP (#2977). The namespaceSelector peer is what the
-# ts-web proxy will match from step 3 of #3635, when it is repointed at the
-# traefik-ts ClusterIP Service. It does not use this path yet.
+# ts-web proxy matches when it forwards to the traefik-ts ClusterIP Service.
 #
 # This rule does not make the listener tailnet-only. The listener is
 # tailnet-only because its Service is ClusterIP, so no LAN address exists for

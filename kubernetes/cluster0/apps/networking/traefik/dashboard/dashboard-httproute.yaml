@@ -34,14 +34,13 @@ spec:
   hostnames: 
   - "traefik.${SECRET_PUBLIC_DOMAIN}"
   parentRefs:
-    # Tier 3 (#3635): the websecurets listener alone. websecurets sits behind
-    # traefik-ts, a ClusterIP Service with no LAN address, so the ts-web
-    # tailnet proxy is the only path to this route. Neither the public
-    # websecure listener nor the LAN websecurelan listener holds a route for
-    # this hostname, so a request to either address returns 404. Tier 2 holds
-    # no route, and kubectl port-forward is the break-glass path (#3718). A
-    # websecure entry restores public reachability and a websecurelan entry
-    # restores a LAN path -- restore the forwardauth-authelia filter first.
+    # Tailnet-only (#3635): the websecurets listener alone. websecurets sits
+    # behind traefik-ts, a ClusterIP Service with no LAN address, so the ts-web
+    # tailnet proxy is the only path to this route. The public websecure
+    # listener holds no route for this hostname, so a request to the public
+    # address returns 404. The LAN tier was retired (#3718, #3723), so kubectl
+    # port-forward is the break-glass path. A websecure entry restores public
+    # reachability -- restore the forwardauth-authelia filter first.
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
