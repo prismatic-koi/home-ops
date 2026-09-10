@@ -123,15 +123,6 @@ spec:
                 - namespaceSelector:
                     matchLabels:
                       kubernetes.io/metadata.name: networking
-      allow-auth-ingress:
-        controller: main
-        policyTypes: [Ingress]
-        rules:
-          ingress:
-            - from:
-                - namespaceSelector:
-                    matchLabels:
-                      kubernetes.io/metadata.name: auth
       allow-monitoring-ingress:
         controller: main
         policyTypes: [Ingress]
