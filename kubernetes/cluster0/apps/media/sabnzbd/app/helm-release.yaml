@@ -62,9 +62,16 @@ spec:
           dns.home-ops/public: "true"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
+          # Expand phase of #3720 (wave C of #3718). websecurets is added
+          # beside the public listener, so the tailnet path is live before the
+          # next commit removes websecure. #3522 records the outage that
+          # follows when those two steps collapse into one.
           - name: traefik-gateway
             namespace: networking
             sectionName: websecure
+          - name: traefik-gateway
+            namespace: networking
+            sectionName: websecurets
         rules:
           - backendRefs:
               - identifier: app
