@@ -115,6 +115,10 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+            # Keep this filter until #3726 closes. qBittorrent has no
+            # administrator password. It mints a random one on each container
+            # start and writes it only to the pod log, so authelia is the only
+            # identity control this route has.
             filters:
               - type: 'ExtensionRef'
                 extensionRef:

@@ -83,6 +83,11 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+            # Keep this filter until #3726 closes. The route is tier 3, so
+            # the headscale ACL gates the network path, but this
+            # application's own authentication mode is unverified: the
+            # setting lives on a Longhorn PVC, not in this tree. authelia is
+            # the only proven identity control on this route.
             filters:
               - type: 'ExtensionRef'
                 extensionRef:
