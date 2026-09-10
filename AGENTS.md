@@ -784,11 +784,12 @@ serves no route until #3723 deletes it.
 Tier 3 today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
 `octoprint`, `search`, `prometheus.ts`, `grafana`, `seaweedfs`, `traefik`,
 `longhorn`, `hubble-ui`, `lidarr`, `prowlarr`, `qbittorrent`, `radarr`,
-`sabnzbd` and `sonarr` (#3648, #3665, #3667, #3719, #3720). Tier 2 is empty.
-`unifi` is still on tier 1 and moves in a later wave of #3718. `auth` stays on
-tier 1 and also binds `websecurets` — read the dual-bind note above before you
-touch its route. Check live membership rather than trusting this list — it
-drifts with every migration wave:
+`sabnzbd`, `sonarr`, `feed` (miniflux) and `nas0` (#3648, #3665, #3667,
+#3719, #3720, #3721). Tier 2 is empty. `unifi` is still on tier 1 and moves
+in a later wave of #3718. `auth` stays on tier 1 and also binds
+`websecurets` — read the dual-bind note above before you touch its route.
+Check live membership rather than trusting this list — it drifts with every
+migration wave:
 
 ```bash
 kubectl -n networking get gateway traefik-gateway \
