@@ -4,33 +4,36 @@ metadata:
   name: hubble-ui
   namespace: kube-system
   labels:
-    # Private DNS decision (#3519), not an omission. This hostname is tier 2
-    # (#3635): reachable from the LAN and the tailnet, not from the internet.
-    # A tier-2 route is LAN-reachable by design, so the forwardauth-authelia
-    # filter below is its identity control and stays permanently.
-    # external-dns owns this record (k8s.cname-hubble), so "false" withdraws
-    # it on the next reconcile. A LAN client then resolves the hostname
-    # through the blocky customDNS pin; a tailnet client through the headscale
-    # split entry and extra_records pin (#3677).
+    # Private DNS decision (#3519), not an omission. This hostname is tier 3
+    # (#3635): the websecurets listener serves it and nothing else does.
+    # external-dns owns this record (k8s.cname-hubble), so "false" keeps the
+    # record withdrawn. The headscale split entry and the extra_records pin
+    # (#3677) are a pair, and together they are the only resolution path for
+    # this hostname. There is no blocky customDNS pin. Remove either half and
+    # no client resolves it.
     dns.home-ops/public: "false"
 spec:
   hostnames:
     - hubble.${SECRET_PUBLIC_DOMAIN}
   parentRefs:
-    # Tier 2 (#3635, #3678): the LAN and tailnet listeners only. The public
-    # websecure listener holds no route for this hostname, so a request to the
-    # public address returns 404. Both entries are load-bearing -- the LAN one
-    # when tailscale is down, the tailnet one when the operator is off-LAN.
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: traefik-gateway
-      namespace: networking
-      sectionName: websecurelan
+    # Tier 3 (#3635): the websecurets listener alone. websecurets sits behind
+    # traefik-ts, a ClusterIP Service with no LAN address, so the ts-web
+    # tailnet proxy is the only path to this route. Neither the public
+    # websecure listener nor the LAN websecurelan listener holds a route for
+    # this hostname, so a request to either address returns 404. Tier 2 holds
+    # no route, and kubectl port-forward is the break-glass path (#3718). A
+    # websecure entry restores public reachability and a websecurelan entry
+    # restores a LAN path -- restore the forwardauth-authelia filter first.
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
       namespace: networking
       sectionName: websecurets
+  # NO forwardauth-authelia middleware. Access control is the headscale ACL
+  # grant (ben@ -> tag:ts-web tcp:443 in policy.hujson), because the ts-web
+  # tailnet proxy is the only path to this route. hubble-ui has no
+  # authentication of its own, so restore the filter before you bind this route
+  # to a listener that has a LAN or a public address.
   rules:
     - backendRefs:
       - group: ""
@@ -38,12 +41,6 @@ spec:
         name: hubble-ui
         namespace: kube-system
         port: 80
-      filters:
-      - extensionRef:
-          group: traefik.io
-          kind: Middleware
-          name: forwardauth-authelia
-        type: ExtensionRef
       matches:                                                                                                                                                                                                                                                  
       - path:                                                                                                                                                                                                                                                   
           type: PathPrefix                                                                                                                                                                                                                                      

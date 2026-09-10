@@ -51,7 +51,9 @@ lost or rotated, expect a longer window while the proxy re-authenticates.
 
 ## Who is affected
 
-Six hostnames route through ts-web today. **None of them has a fallback.**
+Eleven hostnames route through ts-web today. **None of them has a fallback
+over the network.** Three have an off-network repair path — see "The
+port-forward workaround" below.
 
 | Hostname | Tier 3 since |
 |---|---|
@@ -61,15 +63,16 @@ Six hostnames route through ts-web today. **None of them has a fallback.**
 | `uptime.${SECRET_PUBLIC_DOMAIN}` | #3648 |
 | `zigbee2mqtt.${SECRET_PUBLIC_DOMAIN}` | #3648 |
 | `octoprint.${SECRET_PUBLIC_DOMAIN}` | #3648 |
+| `seaweedfs.${SECRET_PUBLIC_DOMAIN}` | #3667 |
+| `grafana.${SECRET_PUBLIC_DOMAIN}` | #3667 |
+| `traefik.${SECRET_PUBLIC_DOMAIN}` | #3719 |
+| `longhorn.${SECRET_PUBLIC_DOMAIN}` | #3719 |
+| `hubble.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 
-Until #3648 the five wave-1 hostnames were also bound to the tier-2
-`websecurelan` listener (named `websecurepriv` before #3654), so a LAN client
-could reach them at the `traefik-lan` address (named `traefik-private` before
-#3654). Only `search` had a LAN name-resolution path to go
-with that, and #3631 removed the blocky `customDNS` pin that gave it one.
-#3648 removed the tier-2 binding itself. `traefik-ts` is a ClusterIP Service
-with no LAN address, so a ts-web outage now takes all six hostnames down, for
-every client class.
+No hostname is bound to a listener that has a LAN address. `traefik-ts` is a
+ClusterIP Service, so a ts-web outage takes all eleven down over the network,
+for every client class. Tier 2 holds no route, and the `websecurelan` listener
+serves nothing until #3723 deletes it.
 
 ### Why a tailnet client has no fallback even when a public record exists
 
@@ -79,8 +82,8 @@ entry for the name into the client's resolver. A Hosts pin **replaces** the
 resolution path; it does not sit behind the public record as a fallback. The
 client returns the Hosts-map answer and never queries public DNS at all. So
 for a tailnet client, ts-web being down means the hostname is down — there is
-no second path to fall back to. All six hostnames carry an `extra_records`
-pin, and none of the six has a public record today.
+no second path to fall back to. All eleven hostnames carry an `extra_records`
+pin, and none of the eleven has a public record today.
 
 ## Why this is accepted, not fixed
 
@@ -93,7 +96,7 @@ single point of failure. All were closed by mechanics, not by preference.
 | `RollingUpdate` with `maxSurge` (instead of `Recreate`) | Both pods would mount the same `TS_KUBE_SECRET` and load the same tailnet node key, so they resolve to a **single** headscale node, not two. The result is one flapping node — connection resets from two pods racing to overwrite each other's endpoints and DERP home — not a clean hand-off. This is a worse failure mode than the plain outage window `Recreate` already gives, not a milder one. |
 | Tailscale Kubernetes Operator / `ProxyGroup` | The operator authenticates via OAuth client credentials against `api.tailscale.com`. headscale serves no tailnet REST admin API for it to talk to — only OIDC user login and a gRPC/CLI plane keyed by API key. |
 | Tailscale Services / VIPService | Not implemented in headscale at the pinned version (v0.29.3). |
-| blocky `customDNS` pin for a tier-3 hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for the four infrastructure names only, never for an ordinary application. |
+| blocky `customDNS` pin for a tier-3 hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for an infrastructure name only, never for an ordinary application. Two pins remain, `unifi` and `auth`, and both name the tier-1 public listener address. |
 | HA subnet routers | headscale's control plane supports this (primary election, health probing). The datapath does not — see below. |
 
 ### HA subnet routers, in more detail
@@ -170,7 +173,7 @@ follow the normal traefik/backend triage instead.
   (Hosts-map entry does not depend on ts-web being up), but the TCP
   connection to it times out or is refused. This is the ts-web-down
   signature for a tailnet client.
-- **LAN, not-tailnet client**, for any of the six: no path exists, and none
+- **LAN, not-tailnet client**, for any of the eleven: no path exists, and none
   existed before the outage either. The hostname does not resolve, because it
   has no public record and no blocky pin. `curl --resolve` does not help:
   `traefik-ts` is a ClusterIP Service, so no LAN address serves the listener.
@@ -202,32 +205,61 @@ There is no failover target. Recovery is: get the single pod healthy again.
    kubectl -n networking logs deploy/tailscale-proxy-ts-web --tail=20
    ```
 
-### No client class has a workaround
+### The port-forward workaround
 
-Every one of the six hostnames is served through ts-web and through nothing
-else. No client class keeps working during an outage, and there is no
-per-hostname workaround to reach for. `search` had one until #3631 removed its
-blocky `customDNS` pin and #3648 removed its tier-2 LAN binding. Earlier
-versions of this runbook described that workaround; it is gone. Recovery is
-the only path.
+Every one of the eleven hostnames is served through ts-web and through nothing
+else, so no client class keeps working over the network during an outage. There
+is no per-hostname network workaround: no blocky pin, no public record, and no
+listener with a LAN address.
+
+`kubectl port-forward` is the one path that survives, because it needs a
+working kubeconfig and nothing else — no name resolution, no ts-web, and no
+traefik. It reaches the backing Service directly:
+
+```bash
+# The three repair tools. Reach these first during a cluster fault.
+kubectl -n networking port-forward svc/traefik-dashboard 8080:80
+kubectl -n longhorn-system port-forward svc/longhorn-frontend 8081:80
+kubectl -n kube-system port-forward svc/hubble-ui 8082:80
+```
+
+Browse the traefik dashboard at `http://localhost:8080/dashboard/`. The route
+rewrites that prefix and a port-forward does not.
+
+The same command works for any of the other eight hostnames — name that
+service's own Service instead. It is the standard path for a convenience
+service, not a documented break-glass step, because none of the eight sits on
+a repair path.
+
+Recovery of ts-web itself is still the path back to normal service.
+port-forward restores access to one service at a time for one operator.
 
 ## The trigger has fired, and the risk is still accepted
 
-#3648 took ts-web from two consumers to six and removed the last LAN path.
-Every rollout of this single-replica `Recreate` Deployment is now a full
-outage for six hostnames, where it was a partial outage for two. State that
-plainly: **step 4 of #3635 removed a fallback that existed.** It did not
-discover that the fallback was absent.
+Every rollout of this single-replica `Recreate` Deployment is a full outage
+for eleven hostnames. #3648 was the step that made it so: it took ts-web from
+two consumers to six and removed the last LAN path. State that plainly:
+**step 4 of #3635 removed a fallback that existed.** It did not discover that
+the fallback was absent. #3667 and #3719 each widened the same blast radius
+further, to eight and then to eleven.
 
 The risk is still accepted, and the reason is the repair path, not the count:
 
-**Nothing behind ts-web is needed to repair a broken cluster.** The
-break-glass set — `traefik`, `longhorn`, `unifi`, `auth`, `hubble-ui` — is
-attached to the public `websecure` listener, not to ts-web. The tier test
-recorded on #3635 sorts on exactly this question, and all six ts-web consumers
-fail it: each is useful during an outage, none is required to end one. A
-ts-web outage costs convenience services. It costs nothing on the recovery
-path of any cluster fault, including a ts-web fault itself.
+**No repair path depends on ts-web.** Three of the break-glass set —
+`traefik`, `longhorn` and `hubble-ui` — sit behind ts-web alone since #3719,
+which retired tier 2. The other two, `unifi` and `auth`, stay on the public
+`websecure` listener and keep their blocky pins.
+
+The three that moved did not lose their repair path; they changed it.
+`kubectl port-forward` reaches each one directly, and it depends on a working
+kubeconfig alone — not on ts-web, not on traefik, and not on name resolution.
+See "The port-forward workaround" above for the commands. The operator
+accepted that tradeoff in #3718 and #3719, in exchange for removing a
+LAN-reachable LoadBalancer path from three unauthenticated admin UIs.
+
+So a ts-web outage still costs convenience services and still costs nothing on
+the recovery path of any cluster fault, including a ts-web fault itself. That
+conclusion is unchanged; only the mechanism behind it changed.
 
 `zigbee2mqtt` is the case worth stating, because the name suggests otherwise.
 Zigbee automation runs over MQTT and does not traverse the web UI. A ts-web
@@ -235,15 +267,18 @@ outage costs administration of the Zigbee network, not its operation. Devices
 keep working.
 
 So this is an availability question about convenience services, not a
-recovery-path question. That is why the fired trigger did not block #3648.
+recovery-path question. That is why the fired trigger did not block #3648,
+#3667 or #3719.
 
 The design pass the trigger asks for is tracked in #3651. It is a design pass,
 not a bug: HA is one option, a second replica under a distinct hostname is
 another, and accepting the outage with a measured, documented recovery time is
 a third.
 
-The trigger will fire again. Waves 2 and 3 of #3607 add `seaweedfs` and
-`grafana` to tier 3, which takes ts-web to eight consumers.
+The trigger will fire again. Waves C, D and E of #3718 move the six *arr
+apps, `feed`, `nas0` and `unifi` to tier 3, which takes ts-web to twenty
+consumers. `unifi` is the one to watch: it is a repair tool, so its move
+leaves `auth` as the only break-glass name on a listener with a LAN address.
 
 ## When to revisit this decision
 
@@ -251,10 +286,10 @@ Revisit accept-and-document, rather than working around it in the moment,
 if either of these becomes true:
 
 - **A third service moves behind ts-web. This has FIRED — see "The trigger
-  has fired, and the risk is still accepted" below.** The original blast
+  has fired, and the risk is still accepted" above.** The original blast
   radius (one pilot service with no fallback, one service with a partial
-  fallback) was the basis for accepting the risk. Six consumers changes that
-  calculation.
+  fallback) was the basis for accepting the risk. Eleven consumers changes
+  that calculation.
 - **A live DSR datapath test gets funded.** The HA-subnet-router direction
   above is closed on an untested datapath question (whether LB DNAT, SNAT,
   and DSR source-encoding compose correctly for a forwarded `100.64.0.0/10`

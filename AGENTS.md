@@ -491,14 +491,13 @@ The reason is the client resolver path, not the cluster:
 
 - headscale pushes `1.1.1.1` and `8.8.8.8` as the global resolvers, so a
   tailnet client resolves app hostnames through **public DNS even on the LAN**.
-- blocky pins only four names in `customDNS`
-  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi`,
-  `traefik`, `longhorn`, `auth`. Everything else falls through to the public
-  upstreams.
+- blocky pins only two names in `customDNS`
+  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `unifi` and
+  `auth`. Everything else falls through to the public upstreams.
 - coredns does not serve the public domain, and there is no wildcard, no
   `conditional` upstream block, and no k8s-gateway.
 
-So for any hostname outside those four pins, the public record **is** the only
+So for any hostname outside those two pins, the public record **is** the only
 resolution path today, LAN included.
 
 **Never remove the label as a bulk operation.** Withdraw a hostname one service
@@ -667,18 +666,30 @@ A `customDNS` pin in
 bootstrap **critical infrastructure** when the cluster is broken. It is not a
 general pattern for the internal resolution of an ordinary application.
 
-Only five hostnames get a pin, because each names a tool you need to repair
-the cluster. The pin address also marks the hostname's tier — `unifi` and
-`auth` pin to the tier-1 (public listener) address; `traefik`, `longhorn` and
-`hubble` pin to the tier-2 (LAN) address:
+Two hostnames get a pin. Both name the tier-1 public listener address
+(`TRAEFIK_IP`):
 
-- `unifi` — network (tier 1)
-- `traefik` — ingress (tier 2)
-- `longhorn` — storage (tier 2)
-- `auth` — authelia; without it nothing else admits a login (tier 1)
-- `hubble` — hubble-ui; the tool for diagnosing a connectivity fault, and
-  gating it behind the tailnet is circular when the fault is the network
-  (#3607, #3687) (tier 2)
+- `unifi` — network
+- `auth` — authelia; without it nothing else admits a login
+
+No pin names the tier-2 LAN address (`TRAEFIK_LAN_IP`). Tier 2 holds no route
+(#3718, #3719), so that address answers 404 for every hostname, and a pin to it
+resolves to a dead end.
+
+`traefik`, `longhorn` and `hubble` are tier 3 and hold no pin. **The
+break-glass path for all three is `kubectl port-forward`**, which needs a
+working kubeconfig and no name resolution at all:
+
+```bash
+# traefik: browse http://localhost:8080/dashboard/ -- the route rewrites the
+# prefix, and a port-forward does not.
+kubectl -n networking port-forward svc/traefik-dashboard 8080:80
+kubectl -n longhorn-system port-forward svc/longhorn-frontend 8081:80
+kubectl -n kube-system port-forward svc/hubble-ui 8082:80
+```
+
+The operator accepted that tradeoff in #3718: no hostname resolves on the LAN
+for these three, and the tailnet is the only browser path.
 
 An ordinary application does not get a pin. Reach it through the tailnet, and
 let the headscale ACL act as its access control. A pin on an application
@@ -686,7 +697,8 @@ widens access to the whole LAN, a wider set than the tailnet ACL admits.
 
 #3609 added pins for four ordinary applications by copying an earlier pin,
 without asking why that pin existed. #3629 removed all five. Before you add a
-pin, confirm the hostname names one of the five infrastructure tools above.
+pin, confirm the hostname names one of the two infrastructure tools above, and
+confirm its route binds a listener that has a LAN address.
 
 ## Three exposure tiers: the listener routes, the Service exposes
 
@@ -701,8 +713,14 @@ controls who can reach it. #3635 holds the full design.
 | Tier | Reachable from | Service | Listener |
 |---|---|---|---|
 | 1 Public | internet, LAN, tailnet | `traefik`, LoadBalancer. The gateway forwards 443 to it. | `websecure` |
-| 2 LAN fallback | LAN, tailnet. Not the internet. | `traefik-lan`, LoadBalancer. The gateway forwards no port to it. | `websecurelan` **and** `websecurets` |
+| 2 LAN fallback | LAN, tailnet. Not the internet. **Holds no route.** | `traefik-lan`, LoadBalancer. The gateway forwards no port to it. | `websecurelan` **and** `websecurets` |
 | 3 Tailnet only | tailnet only | `traefik-ts`, **ClusterIP** | `websecurets` |
+
+**Tier 2 holds no route (#3718, #3719).** `traefik`, `longhorn` and `hubble-ui`
+were its only members and are now tier 3. The `traefik-lan` Service and the
+`websecurelan` listener still exist and serve nothing; #3723 deletes both. Do
+not put a new route on tier 2 — pick tier 1 or tier 3, and use `kubectl
+port-forward` for break-glass.
 
 All three listeners carry the same wildcard certificates, so a route serves the
 same certificates on any of them. The public `websecure` listener holds no
@@ -712,16 +730,15 @@ address returns 404, whatever the client resolves.
 ### How to select a tier
 
 - **Tier 1** — one `parentRefs` entry, `websecure`.
-- **Tier 2** — two `parentRefs` entries, `websecurelan` and `websecurets`.
-  Break-glass needs both paths: the LAN one when tailscale is down, the tailnet
-  one when the operator is off the LAN.
+- **Tier 2** — two `parentRefs` entries, `websecurelan` and `websecurets`. No
+  route selects this tier. Do not add one.
 - **Tier 3** — one `parentRefs` entry, `websecurets`, and no other listener.
 
 **A tier-2 route is not private from the LAN.** `traefik-lan` is a
 LoadBalancer, and the Cilium L2 announcement policy matches every node, so its
 address answers ARP across the whole LAN. Any LAN host reaches a tier-2 route
-with `curl --resolve`. A tier-2 route therefore keeps its `forwardauth-authelia`
-filter permanently: the filter is its identity control, not a migration step.
+with `curl --resolve`. That is why the tier holds no route, and why any route
+put back on it needs a `forwardauth-authelia` filter as its identity control.
 
 **Tier 3 is private because no LAN address exists for its listener**, not
 because a rule denies access. `traefik-ts` is a ClusterIP Service, so the ts-web
@@ -731,18 +748,19 @@ from the LB-IPAM pool. `expose.default` must stay `false` on both the
 `websecurelan` and `websecurets` entrypoints, or the chart publishes them on
 the public address.
 
-Tier 3 is the default. Tier 2 is only for a tool you need to **repair** a broken
-cluster — ingress, storage, network, login, connectivity diagnosis. A tool that
-is merely useful during an outage fails that test and belongs in tier 3.
+Tier 3 is the default, including for a tool you need to **repair** a broken
+cluster. `kubectl port-forward` is the break-glass path for such a tool, and it
+needs a working kubeconfig and no name resolution. The `websecurelan` listener
+serves no route until #3723 deletes it.
 
 ### Membership today
 
 Tier 3 today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
-`octoprint`, `search`, `prometheus.ts`, `grafana` and `seaweedfs` (#3648,
-#3665, #3667). `traefik`, `longhorn` and `hubble-ui` are tier 2, dual-bound to
-`websecurelan` and `websecurets` (#3672, #3689). `unifi` and `auth` are still
-on tier 1 and move in later waves of #3607. Check live membership rather than
-trusting this list — it drifts with every migration wave:
+`octoprint`, `search`, `prometheus.ts`, `grafana`, `seaweedfs`, `traefik`,
+`longhorn` and `hubble-ui` (#3648, #3665, #3667, #3719). Tier 2 is empty.
+`unifi` and `auth` are still on tier 1 and move in later waves of #3718. Check
+live membership rather than trusting this list — it drifts with every migration
+wave:
 
 ```bash
 kubectl -n networking get gateway traefik-gateway \

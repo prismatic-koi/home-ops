@@ -29,18 +29,20 @@ data:
 
     customDNS:
       # A pin here is break-glass bootstrap for critical infrastructure only --
-      # the set of names you need to repair a broken cluster (network, ingress,
-      # storage, and auth). It is not a general LAN fallback. Ordinary
-      # applications are reached through the tailnet, and the headscale ACL is
-      # their access control -- they do not get a pin here (#3629, #3617).
+      # the set of names you need to repair a broken cluster. It is not a
+      # general LAN fallback. Ordinary applications are reached through the
+      # tailnet, and the headscale ACL is their access control -- they do not
+      # get a pin here (#3629, #3617).
+      #
+      # Both pins name TRAEFIK_IP, the tier-1 public listener address. No pin
+      # names TRAEFIK_LAN_IP: tier 2 holds no route (#3718), so that address
+      # answers 404 for every hostname and a pin to it resolves to a dead end.
+      # traefik, longhorn and hubble each bind the websecurets listener alone,
+      # and kubectl port-forward is their break-glass path. A pin for any of
+      # the three belongs here only if its route is bound back to websecurelan.
       mapping: # some useful defaults
         unifi.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        traefik.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_LAN_IP}
-        longhorn.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_LAN_IP}
         auth.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
-        # Tier 2 phase 2 (#3677, parent #3607). hubble-ui has no pin today;
-        # this is its first.
-        hubble.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_LAN_IP}
 
     blocking:
       loading:
