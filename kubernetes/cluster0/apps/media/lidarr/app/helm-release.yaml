@@ -36,7 +36,7 @@ spec:
           app:
             image:
               repository: lscr.io/linuxserver/lidarr
-              tag: 2.12.4.4658-ls49@sha256:286af1e270d2829efd0b6a33d26dbadc614d61d8e9bb1a07b8396ad6231921a2
+              tag: 3.1.0.4875-ls41@sha256:8ab0fd370b604ae034d9a9c261a9d8d873bece33d9736852e7ce4f3566e4a35d
             env:
               TZ: "${TIMEZONE}"
               # PUID/PGID are read by the linuxserver s6-overlay entrypoint;
