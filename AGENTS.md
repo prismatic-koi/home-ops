@@ -835,6 +835,72 @@ names the Service port denies the translated traffic when the Service's
 `targetPort` differs from its `port`. This broke the tailnet path in #3623
 and was fixed in #3625.
 
+## Exposure tiers are a labelled, linted decision
+
+A route's exposure tier is the listener it binds, and that is the whole access
+control for a tailnet-only route. See "Two exposure tiers" above for the
+mechanism: `websecure` sits behind the `traefik` LoadBalancer (public);
+`websecurets` sits behind `traefik-ts`, a ClusterIP Service with no LAN
+address, reachable only through the ts-web tailnet proxy (tier 3). Every tier-3
+route is unauthenticated once #3730 removes the last `forwardauth-authelia`
+filters and #3724 deletes authelia. So one `sectionName` changed from
+`websecurets` to `websecure`, in one file, puts an unauthenticated
+administrator interface on the public internet, with no other signal.
+
+The DNS label does not stop this. #3635 records that withdrawing a public DNS
+record reduces discoverability, not reachability, because traefik routes by the
+HTTP `Host` header. The listener binding is the control.
+
+### The tier label
+
+Every HTTPRoute that declares a hostname carries `exposure.home-ops/tier`, on
+the same object as `dns.home-ops/public`:
+
+| Label value                       | Meaning                                   |
+|-----------------------------------|-------------------------------------------|
+| `exposure.home-ops/tier: "1"`     | Public tier. Binds `websecure`.           |
+| `exposure.home-ops/tier: "3"`     | Tailnet-only tier. Binds `websecurets`.   |
+| No label (route has a hostname)   | CI fails — the tier decision is missing.  |
+
+The value is a **quoted string**, `"1"` or `"3"`, matching the quoting
+discipline #3519 enforces for `dns.home-ops/public`. An unquoted number fails
+the lint. Tier 2 (the retired LAN tier, `websecurelan`) is not a valid value:
+its listener was deleted in #3739.
+
+The label lives next to the route so that **changing a tier is a visible,
+reviewable, labelled edit** — not an implicit consequence of a `sectionName`
+change a reviewer can miss. To move a route between tiers, change the label AND
+the `sectionName` together; the lint fails if they disagree.
+
+### The `auth/authelia` exception
+
+`auth/authelia` is the one permitted dual-bind: it binds `websecure` AND
+`websecurets`, and no other route may. Every route that carries the
+`forwardauth-authelia` filter redirects to the `auth` hostname; a tailnet
+client resolves that name to the ts-web proxy, so the redirect target must
+exist on `websecurets`, while a LAN client that is not on the tailnet resolves
+`auth` to `TRAEFIK_IP` and needs `websecure` (#3720). authelia sits on the
+public tier, so it carries `exposure.home-ops/tier: "1"`, and the lint permits
+the extra `websecurets` bind for this route by name only. Do not normalise it,
+and do not generalise it into a "two listeners are allowed" rule — that would
+permit the exact mistake this lint exists to catch. #3724 deletes this route
+with authelia.
+
+### CI enforces it
+
+`.github/workflows/exposure-tier-lint.yaml`
+(`scripts/lint-exposure-tier.py`) fails a pull request when a rendered
+HTTPRoute that declares a hostname carries no valid tier label, or when its
+listener binding does not match its tier. It lints `flate build` output,
+because a route's `sectionName` and label can come from a chart `route:` block,
+not only a raw manifest. A render with no HTTPRoute fails loudly, never
+vacuously (#3601). The failure message names the namespace, the route, the
+source file, and the expected `sectionName`. The usual fix is to make the label
+and the `sectionName` agree.
+
+This lint replaces the accidental protection `forwardauth-authelia` gave before
+#3730 removed the last filters. It must stay ahead of #3724.
+
 ## Cilium Helm chart minor/major upgrades
 
 Cilium CRDs (especially `ciliumnodeconfigs.cilium.io`) track deprecated apiVersions in their

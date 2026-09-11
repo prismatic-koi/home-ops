@@ -99,6 +99,9 @@ spec:
           # public address answers 404 meanwhile, because no route names the
           # websecure listener.
           dns.home-ops/public: "false"
+          # Exposure tier (#3734). Tier 3 = tailnet-only (websecurets). This
+          # label and the parentRefs sectionName must agree; the lint enforces it.
+          exposure.home-ops/tier: "3"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           # Tier 3 (#3635): the websecurets listener alone. websecurets sits
