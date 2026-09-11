@@ -13,7 +13,7 @@
 # backendRef needs no ReferenceGrant — same pattern as the hubble-ui and
 # longhorn HTTPRoutes, which live beside their own Services.
 #
-# NO forwardauth-authelia middleware: access control is the tailnet ACL
+# NO authentication filter (#3724): access control is the tailnet ACL
 # (ben@ -> tag:ts-web tcp:443 in headscale policy.hujson). Prometheus is a
 # read-mostly, non-destructive UI; this is the whole point of the pilot.
 #

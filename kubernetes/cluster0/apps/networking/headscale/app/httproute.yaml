@@ -29,7 +29,8 @@ spec:
       namespace: networking
       sectionName: websecure
   rules:
-    # NOTE: no forwardauth-authelia filter here - headscale clients
+    # NOTE: no forward-auth filter here. This cluster runs none at all since
+    # #3724, and headscale could not use one regardless: its clients
     # (tailscale/headscale nodes) need to reach the noise/TS2021 protocol
     # un-proxied by forward-auth. Traefik terminates TLS; the WebSocket
     # upgrade for the noise protocol passes straight through.

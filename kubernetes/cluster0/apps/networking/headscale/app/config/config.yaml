@@ -115,17 +115,6 @@ dns:
       radarr.${SECRET_PUBLIC_DOMAIN}: []
       sabnzbd.${SECRET_PUBLIC_DOMAIN}: []
       sonarr.${SECRET_PUBLIC_DOMAIN}: []
-      # authelia (#3720). Leaf-scoped for the same reason as the search entry
-      # above. This key is not a tier change: auth stays on the public
-      # websecure listener and keeps its blocky pin, which still serves a LAN
-      # client that is not on the tailnet.
-      #
-      # It gives a tailnet client a resolution path to the authelia portal,
-      # because blocky-tailnet answers this name with TRAEFIK_IP, a LAN
-      # address that no tailnet subnet route covers. No route redirects here:
-      # no route carries the forwardauth-authelia filter (#3730). Paired with
-      # the auth pin below, and #3724 removes both.
-      auth.${SECRET_PUBLIC_DOMAIN}: []
       # Wave D (#3721, parent #3718), expand phase. Leaf-scoped for the same
       # reason as the search entry above -- each key equals its own leaf
       # hostname, never the bare domain. Paired with the extra_records pins
@@ -227,20 +216,6 @@ dns:
       type: "A"
       value: "100.64.0.3"
     - name: "sonarr.${SECRET_PUBLIC_DOMAIN}"
-      type: "A"
-      value: "100.64.0.3"
-    # authelia (#3720). Same shared ts-web proxy as the pins above. Paired
-    # with the auth split entry above.
-    #
-    # This pin OVERRIDES the blocky customDNS answer for a tailnet client: a
-    # MagicDNS Hosts entry is exact and wins over the pushed resolver. A LAN
-    # client that is not on the tailnet never sees this pin and still reaches
-    # auth at TRAEFIK_IP, so the tier-1 break-glass path survives.
-    #
-    # A client with tailscale UP now depends on ts-web to log in, even on the
-    # LAN. If ts-web is down, disconnect tailscale to restore the blocky
-    # answer. docs/runbooks/tailnet-web-proxy-outage.md records this.
-    - name: "auth.${SECRET_PUBLIC_DOMAIN}"
       type: "A"
       value: "100.64.0.3"
     # Wave D (#3721, parent #3718), expand phase. Same shared ts-web proxy as

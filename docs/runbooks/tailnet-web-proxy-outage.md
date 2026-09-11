@@ -51,15 +51,13 @@ lost or rotated, expect a longer window while the proxy re-authenticates.
 
 ## Who is affected
 
-Twenty-one hostnames route through ts-web today. **Twenty of them have no
-fallback over the network.** Four of those twenty have an off-network repair
-path — see "The port-forward workaround" below.
+Twenty hostnames route through ts-web today, and **none of them has a fallback
+over the network.** Four have an off-network repair path — see "The
+port-forward workaround" below.
 
-`auth` is the twenty-first and it is the only one with a fallback. Its blocky
-pin serves one client class: a client that is not on the tailnet. A tailnet
-client reaches `auth` through ts-web alone, because an `extra_records` pin
-replaces the resolution path. See "authelia login depends on ts-web for a
-tailscale-up client" below.
+`auth` was the twenty-first and the only one with a fallback. #3724 deleted
+authelia, its route, its blocky pin and its `extra_records` pin, so the
+hostname no longer exists.
 
 | Hostname | Tier 3 since |
 |---|---|
@@ -74,7 +72,6 @@ tailscale-up client" below.
 | `traefik.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 | `longhorn.${SECRET_PUBLIC_DOMAIN}` | #3719 |
 | `hubble.${SECRET_PUBLIC_DOMAIN}` | #3719 |
-| `auth.${SECRET_PUBLIC_DOMAIN}` | #3720. **Not tailnet-only.** Dual-bound to `websecure` and `websecurets`. Its LAN fallback survives for a non-tailnet client only. |
 | `lidarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
 | `prowlarr.${SECRET_PUBLIC_DOMAIN}` | #3720 |
 | `qbittorrent.${SECRET_PUBLIC_DOMAIN}` | #3720 |
@@ -85,14 +82,13 @@ tailscale-up client" below.
 | `nas0.${SECRET_PUBLIC_DOMAIN}` | #3721 |
 | `unifi.${SECRET_PUBLIC_DOMAIN}` | #3722. Repair tool, but its break-glass path is a direct LAN browse to the physical controller at `10.87.1.1`, not ts-web and not port-forward. |
 
-Twenty of the twenty-one are bound to no listener that has a LAN address.
-`traefik-ts` is a ClusterIP Service, so a ts-web outage takes those twenty
-down over the network, for every client class. The LAN tier held no route, and
-#3723 deleted the `websecurelan` listener and the `traefik-lan` Service.
+All twenty are bound to no listener that has a LAN address. `traefik-ts` is a
+ClusterIP Service, so a ts-web outage takes all twenty down over the network,
+for every client class. The LAN tier held no route, and #3723 deleted the
+`websecurelan` listener and the `traefik-lan` Service.
 
-`auth` is bound to `websecure` as well, so the public traefik address still
-serves it. A tailnet client does not use that address, for the reason in the
-next subsection.
+No route binds the public `websecure` listener as a second path. `auth` was
+the only one that did, and #3724 deleted it.
 
 ### Why a tailnet client has no fallback even when a public record exists
 
@@ -102,10 +98,10 @@ entry for the name into the client's resolver. A Hosts pin **replaces** the
 resolution path; it does not sit behind the public record as a fallback. The
 client returns the Hosts-map answer and never queries public DNS at all. So
 for a tailnet client, ts-web being down means the hostname is down — there is
-no second path to fall back to. All twenty-one hostnames carry an
-`extra_records` pin.
+no second path to fall back to. All twenty hostnames carry an `extra_records`
+pin.
 
-Fourteen of them have no public record. Seven do: `auth`, four of the six
+Fourteen of them have no public record. Six do: four of the six
 *arr hostnames, `nas0`, and `unifi`. external-dns holds no ownership TXT for
 `lidarr`, `qbittorrent`, `radarr`, `sonarr`, `nas0` or `unifi` under either
 naming scheme, so the `dns.home-ops/public: "false"` flip on each of those
@@ -114,7 +110,7 @@ external-dns owns the `prowlarr`, `sabnzbd` and `feed` records — `feed`'s
 ownership TXT is `k8s.cname-feed` — and withdrew all three on the `"false"`
 flip (#3721).
 
-None of the seven is a fallback. A tailnet client never queries public DNS
+None of the six is a fallback. A tailnet client never queries public DNS
 for a pinned name. For a client that is not on the tailnet, the four *arr
 records, the `nas0` record and the `unifi` record are Cloudflare-proxied: the
 client reaches the Cloudflare edge, the edge forwards to the origin, and
@@ -123,29 +119,6 @@ gets a 404.
 
 A `dig` mid-outage returns a Cloudflare address, not `TRAEFIK_IP`. That is
 normal for a proxied record and it is not evidence of a fault.
-
-### authelia login depends on ts-web for a tailscale-up client
-
-`auth.${SECRET_PUBLIC_DOMAIN}` carries an `extra_records` pin to the ts-web
-proxy (#3720). A MagicDNS Hosts entry is exact, and it wins over the pushed
-resolver. So **any client with tailscale up resolves `auth` to `100.64.0.3`,
-including a client that is sitting on the LAN.**
-
-**No other hostname depends on this.** No route carries the
-`forwardauth-authelia` filter (#3730), so no hostname redirects to `auth`, and
-the authelia portal is the only thing the name reaches.
-
-**Symptom during a ts-web outage:** you are on the LAN, `10.87.42.10` is
-reachable, and the authelia login page still does not load. Nothing else
-fails with it.
-
-**Recovery: disconnect tailscale.** That drops the MagicDNS pin, restores the
-blocky answer of `TRAEFIK_IP`, and the public route on `websecure` serves the
-login page again. A LAN client that was never on the tailnet is unaffected
-throughout.
-
-This costs no break-glass path. #3724 deletes authelia and removes the pin
-with it.
 
 ## Why this is accepted, not fixed
 
@@ -158,7 +131,7 @@ single point of failure. All were closed by mechanics, not by preference.
 | `RollingUpdate` with `maxSurge` (instead of `Recreate`) | Both pods would mount the same `TS_KUBE_SECRET` and load the same tailnet node key, so they resolve to a **single** headscale node, not two. The result is one flapping node — connection resets from two pods racing to overwrite each other's endpoints and DERP home — not a clean hand-off. This is a worse failure mode than the plain outage window `Recreate` already gives, not a milder one. |
 | Tailscale Kubernetes Operator / `ProxyGroup` | The operator authenticates via OAuth client credentials against `api.tailscale.com`. headscale serves no tailnet REST admin API for it to talk to — only OIDC user login and a gRPC/CLI plane keyed by API key. |
 | Tailscale Services / VIPService | Not implemented in headscale at the pinned version (v0.29.3). |
-| blocky `customDNS` pin for a tailnet-only hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for an infrastructure name only, never for an ordinary application. `unifi` lost its pin in wave E (#3722); `auth` is now the only pin left, and it names the public listener address. #3724 removes it. |
+| blocky `customDNS` pin for a tailnet-only hostname | Rejected on security posture, not mechanics: blocky is the LAN resolver, so a pin would make the hostname LAN-reachable off-tailnet, voiding the tailnet-only premise. `search` once carried such a pin. #3631 removed it and #3629 recorded the rule: a pin is break-glass bootstrap for an infrastructure name only, never for an ordinary application. `unifi` lost its pin in wave E (#3722) and `auth` went with authelia (#3724), so **the `customDNS` block is empty and no hostname resolves on the LAN.** |
 | HA subnet routers | headscale's control plane supports this (primary election, health probing). The datapath does not — see below. |
 
 ### HA subnet routers, in more detail
@@ -240,12 +213,9 @@ follow the normal traefik/backend triage instead.
   resolve, or resolves to a public address that answers 404. `curl --resolve`
   does not help: `traefik-ts` is a ClusterIP Service, so no LAN address
   serves the listener. This client class cannot tell a ts-web outage from
-  normal operation, so a report from it is not evidence either way. `auth` is
-  the exception: this client keeps its blocky pin and reaches the login page
-  throughout.
-- **LAN, tailnet client**, for `auth`: the login page does not load, even
-  though `10.87.42.10` answers. See "authelia login depends on ts-web for a
-  tailscale-up client" above. Disconnect tailscale to recover.
+  normal operation, so a report from it is not evidence either way. There is
+  no exception: the blocky `customDNS` block is empty since #3724, so this
+  client reaches no hostname at all.
 
 ## Recovery
 
@@ -274,15 +244,14 @@ There is no failover target. Recovery is: get the single pod healthy again.
 
 ### The port-forward workaround
 
-Twenty of the twenty-one hostnames are served through ts-web and through
-nothing else, so no client class keeps working over the network during an
-outage. There is no per-hostname network workaround for those twenty: no
-blocky pin and no listener with a LAN address. Six of them keep an unowned
-public CNAME (the four *arr hostnames named above, plus `nas0` and `unifi`),
-and it reaches an address that answers 404, so it is not a workaround either.
+All twenty hostnames are served through ts-web and through nothing else, so no
+client class keeps working over the network during an outage. There is no
+per-hostname network workaround for any of them: no blocky pin and no listener
+with a LAN address. Six of them keep an unowned public CNAME (the four *arr
+hostnames named above, plus `nas0` and `unifi`), and it reaches an address that
+answers 404, so it is not a workaround either.
 
-`auth` is the exception. Its workaround is to disconnect tailscale, which
-drops the `extra_records` pin and restores the blocky answer.
+There is no exception. `auth` was the only one, and #3724 deleted it.
 
 `kubectl port-forward` is the one path that survives for a Service with a real
 pod, because it needs a working kubeconfig and nothing else — no name
@@ -324,10 +293,9 @@ reach it either. `nas0` is not a repair tool, but reach it at `10.87.42.200`
 on the LAN if you need it during an outage.
 
 For every other hostname the backing Service has a real pod, so `kubectl
-port-forward` reaches it — name that service's own Service instead. For `auth`
-that is `svc/authelia` in the `auth` namespace. It is the standard path for a
-convenience service, not a documented break-glass step, because none of those
-pod-backed convenience services sits on a repair path.
+port-forward` reaches it — name that service's own Service instead. It is the
+standard path for a convenience service, not a documented break-glass step,
+because none of those pod-backed convenience services sits on a repair path.
 
 Recovery of ts-web itself is still the path back to normal service.
 port-forward restores access to one service at a time for one operator.
@@ -335,12 +303,13 @@ port-forward restores access to one service at a time for one operator.
 ## The trigger has fired, and the risk is still accepted
 
 Every rollout of this single-replica `Recreate` Deployment is a full outage
-for twenty-one hostnames. #3648 was the step that made it so: it took ts-web
+for twenty hostnames. #3648 was the step that made it so: it took ts-web
 from two consumers to six and removed the last LAN path. State that plainly:
 **step 4 of #3635 removed a fallback that existed.** It did not discover that
 the fallback was absent. #3667, #3719, #3720, #3721 and #3722 each widened the
 same blast radius further, to eight, then to eleven, then to eighteen, then to
-twenty, then to twenty-one.
+twenty, then to twenty-one. #3724 deleted `auth`, returning the count to
+twenty.
 
 The risk is still accepted, and the reason is the repair path, not the count:
 
@@ -351,19 +320,13 @@ alone since #3719, which moved them off the LAN tier, and their repair path is
 `kubectl port-forward`. `unifi` moved behind ts-web in #3722, but its repair path is
 neither ts-web nor port-forward: it administers the physical LAN through a
 controller at `10.87.1.1`, reached by a direct LAN browse that needs no
-cluster. `auth` is the last of the set still on `websecure`, and it keeps the
-last blocky pin; #3724 removes both.
+cluster. `auth` was the last of the set still on `websecure` and held the last
+blocky pin; #3724 deleted authelia, the route and the pin together, so no
+route binds `websecure` as a repair path and the `customDNS` block is empty.
 
-The `auth` pin no longer serves every client. Since #3720 it serves a client
-that is not on the tailnet, and no other class: the `extra_records` Hosts
-entry is exact, so a client with tailscale up resolves `auth` to ts-web even
-on the LAN. See "authelia login depends on ts-web for a tailscale-up client"
-above. The recovery is to disconnect tailscale, which needs no kubeconfig and
-no name resolution.
-
-That does not change the sentence in bold. No route carries the
-`forwardauth-authelia` filter (#3730), so no repair tool sits behind a login
-that itself depends on ts-web.
+That does not change the sentence in bold. This cluster runs no forward-auth
+provider (#3724), so no repair tool sits behind a login at all, and no login
+depends on ts-web.
 
 The three that moved did not lose their repair path; they changed it.
 `kubectl port-forward` reaches each one directly, and it depends on a working
@@ -400,9 +363,11 @@ the tailnet tier, taking ts-web to twenty-one consumers. `unifi` was the one to 
 because it is a repair tool. But its repair path never depended on ts-web or
 on the cluster: the physical UniFi controller answers a direct LAN browse at
 `10.87.1.1`, which needs no cluster, no kube-apiserver, no DNS and no tailnet.
-So the claim in bold above still holds with `unifi` in the set. The move
-leaves `auth` as the only break-glass name on a listener with a LAN address,
-and only for a client that is not on the tailnet; #3724 removes that last one.
+So the claim in bold above still holds with `unifi` in the set. The move left
+`auth` as the only break-glass name on a listener with a LAN address, and only
+for a client that is not on the tailnet. #3724 deleted authelia and that
+hostname, so **no break-glass name sits on a listener with a LAN address any
+more**, and ts-web is back to twenty consumers.
 
 ## When to revisit this decision
 
@@ -412,8 +377,8 @@ if either of these becomes true:
 - **A third service moves behind ts-web. This has FIRED — see "The trigger
   has fired, and the risk is still accepted" above.** The original blast
   radius (one pilot service with no fallback, one service with a partial
-  fallback) was the basis for accepting the risk. Twenty-one consumers changes
-  that calculation.
+  fallback) was the basis for accepting the risk. Twenty consumers, none with
+  any fallback, changes that calculation.
 - **A live DSR datapath test gets funded.** The HA-subnet-router direction
   above is closed on an untested datapath question (whether LB DNAT, SNAT,
   and DSR source-encoding compose correctly for a forwarded `100.64.0.0/10`
