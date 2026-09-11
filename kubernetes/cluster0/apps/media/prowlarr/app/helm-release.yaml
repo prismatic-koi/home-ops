@@ -86,17 +86,14 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
-            # Keep this filter until #3726 closes. The route is tier 3, so
-            # the headscale ACL gates the network path, but this
-            # application's own authentication mode is unverified: the
-            # setting lives on a Longhorn PVC, not in this tree. authelia is
-            # the only proven identity control on this route.
-            filters:
-              - type: 'ExtensionRef'
-                extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
-                  name: 'forwardauth-authelia'
+            # NO forwardauth-authelia middleware (#3730). prowlarr performs no
+            # authentication of its own, so the access controls are the
+            # headscale ACL grant (ben@ -> tag:ts-web tcp:443 in
+            # policy.hujson) and the media namespace NetworkPolicies, a
+            # per-application allow-list on top of a default-deny. The ts-web
+            # tailnet proxy is the only path to this route. Restore the filter
+            # before you bind this route to a listener that has a LAN or a
+            # public address.
     networkpolicies:
       default-deny:
         controller: main
