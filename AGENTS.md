@@ -750,7 +750,7 @@ returns 404, whatever the client resolves.
 - **Tailnet** — one `parentRefs` entry, `websecurets`, and no other listener.
 
 **A route can carry `websecure` and `websecurets` together. That shape is not
-a tier.** Two things use it:
+a tier.** Two routes carry this shape:
 
 - **The expand phase of a migration.** A route gains `websecurets` before it
   loses `websecure`, so the tailnet path is live before the public path goes.

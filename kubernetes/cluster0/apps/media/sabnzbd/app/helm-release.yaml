@@ -88,13 +88,21 @@ spec:
               - identifier: app
                 port: *port
             # NO forwardauth-authelia middleware (#3730). sabnzbd performs no
-            # authentication of its own, so the access controls are the
+            # authentication of its own. Two controls, two paths: the
             # headscale ACL grant (ben@ -> tag:ts-web tcp:443 in
-            # policy.hujson) and the media namespace NetworkPolicies, a
-            # per-application allow-list on top of a default-deny. The ts-web
-            # tailnet proxy is the only path to this route. Restore the filter
-            # before you bind this route to a listener that has a LAN or a
-            # public address.
+            # policy.hujson) is the whole control on the browser path, because
+            # the ts-web tailnet proxy is the only way in; the media
+            # NetworkPolicies are a per-application allow-list on a
+            # default-deny and bound the in-cluster path only, because the
+            # traefik ingress rule admits the whole networking namespace.
+            #
+            # Like qBittorrent, this WebUI can set a post-processing script to
+            # run on completion, which is command execution in this container.
+            # The ingress allow-list is what keeps that narrow (#3726 records
+            # the same reasoning). Widen it and you widen command execution.
+            #
+            # Restore the filter before you bind this route to a listener that
+            # has a LAN or a public address.
     networkpolicies:
       default-deny:
         controller: main
