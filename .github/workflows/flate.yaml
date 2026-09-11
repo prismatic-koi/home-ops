@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: Flux Local
+name: Flate
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   filter:
-    name: Flux Local - Filter
+    name: Flate - Filter
     runs-on: ubuntu-latest
     outputs:
       changed-files: ${{ steps.changed-files.outputs.changed_files }}
@@ -27,12 +27,12 @@ jobs:
         with:
           patterns: |-
             kubernetes/**/*
-            .github/workflows/flux-local.yaml
+            .github/workflows/flate.yaml
 
   test:
     if: ${{ needs.filter.outputs.changed-files != '[]' }}
     needs: filter
-    name: Flux Local - Test
+    name: Flate - Test
     runs-on: ubuntu-latest
     steps:
       - name: Generate Token
@@ -68,7 +68,7 @@ jobs:
   diff:
     if: ${{ needs.filter.outputs.changed-files != '[]' }}
     needs: filter
-    name: Flux Local - Diff
+    name: Flate - Diff
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -188,7 +188,7 @@ jobs:
     needs:
       - test
       - diff
-    name: Flux Local - Success
+    name: Flate - Success
     runs-on: ubuntu-latest
     steps:
       - name: Any jobs failed?

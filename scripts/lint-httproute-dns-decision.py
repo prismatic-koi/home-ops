@@ -43,7 +43,7 @@ render for every route today. Rendering earns its cost for two narrower reasons
      often templated (`hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]`)
      and a route may inherit hostnames from its chart.
 
-So the lint reads the rendered manifests produced by `flux-local build`. It
+So the lint reads the rendered manifests produced by `flate build`. It
 maps each rendered route back to its authored source file (a raw HTTPRoute
 manifest, or a bjw-s app-template HelmRelease `route.<name>` block) so the error
 message can name the file and the exact fix.
@@ -233,7 +233,7 @@ def lint(rendered_docs: list[dict],
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--rendered", required=True,
-                    help="Path to the `flux-local build` output (multi-doc "
+                    help="Path to the `flate build` output (multi-doc "
                          "YAML). Use '-' to read stdin.")
     ap.add_argument("--root", default="kubernetes",
                     help="Root of the source manifests tree, used to map a "
@@ -262,7 +262,7 @@ def main() -> int:
     route_docs = [d for d in rendered_docs if d.get("kind") == "HTTPRoute"]
     if not route_docs:
         print("ERROR: no HTTPRoute objects found in the rendered manifests. "
-              "Did `flux-local build` run and produce output?", file=sys.stderr)
+              "Did `flate build` run and produce output?", file=sys.stderr)
         return 2
 
     index = build_source_index(root)
