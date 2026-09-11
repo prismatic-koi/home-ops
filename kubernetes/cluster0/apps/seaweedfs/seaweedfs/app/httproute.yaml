@@ -30,10 +30,11 @@ spec:
       name: traefik-gateway
       namespace: networking
       sectionName: websecurets
-  # NO forwardauth-authelia middleware: access control is the headscale ACL
+  # NO authentication filter (#3724): access control is the headscale ACL
   # grant (ben@ -> tag:ts-web:443 in policy.hujson). The ts-web tailnet proxy
-  # is the only path to this route. Add the filter back before you bind this
-  # route to a listener that has a LAN or a public address.
+  # is the only path to this route. This cluster runs no forward-auth provider,
+  # so put authentication in front of this route before you bind it to a
+  # listener with a public address.
   rules:
     - backendRefs:
         - group: ""

@@ -25,14 +25,14 @@ spec:
     # listener holds no route for this hostname, so a request to the public
     # address returns 404. There is no LAN-only tier any more (#3739), and
     # kubectl port-forward is the break-glass path (#3718). A websecure entry
-    # restores public reachability -- restore the forwardauth-authelia filter
-    # first.
+    # restores public reachability. This cluster runs no forward-auth provider
+    # (#3724), so put authentication in front of this UI first.
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: traefik-gateway
       namespace: networking
       sectionName: websecurets
-  # NO forwardauth-authelia middleware. Access control is the headscale ACL
+  # NO authentication filter (#3724). Access control is the headscale ACL
   # grant (ben@ -> tag:ts-web tcp:443 in policy.hujson), because the ts-web
   # tailnet proxy is the only path to this route. longhorn-frontend has no
   # authentication of its own, so restore the filter before you bind this route

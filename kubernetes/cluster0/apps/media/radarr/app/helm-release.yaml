@@ -87,7 +87,7 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
-            # NO forwardauth-authelia middleware (#3730). radarr performs no
+            # NO authentication filter (#3730, #3724). radarr performs no
             # authentication of its own. Two controls, two paths: the
             # headscale ACL grant (ben@ -> tag:ts-web tcp:443 in
             # policy.hujson) is the whole control on the browser path, because
@@ -95,8 +95,9 @@ spec:
             # NetworkPolicies are a per-application allow-list on a
             # default-deny and bound the in-cluster path only, because the
             # traefik ingress rule admits the whole networking namespace.
-            # Restore the filter before you bind this route to a listener that
-            # has a LAN or a public address.
+            # This cluster runs no forward-auth provider (#3724): there is no
+            # filter to restore. Put authentication in front of this route
+            # before you bind it to a listener with a public address.
     networkpolicies:
       default-deny:
         controller: main

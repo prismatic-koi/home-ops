@@ -27,25 +27,29 @@ data:
           - tcp-tls:one.one.one.one:853
           - tcp-tls:dns.quad9.net:853
 
-    customDNS:
-      # A pin here is break-glass bootstrap for critical infrastructure only --
-      # the set of names you need to repair a broken cluster. It is not a
-      # general LAN fallback. Ordinary applications are reached through the
-      # tailnet, and the headscale ACL is their access control -- they do not
-      # get a pin here (#3629, #3617).
-      #
-      # The one remaining pin names TRAEFIK_IP, the tier-1 public listener
-      # address. There is no LAN-only tier any more (#3739), so no pin names a
-      # LAN address. traefik, longhorn and hubble each bind the websecurets
-      # listener alone, and kubectl port-forward is their break-glass path. A
-      # pin for any of the three belongs here only if its route is bound back
-      # to the public websecure listener.
-      #
-      # unifi lost its pin in wave E (#3722): it is tier 3 now, and its
-      # break-glass path is a direct LAN browse to the physical controller at
-      # UNIFI_IP, not a pin here. auth is the last pin left; #3724 removes it.
-      mapping: # some useful defaults
-        auth.${SECRET_PUBLIC_DOMAIN}: ${TRAEFIK_IP}
+    # No customDNS block. There are no pins left, and NO HOSTNAME RESOLVES ON
+    # THE LAN (#3724, parent #3718). The `auth` pin was the last one; wave F
+    # deleted authelia, so the name it answered no longer exists. `unifi` lost
+    # its pin in wave E (#3722).
+    #
+    # The break-glass path is `kubectl port-forward`, which needs a working
+    # kubeconfig and no name resolution at all:
+    #   kubectl -n networking port-forward svc/traefik-dashboard 8080:80
+    #   kubectl -n longhorn-system port-forward svc/longhorn-frontend 8081:80
+    #   kubectl -n kube-system port-forward svc/hubble-ui 8082:80
+    # A selectorless external-service route has no pod to attach to, so this
+    # does not work for `unifi` or `nas0` -- browse those boxes directly on the
+    # LAN at UNIFI_IP and NAS0_IP.
+    #
+    # A pin here is break-glass bootstrap for critical infrastructure only --
+    # the set of names you need to repair a broken cluster. It is not a general
+    # LAN fallback. An ordinary application is reached through the tailnet, and
+    # the headscale ACL is its access control; a pin would widen access to the
+    # whole LAN, a wider set than that ACL admits (#3629, #3617). Before you
+    # add one back, confirm the hostname names an infrastructure tool AND that
+    # its route binds the public websecure listener, whose address a pin can
+    # name. No route on the tailnet-only websecurets listener has a LAN address
+    # for a pin to point at.
 
     blocking:
       loading:

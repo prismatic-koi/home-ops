@@ -20,11 +20,11 @@ headscale policy grants exactly one identity to that proxy
 (`ben@ -> tag:ts-web`). That listener binding is the whole access control for a
 tier-3 route.
 
-Every tier-3 route is unauthenticated. No route carries a
-`forwardauth-authelia` filter (#3730), and #3724 deletes authelia. So a single
-wrong `sectionName` — `websecurets` changed to `websecure` in one file — puts
-an unauthenticated administrator interface on the public internet, with no
-other signal that anything changed. This lint is the only control against that
+Every tier-3 route is unauthenticated. authelia is deleted (#3724) and no
+forward-auth provider exists on this cluster at all. So a single wrong
+`sectionName` — `websecurets` changed to `websecure` in one file — puts an
+unauthenticated administrator interface on the public internet, with no other
+signal that anything changed. This lint is the only control against that
 mistake.
 
 The DNS label is not the control. #3635 records that withdrawing a public DNS
@@ -49,9 +49,8 @@ Rules
     `websecure`.
   * A tier-3 route declares exactly one `parentRefs` entry, `sectionName`
     `websecurets`.
-  * The `auth/authelia` route is the ONE permitted dual-bind: `websecure` AND
-    `websecurets`. It is a named exception, and the dual-bind is vestigial —
-    see the note below.
+  * There is NO dual-bind exception. Every route binds exactly one listener.
+    The `auth/authelia` exception was removed with authelia itself (#3724).
   * A route that declares NO hostname passes (it can never be reached by a
     `Host` header a client controls; there is nothing to expose).
   * A vendored upstream manifest is exempt (see EXEMPT_SOURCE_SUFFIXES).
@@ -96,19 +95,13 @@ TIER_LISTENER = {
 }
 VALID_VALUES = tuple(TIER_LISTENER.keys())
 
-# The ONE permitted dual-bind. `auth/authelia` binds `websecure` AND
-# `websecurets`, and no other route may. The dual-bind is vestigial: no route
-# carries the `forwardauth-authelia` filter any more (#3730), so no redirect
-# to the `auth` hostname needs a target on `websecurets`. The exception stays
-# because the live route still declares both listeners, and #3724 deletes the
-# route with authelia. authelia sits on the public tier, so it carries tier 1;
-# the exception permits the extra `websecurets` bind. Do NOT generalise this
-# into a "two listeners are allowed" rule — that would permit the exact
-# public-exposure mistake this lint exists to catch.
-AUTH_EXCEPTION_NS = "auth"
-AUTH_EXCEPTION_NAME = "authelia"
-AUTH_EXCEPTION_TIER = "1"
-AUTH_EXCEPTION_LISTENERS = ("websecure", "websecurets")
+# There are ZERO permitted dual-binds. Every route binds exactly one listener,
+# matching its tier. `auth/authelia` was the one named exception; #3724 deleted
+# that route with authelia, so the exception went with it.
+#
+# Do NOT add another. A second listener on a tier-3 route is exactly the
+# public-exposure mistake this lint exists to catch, and a named exception is
+# how that mistake gets normalised.
 
 # Vendored upstream manifests. These are install output, not authored routes,
 # and must never be flagged. Matched as a path suffix against a route's source
@@ -256,34 +249,6 @@ def lint(rendered_docs: list[dict],
         checked += 1
         labels = meta.get("labels") or {}
         sections = section_names(doc)
-
-        # The named auth exception: the ONE permitted dual-bind.
-        if ns == AUTH_EXCEPTION_NS and name == AUTH_EXCEPTION_NAME:
-            ok, value, reason = classify_label(labels)
-            expected = "/".join(AUTH_EXCEPTION_LISTENERS)
-            if not ok:
-                violations.append(Violation(ns, name, list(hostnames), reason,
-                                            expected, source))
-                continue
-            if value != AUTH_EXCEPTION_TIER:
-                violations.append(Violation(
-                    ns, name, list(hostnames),
-                    f"named auth exception must carry tier "
-                    f"{AUTH_EXCEPTION_TIER!r} (public tier), not {value!r}",
-                    expected, source))
-                continue
-            if sorted(sections) != sorted(AUTH_EXCEPTION_LISTENERS):
-                violations.append(Violation(
-                    ns, name, list(hostnames),
-                    f"the auth exception must bind exactly "
-                    f"{list(AUTH_EXCEPTION_LISTENERS)}, but binds "
-                    f"{sections or '[]'}",
-                    expected, source))
-                continue
-            if verbose:
-                print(f"OK   {ns}/{name}: named auth dual-bind exception "
-                      f"(tier {value}, {sections})")
-            continue
 
         ok, value, reason = classify_label(labels)
         if not ok:

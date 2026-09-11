@@ -75,7 +75,6 @@ Flux uses `Kustomization` resources (not to be confused with Kustomize's `kustom
 | cloudnative-pg | databases | Deployment | `cloudnative-pg` |
 | home-assistant | home | Deployment | `home-assistant` |
 | intel-gpu-plugin | kube-system | DaemonSet | `intel-gpu-plugin-intel-gpu-plugin` |
-| valkey (authelia) | auth | StatefulSet | `valkey` |
 | valkey (searxng) | home | StatefulSet | `searxng-valkey` |
 | valkey (blocky) | networking | StatefulSet | `blocky-valkey` |
 | reloader | kube-system | Deployment | `reloader` |
@@ -101,7 +100,8 @@ kubectl -n <namespace> rollout status deployment/<exact-name>
 ## Multiple Instances
 
 Some applications have multiple instances deployed:
-- **valkey**: 3 instances (auth, home/searxng, networking/blocky)
+- **valkey**: 2 instances (home/searxng, networking/blocky). The third lived in
+  `auth` and went with authelia (#3724).
 - **blocky**: 1 HelmRelease running 2 replicas (consolidated from separate primary/secondary in #3563)
 - **postgres clusters**: Multiple managed by cloudnative-pg operator
 
@@ -186,7 +186,6 @@ The Renovate Dashboard issue contains checkboxes that trigger Renovate actions:
 Priority updates that should be merged quickly:
 - Any CVE fixes
 - cert-manager / trust-manager (TLS infrastructure)
-- authelia (authentication)
 - Prometheus operator (monitoring)
 - Cilium (networking)
 
@@ -491,15 +490,15 @@ The reason is the client resolver path, not the cluster:
 
 - headscale pushes `1.1.1.1` and `8.8.8.8` as the global resolvers, so a
   tailnet client resolves app hostnames through **public DNS even on the LAN**.
-- blocky pins only one name in `customDNS`
-  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`): `auth`
-  (`unifi` lost its pin in wave E, #3722). Everything else falls through to
-  the public upstreams.
+- blocky pins **no** name: there is no `customDNS` block at all
+  (`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`). `unifi` lost
+  its pin in wave E (#3722) and `auth` went with authelia (#3724). Every name
+  falls through to the public upstreams.
 - coredns does not serve the public domain, and there is no wildcard, no
   `conditional` upstream block, and no k8s-gateway.
 
-So for any hostname outside that one pin, the public record **is** the only
-resolution path today, LAN included.
+So for a hostname with no headscale `extra_records` pin, the public record
+**is** the only resolution path today, LAN included.
 
 **Never remove the label as a bulk operation.** Withdraw a hostname one service
 at a time, as part of that service's tailnet migration, and land internal
@@ -660,29 +659,26 @@ kubectl -n networking logs deploy/external-dns --tail=500 \
 ```
 
 
-## A blocky customDNS pin is break-glass infrastructure only
+## The blocky customDNS block is empty: no hostname resolves on the LAN
 
-A `customDNS` pin in
-`kubernetes/cluster0/apps/networking/blocky/app/config.yaml` exists to
-bootstrap **critical infrastructure** when the cluster is broken. It is not a
-general pattern for the internal resolution of an ordinary application.
+There is **no `customDNS` block** in
+`kubernetes/cluster0/apps/networking/blocky/app/config.yaml`. It holds no
+pins, so **no hostname resolves on the LAN** (#3724, parent #3718).
 
-One hostname gets a pin. It names the public listener address
-(`TRAEFIK_IP`):
-
-- `auth` — authelia. The pin reaches the authelia portal, and no route
-  redirects to it (#3730). #3724 deletes authelia and removes the pin.
-
-`unifi` held the second pin until wave E (#3722) moved it to the tailnet
-tier and removed the pin. `auth` is the last pin left; #3724 removes it.
-
-The `auth` pin serves a client that is not on the tailnet, and no other class.
-An `extra_records` pin sends a client with tailscale up to the ts-web proxy
-instead, even on the LAN (#3720). To use the pin, disconnect tailscale.
+`auth` was the last pin. #3724 deleted authelia, so the name it answered no
+longer exists. `unifi` lost its pin in wave E (#3722) when it moved to the
+tailnet tier.
 
 The retired LAN tier had no pin either. Its address `10.87.42.16` returned to
 the LB-IPAM pool when #3723 deleted the `traefik-lan` Service and the
 `websecurelan` listener, so no address is left for such a pin to name.
+
+A pin exists to bootstrap **critical infrastructure** when the cluster is
+broken. It is not a general pattern for the internal resolution of an ordinary
+application. Before you add one back, confirm both: the hostname names an
+infrastructure tool, **and** its route binds the public `websecure` listener,
+whose address (`TRAEFIK_IP`) a pin can name. No route on the tailnet-only
+`websecurets` listener has a LAN address for a pin to point at.
 
 `traefik`, `longhorn` and `hubble` are tailnet-only and hold no pin. **The
 break-glass path for all three is `kubectl port-forward`**, which needs a
@@ -713,9 +709,9 @@ let the headscale ACL act as its access control. A pin on an application
 widens access to the whole LAN, a wider set than the tailnet ACL admits.
 
 #3609 added pins for four ordinary applications by copying an earlier pin,
-without asking why that pin existed. #3629 removed all five. Before you add a
-pin, confirm the hostname names the infrastructure tool above, and confirm its
-route binds the public listener, whose address the pin can name.
+without asking why that pin existed. #3629 removed all five. That is the
+failure mode to avoid: a pin copied from another pin, with no check of why the
+original existed. No pin remains to copy.
 
 ## Two exposure tiers: the listener routes, the Service exposes
 
@@ -750,24 +746,23 @@ returns 404, whatever the client resolves.
 - **Tailnet** — one `parentRefs` entry, `websecurets`, and no other listener.
 
 **A route can carry `websecure` and `websecurets` together. That shape is not
-a tier.** Two routes carry this shape:
+a tier.** No route carries this shape today. It is legitimate in exactly one
+case:
 
 - **The expand phase of a migration.** A route gains `websecurets` before it
   loses `websecure`, so the tailnet path is live before the public path goes.
   #3522 records the outage that follows when those two steps land together.
   The shape is temporary: the next commit removes `websecure`.
-- **`auth`, for as long as authelia exists (#3720).** The dual-bind is
-  vestigial: no route carries the `forwardauth-authelia` filter (#3730), so no
-  redirect to the `auth` hostname needs a target on `websecurets`. The shape
-  stays because the route still declares both listeners.
 
-**Do not normalise the `auth` route to the public shape.** The exposure-tier
-lint requires this route to bind exactly `websecure` and `websecurets`, so
-deleting either entry fails CI. #3724 deletes the route with authelia.
+`auth` held the only other dual-bind (#3720). #3724 deleted authelia, the
+route and the lint exception together, so the exposure-tier lint now permits
+**zero** dual-binds — every route binds exactly one listener. Do not add a
+named exception to re-permit one.
 
-**No route carries a `forwardauth-authelia` filter (#3730).** Every
-tailnet-only route is unauthenticated, and its listener binding is the whole
-access control. Do not add the filter to a tailnet-only route.
+**This cluster runs no forward-auth provider (#3724).** Every tailnet-only
+route is unauthenticated, and its listener binding is the whole access
+control. The `forwardauth-authelia` Middleware no longer exists, so a route
+that names it fails to attach.
 
 The retired LAN tier showed why a LAN LoadBalancer is not private: `traefik-lan`
 was a LoadBalancer, and the Cilium L2 announcement policy matches every node, so
@@ -794,8 +789,8 @@ The tailnet tier today includes `changedetection-io`, `zigbee2mqtt`, `uptime`,
 `octoprint`, `search`, `prometheus.ts`, `grafana`, `seaweedfs`, `traefik`,
 `longhorn`, `hubble-ui`, `lidarr`, `prowlarr`, `qbittorrent`, `radarr`,
 `sabnzbd`, `sonarr`, `feed` (miniflux), `nas0` and `unifi` (#3648, #3665,
-#3667, #3719, #3720, #3721, #3722). `auth` stays on the public tier and also
-binds `websecurets` — read the dual-bind note above before you touch its route.
+#3667, #3719, #3720, #3721, #3722). `auth` is gone: #3724 deleted authelia and
+its route, so no route binds two listeners any more.
 Check live membership rather than trusting this list — it drifts with every
 migration wave:
 
@@ -840,10 +835,10 @@ control for a tailnet-only route. See "Two exposure tiers" above for the
 mechanism: `websecure` sits behind the `traefik` LoadBalancer (public);
 `websecurets` sits behind `traefik-ts`, a ClusterIP Service with no LAN
 address, reachable only through the ts-web tailnet proxy (tier 3). Every tier-3
-route is unauthenticated: no route carries a `forwardauth-authelia` filter
-(#3730), and #3724 deletes authelia. So one `sectionName` changed from
-`websecurets` to `websecure`, in one file, puts an unauthenticated
-administrator interface on the public internet, with no other signal.
+route is unauthenticated: authelia is deleted (#3724) and this cluster runs no
+forward-auth provider at all. So one `sectionName` changed from `websecurets`
+to `websecure`, in one file, puts an unauthenticated administrator interface on
+the public internet, with no other signal.
 
 The DNS label does not stop this. #3635 records that withdrawing a public DNS
 record reduces discoverability, not reachability, because traefik routes by the
@@ -870,18 +865,18 @@ reviewable, labelled edit** — not an implicit consequence of a `sectionName`
 change a reviewer can miss. To move a route between tiers, change the label AND
 the `sectionName` together; the lint fails if they disagree.
 
-### The `auth/authelia` exception
+### Zero exceptions: every route binds exactly one listener
 
-`auth/authelia` is the one permitted dual-bind: it binds `websecure` AND
-`websecurets`, and no other route may. The dual-bind is vestigial: no route
-carries the `forwardauth-authelia` filter (#3730), so no redirect to the `auth`
-hostname needs a target on `websecurets`. The exception stays because the route
-still declares both listeners, and #3724 deletes the route with authelia.
-authelia sits on the public tier, so it carries `exposure.home-ops/tier: "1"`,
-and the lint permits the extra `websecurets` bind for this route by name only.
-The lint requires exactly those two listeners, so deleting either entry fails
-CI. Do not generalise the exception into a "two listeners are allowed" rule —
-that would permit the exact mistake this lint exists to catch.
+The lint permits **no** dual-bind. Every route that declares a hostname binds
+exactly one listener, matching its tier.
+
+`auth/authelia` was the one named exception (#3720, #3741). #3724 deleted
+authelia, its route and the exception together, so the lint now carries no
+exception at all.
+
+Do not add one back. A named exception is how a second listener on a tier-3
+route gets normalised, and that is the exact public-exposure mistake this lint
+exists to catch.
 
 ### CI enforces it
 
@@ -895,9 +890,9 @@ vacuously (#3601). The failure message names the namespace, the route, the
 source file, and the expected `sectionName`. The usual fix is to make the label
 and the `sectionName` agree.
 
-No route carries a `forwardauth-authelia` filter (#3730), so this lint is the
-only control against a tailnet-only route moved to the public listener. It must
-stay ahead of #3724.
+This cluster runs no forward-auth provider (#3724), so this lint is the **only**
+control against a tailnet-only route moved to the public listener. Nothing else
+would catch it.
 
 ## Cilium Helm chart minor/major upgrades
 

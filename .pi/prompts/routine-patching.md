@@ -176,8 +176,7 @@ interesting:
 
 **Security Updates:**
 - Any CVE fixes should be prioritised.
-- Priority surfaces: cert-manager, trust-manager, authelia, prometheus-operator,
-  cilium.
+- Priority surfaces: cert-manager, trust-manager, prometheus-operator, cilium.
 
 ### 3.5 Record the assessment
 
