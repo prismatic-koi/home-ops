@@ -54,8 +54,9 @@ spec:
   # headscale ACL grant (ben@ -> tag:ts-web tcp:443 in policy.hujson), because
   # the ts-web tailnet proxy is the only path to this route. The traefik
   # dashboard has no authentication of its own and its /api rule exposes the
-  # whole routing table, so restore the filter on BOTH rules before you bind
-  # this route to a listener that has a LAN or a public address.
+  # whole routing table. This cluster runs no forward-auth provider (#3724):
+  # there is no filter to restore. Put authentication in front of BOTH rules
+  # before you bind this route to a listener with a public address.
   rules:
   - matches:
       - path:
