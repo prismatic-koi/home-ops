@@ -94,6 +94,10 @@ spec:
           # Public DNS opt-in (#3518). Removing this withdraws public DNS for
           # the hostname — pair it with internal resolution. See AGENTS.md.
           dns.home-ops/public: "true"
+          # Exposure tier (#3734). Tier 1 (public), but this route is the ONE
+          # named dual-bind exception: it binds websecure AND websecurets
+          # (#3720). The lint permits that pairing only for auth/authelia.
+          exposure.home-ops/tier: "1"
         hostnames: ["auth.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           # Dual-bind, not a tier change. auth stays tier 1 on websecure: it

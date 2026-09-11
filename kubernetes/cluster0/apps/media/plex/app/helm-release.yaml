@@ -85,6 +85,9 @@ spec:
           # guest consumers reach Plex from native apps off the tailnet. Not a
           # tailnet-migration candidate. See AGENTS.md.
           dns.home-ops/public: "true"
+          # Exposure tier (#3734). Tier 1 = public (websecure). This label and
+          # the parentRefs sectionName must agree; the lint enforces it.
+          exposure.home-ops/tier: "1"
         hostnames: ["{{ .Release.Name }}.${SECRET_PUBLIC_DOMAIN}"]
         parentRefs:
           - name: traefik-gateway

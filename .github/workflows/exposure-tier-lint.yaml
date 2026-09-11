@@ -1,0 +1,99 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Exposure tier lint
+
+# Asserts every HTTPRoute's listener binding matches its declared exposure tier
+# (#3734). A route is public (tier 1) or tailnet-only (tier 3) because of the
+# listener it binds — `websecure` sits behind the traefik LoadBalancer,
+# `websecurets` sits behind traefik-ts, a ClusterIP Service reachable only
+# through the ts-web tailnet proxy (#3635, #3718, #3739). Every tier-3 route is
+# unauthenticated once #3730 removes the last forwardauth-authelia filters, so a
+# single `sectionName` changed from `websecurets` to `websecure` puts an
+# unauthenticated administrator interface on the public internet.
+#
+# The tier lives in the repository as the label `exposure.home-ops/tier` on the
+# same object that carries `dns.home-ops/public`, so a tier change is a visible,
+# reviewable edit. This lint fails a pull request when a route that declares a
+# hostname carries no valid tier label, or when its listener binding does not
+# match its tier. `auth/authelia` is the one permitted dual-bind
+# (`websecure` + `websecurets`), encoded as a named exception (#3720). A render
+# with no HTTPRoute fails loudly, never vacuously (#3601). See issue #3734 and
+# AGENTS.md, "Exposure tiers are a labelled, linted decision".
+#
+# The lint reads rendered manifests from `flate build`, because a route's
+# `sectionName` and label can come from a chart's `route:` values, not a raw
+# manifest a text scan can see.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-exposure-tier.py"
+      - ".github/workflows/exposure-tier-lint.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "kubernetes/**/*.yaml"
+      - "scripts/lint-exposure-tier.py"
+      - ".github/workflows/exposure-tier-lint.yaml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint exposure tier
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Install flate
+        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        with:
+          version: "0.6.5"
+
+      - name: Render manifests with flate
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # The install step exports FLATE_BASE=main into every later step's
+          # environment (for changed-only mode). This job checks out a single
+          # branch at default depth, so no origin/main ref exists on disk and
+          # flate fails to resolve it: "could not resolve --base=\"main\": not
+          # found locally or as origin/main". A plain `build` needs no base —
+          # only `diff` does — so the fix is to stop FLATE_BASE reaching this
+          # step, not to fetch full history with fetch-depth: 0.
+          FLATE_BASE: ""
+        run: flate build all --path kubernetes/cluster0/flux > rendered-manifests.yaml
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install PyYAML
+        run: python3 -m pip install --disable-pip-version-check "pyyaml==6.0.2"
+
+      - name: Run lint
+        run: >-
+          python3 scripts/lint-exposure-tier.py
+          --rendered rendered-manifests.yaml
+          --root kubernetes
+          --verbose

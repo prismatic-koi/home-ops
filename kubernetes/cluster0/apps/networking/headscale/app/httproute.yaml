@@ -16,6 +16,9 @@ metadata:
     # its next reconcile. Every tailnet client then loses the ability to
     # register or re-key. This label is structural, not a convenience.
     dns.home-ops/public: "true"
+    # Exposure tier (#3734). Tier 1 = public (websecure). This label and the
+    # parentRefs sectionName must agree; the lint enforces it.
+    exposure.home-ops/tier: "1"
 spec:
   hostnames:
     - hs.${SECRET_PUBLIC_DOMAIN}
