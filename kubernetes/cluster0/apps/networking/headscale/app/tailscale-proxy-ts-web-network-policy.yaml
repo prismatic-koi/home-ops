@@ -115,7 +115,7 @@ spec:
               - 172.16.0.0/12
               - 192.168.0.0/16
 ---
-# The actual forward target: TCP :80, :443 and :8443 to traefik pods in the
+# The actual forward target: TCP :80, :443 and :9443 to traefik pods in the
 # networking namespace. This is the outbound net.Dial the TCPForward handler
 # makes for each accepted tailnet connection -- :443 for the app itself,
 # :80 for the HTTP->HTTPS redirect (issue #3471). Under Cilium socket-LB the
@@ -123,23 +123,19 @@ spec:
 # egress policy evaluation, so this podSelector rule matches the translated
 # target.
 #
-# :8443 (issue #3624) is the CONTAINER port behind the traefik-lan
-# Service's :443 (targetPort websecurelan), used since #3623 repointed this
-# proxy's TCPForward at traefik-lan.networking.svc.cluster.local:443.
-# With kubeProxyReplacement=true, Cilium socket-LB rewrites the destination
-# to the pod's :8443 BEFORE egress policy evaluation, so a rule naming only
-# the Service port 443 never matches the translated traffic -- the same
-# failure mode AGENTS.md documents for the kube-apiserver rule below. Do not
-# remove :8443 as a "redundant" duplicate of :443.
-#
 # :9443 (issue #3643) is the CONTAINER port behind the tier-3 traefik-ts
-# ClusterIP Service's :443 (targetPort websecurets). It is pre-authorised
-# here, one step BEFORE step 3 repoints this proxy's TCPForward at
-# traefik-ts.networking.svc.cluster.local:443. Adding it in the repoint step
-# would repeat the #3624 outage, where the proxy was repointed at a Service
-# whose container port the egress policy did not permit and six tailnet
-# hostnames went down. It is inert until that repoint. Keep :80, :443, :8443
-# and :9443 all four.
+# ClusterIP Service's :443 (targetPort websecurets). Since #3623 this proxy's
+# TCPForward points at traefik-ts.networking.svc.cluster.local:443, and with
+# kubeProxyReplacement=true Cilium socket-LB rewrites the destination to the
+# pod's :9443 BEFORE egress policy evaluation, so a rule naming only the
+# Service port 443 never matches the translated traffic -- the same failure
+# mode AGENTS.md documents for the kube-apiserver rule below. Do not remove
+# :9443 as a "redundant" duplicate of :443.
+#
+# The former :8443 (issue #3624) was the CONTAINER port behind the deleted
+# traefik-lan Service's :443 (targetPort websecurelan). #3739 deleted that
+# Service, so nothing translates to :8443 any more and the allow was dead;
+# it is removed here. Keep :80, :443 and :9443.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -155,8 +151,6 @@ spec:
         - port: 80
           protocol: TCP
         - port: 443
-          protocol: TCP
-        - port: 8443
           protocol: TCP
         - port: 9443
           protocol: TCP
