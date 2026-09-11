@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 lint-external-dns.py — assert two invariants of the rendered external-dns
-objects, both read from the same `flux-local build` output.
+objects, both read from the same `flate build` output.
 
 Check 1 — label-filter (#3597)
 ------------------------------
@@ -52,9 +52,9 @@ Why render both checks
 The chart decides what renders. A text scan of the HelmRelease cannot see a
 chart that drops an unrecognised key (check 1) or one that generates no RBAC
 for a source declared the wrong way (check 2). Both checks read the rendered
-manifests produced by `flux-local build`, the same source the #3519 HTTPRoute
+manifests produced by `flate build`, the same source the #3519 HTTPRoute
 DNS decision lint uses. They share one render because a second full-tree
-`flux-local` render on every PR costs real minutes; the Python is near-free.
+`flate` render on every PR costs real minutes; the Python is near-free.
 
 Not vacuous
 -----------
@@ -439,7 +439,7 @@ def check_source_rbac(docs: list[dict], verbose: bool) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--rendered", required=True,
-                    help="Path to the `flux-local build` output (multi-doc "
+                    help="Path to the `flate build` output (multi-doc "
                          "YAML). Use '-' to read stdin.")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="Print resolved values on success, not just "
@@ -458,7 +458,7 @@ def main() -> int:
     docs = list(iter_yaml_docs(rendered_text))
     if not docs:
         print("ERROR: no objects found in the rendered manifests. Did "
-              "`flux-local build` run and produce output?", file=sys.stderr)
+              "`flate build` run and produce output?", file=sys.stderr)
         return 2
 
     # Run both checks. Each prints its own section. The pull request fails if

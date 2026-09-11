@@ -327,7 +327,7 @@ never passes vacuously.
 
 The two checks were consolidated into one script and one workflow (#3601)
 because both read the same rendered external-dns objects, and a second
-full-tree `flux-local` render on every PR costs real minutes.
+full-tree `flate` render on every PR costs real minutes.
 
 #### Rendering `flate` output locally
 
@@ -366,30 +366,11 @@ The script makes no commit, no push, and no change of any kind to your
 worktree or to `.bare`. It cleans up its temporary directory on success, on
 failure, and on interrupt.
 
-##### Fallback: `flux-local`
+##### No local fallback renderer
 
-If `flate` or the script is unavailable, `flux-local` 8.4.0 remains on PATH
-as a fallback, wired in via nixos-config's `modules/programs/kubetools.nix`.
-Do not install `flux-local` with pip, pipx, uv, or a venv — it is already
-self-contained and wraps `helm`, `kustomize` and `flux` onto its PATH. If the
-command is not found, the host needs a NixOS rebuild; the package reaches a
-session only after the next rebuild, not at merge time.
-
-`flux-local` has the same worktree limitation as `flate`, but fails fast
-rather than hanging: GitPython cannot resolve a worktree `.git` file, so
-`flux-local` errors out in under a second inside a `git worktree` checkout.
-Copy the tree out and render there instead:
-
-```bash
-git archive HEAD | tar -x -C <dir>
-cd <dir> && git init
-flux-local build all --enable-helm --skip-secrets --skip-crds \
-  --output-file rendered.yaml kubernetes/cluster0/flux
-```
-
-#3659 measured `flate` and `flux-local` against this tree and found the
-object sets equivalent for both lints, which is why the `flux-local` fallback
-remains acceptable when `flate` is not available.
+There is no local fallback renderer. `flate` is expected on every system
+where this repo's work happens. When a host has no `flate`, the fallback is
+the CI `flate` run on the pull request.
 
 An object without the label is invisible to external-dns. It gets **no** public
 A/CNAME record and **no** `k8s.` TXT ownership record.
