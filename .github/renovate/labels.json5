@@ -59,6 +59,36 @@
       "matchDatasources": ["docker"],
       "matchPackagePatterns": ["linuxserver/qbittorrent"]
     },
+    // linuxserver ls-form images (e.g. lidarr, prowlarr: `2.12.4.4658-ls49`).
+    // Renovate's default `docker` versioning gates a candidate on
+    // `isCompatible`, which requires the tag's suffix (text after the first
+    // `-`) to match the pinned suffix exactly. linuxserver increments the
+    // `-lsNN` build revision on nearly every rebuild, so the suffix never
+    // matches and every newer tag is silently filtered out as incompatible
+    // -- no error, no dashboard entry, just a permanently frozen image.
+    // Scoped by tag shape (`matchCurrentValue`), not by package name: the
+    // short-form images (radarr, sabnzbd, sonarr: `6.3.0`) use the same
+    // `linuxserver/*` packages and already update correctly under `docker`
+    // versioning, so a `matchPackageNames` scope would break them. See #3747.
+    {
+      "matchDatasources": ["docker"],
+      "matchCurrentValue": "/^\\d+\\.\\d+\\.\\d+\\.\\d+-ls\\d+$/",
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-ls(?<revision>\\d+)$"
+    },
+    // jellyfin: a separate trigger of the same `isCompatible` gate. It also
+    // requires the candidate's release-length (count of dot-separated
+    // numbers) to match the pinned one. Current `10.11.11` has release
+    // length 3; the only stable 12.x tag is the 2-part `12.0`, so every
+    // 12.x candidate is filtered out even though jellyfin's own `10.11.x`
+    // updates still work. `regex` versioning drops the length gate (it only
+    // reads a `compatibility` group, which this rule does not define), and
+    // normalises the absent patch group to 0, so `12.0` parses as [12,0,0]
+    // and is correctly offered as newer than `10.11.11`. See #3747.
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["jellyfin/jellyfin"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)(\\.(?<patch>\\d+))?$"
+    },
     {
       "allowedVersions": "!/^(5|2021).*/",
       "matchDatasources": ["docker"],
