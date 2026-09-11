@@ -104,16 +104,22 @@ spec:
           # keeps its public record and its blocky pin to TRAEFIK_IP, which is
           # the break-glass path for a LAN client that is not on the tailnet.
           #
-          # websecurets exists because every route that carries the
-          # forwardauth-authelia filter redirects to auth.${SECRET_PUBLIC_DOMAIN},
-          # and a tailnet client resolves that name through blocky-tailnet to
-          # TRAEFIK_IP, a LAN address that no tailnet subnet route covers. Only
-          # 10.87.42.2/32 is approved in policy.hujson. Without this entry the
-          # redirect dead-ends for a client that is off the LAN, so no tier-3
-          # route that keeps the filter can complete a login (#3720).
+          # Nothing depends on the websecurets entry. No route carries the
+          # forwardauth-authelia filter (#3730), so no route redirects to
+          # auth.${SECRET_PUBLIC_DOMAIN}. The entry serves direct tailnet
+          # access to the authelia UI, and nothing else.
+          #
+          # Keep it as a condition, not as a live reason: if a tailnet-only
+          # route ever regains a forwardauth-authelia filter, that route
+          # cannot complete a login unless auth has a tailnet target. The
+          # auth extra_records pin sends a tailnet client to ts-web, because
+          # blocky-tailnet answers this name with TRAEFIK_IP, a LAN address
+          # that no tailnet subnet route covers -- only 10.87.42.2/32 is
+          # approved in policy.hujson.
           #
           # Remove this entry and the auth extra_records pin together, or a
-          # tailnet client resolves auth to ts-web and reaches no route.
+          # tailnet client resolves auth to ts-web and reaches no route. #3724
+          # removes this route and the auth namespace.
           - name: traefik-gateway
             namespace: networking
             sectionName: websecure

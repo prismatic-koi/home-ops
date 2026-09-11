@@ -670,7 +670,8 @@ general pattern for the internal resolution of an ordinary application.
 One hostname gets a pin. It names the public listener address
 (`TRAEFIK_IP`):
 
-- `auth` — authelia; without it nothing else admits a login
+- `auth` — authelia. The pin reaches the authelia portal, and no route
+  redirects to it (#3730). #3724 deletes authelia and removes the pin.
 
 `unifi` held the second pin until wave E (#3722) moved it to the tailnet
 tier and removed the pin. `auth` is the last pin left; #3724 removes it.
@@ -749,27 +750,24 @@ returns 404, whatever the client resolves.
 - **Tailnet** — one `parentRefs` entry, `websecurets`, and no other listener.
 
 **A route can carry `websecure` and `websecurets` together. That shape is not
-a tier.** Two things use it:
+a tier.** Two routes carry this shape:
 
 - **The expand phase of a migration.** A route gains `websecurets` before it
   loses `websecure`, so the tailnet path is live before the public path goes.
   #3522 records the outage that follows when those two steps land together.
   The shape is temporary: the next commit removes `websecure`.
-- **`auth`, for as long as authelia exists (#3720).** Every route that
-  carries the `forwardauth-authelia` filter redirects to the `auth`
-  hostname. A tailnet client resolves that name to the ts-web proxy through an
-  `extra_records` pin, so the redirect needs a target on `websecurets`. The
-  `websecure` entry stays because a LAN client that is not on the tailnet
-  resolves `auth` to `TRAEFIK_IP` through its blocky pin.
+- **`auth`, for as long as authelia exists (#3720).** The dual-bind is
+  vestigial: no route carries the `forwardauth-authelia` filter (#3730), so no
+  redirect to the `auth` hostname needs a target on `websecurets`. The shape
+  stays because the route still declares both listeners.
 
-**Do not normalise the `auth` route to the public shape.** Delete its
-`websecurets` entry and every tailnet-only route behind the filter loses its
-login, for every client that is off the LAN. #3724 deletes the route with
-authelia.
+**Do not normalise the `auth` route to the public shape.** The exposure-tier
+lint requires this route to bind exactly `websecure` and `websecurets`, so
+deleting either entry fails CI. #3724 deletes the route with authelia.
 
-**A tailnet-only route can still carry a `forwardauth-authelia` filter.** The
-six *arr routes do, because #3726 blocks the removal. Do not read the filter on
-a tailnet-only route as an oversight — read the comment in the file.
+**No route carries a `forwardauth-authelia` filter (#3730).** Every
+tailnet-only route is unauthenticated, and its listener binding is the whole
+access control. Do not add the filter to a tailnet-only route.
 
 The retired LAN tier showed why a LAN LoadBalancer is not private: `traefik-lan`
 was a LoadBalancer, and the Cilium L2 announcement policy matches every node, so
@@ -842,8 +840,8 @@ control for a tailnet-only route. See "Two exposure tiers" above for the
 mechanism: `websecure` sits behind the `traefik` LoadBalancer (public);
 `websecurets` sits behind `traefik-ts`, a ClusterIP Service with no LAN
 address, reachable only through the ts-web tailnet proxy (tier 3). Every tier-3
-route is unauthenticated once #3730 removes the last `forwardauth-authelia`
-filters and #3724 deletes authelia. So one `sectionName` changed from
+route is unauthenticated: no route carries a `forwardauth-authelia` filter
+(#3730), and #3724 deletes authelia. So one `sectionName` changed from
 `websecurets` to `websecure`, in one file, puts an unauthenticated
 administrator interface on the public internet, with no other signal.
 
@@ -875,16 +873,15 @@ the `sectionName` together; the lint fails if they disagree.
 ### The `auth/authelia` exception
 
 `auth/authelia` is the one permitted dual-bind: it binds `websecure` AND
-`websecurets`, and no other route may. Every route that carries the
-`forwardauth-authelia` filter redirects to the `auth` hostname; a tailnet
-client resolves that name to the ts-web proxy, so the redirect target must
-exist on `websecurets`, while a LAN client that is not on the tailnet resolves
-`auth` to `TRAEFIK_IP` and needs `websecure` (#3720). authelia sits on the
-public tier, so it carries `exposure.home-ops/tier: "1"`, and the lint permits
-the extra `websecurets` bind for this route by name only. Do not normalise it,
-and do not generalise it into a "two listeners are allowed" rule — that would
-permit the exact mistake this lint exists to catch. #3724 deletes this route
-with authelia.
+`websecurets`, and no other route may. The dual-bind is vestigial: no route
+carries the `forwardauth-authelia` filter (#3730), so no redirect to the `auth`
+hostname needs a target on `websecurets`. The exception stays because the route
+still declares both listeners, and #3724 deletes the route with authelia.
+authelia sits on the public tier, so it carries `exposure.home-ops/tier: "1"`,
+and the lint permits the extra `websecurets` bind for this route by name only.
+The lint requires exactly those two listeners, so deleting either entry fails
+CI. Do not generalise the exception into a "two listeners are allowed" rule —
+that would permit the exact mistake this lint exists to catch.
 
 ### CI enforces it
 
@@ -898,8 +895,9 @@ vacuously (#3601). The failure message names the namespace, the route, the
 source file, and the expected `sectionName`. The usual fix is to make the label
 and the `sectionName` agree.
 
-This lint replaces the accidental protection `forwardauth-authelia` gave before
-#3730 removed the last filters. It must stay ahead of #3724.
+No route carries a `forwardauth-authelia` filter (#3730), so this lint is the
+only control against a tailnet-only route moved to the public listener. It must
+stay ahead of #3724.
 
 ## Cilium Helm chart minor/major upgrades
 

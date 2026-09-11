@@ -131,22 +131,21 @@ proxy (#3720). A MagicDNS Hosts entry is exact, and it wins over the pushed
 resolver. So **any client with tailscale up resolves `auth` to `100.64.0.3`,
 including a client that is sitting on the LAN.**
 
-The pin exists because every route that keeps the `forwardauth-authelia`
-filter redirects to this hostname. Without the pin, blocky answers with
-`TRAEFIK_IP`, a LAN address that no tailnet subnet route covers, so the
-redirect dead-ends for a client that is off the LAN.
+**No other hostname depends on this.** No route carries the
+`forwardauth-authelia` filter (#3730), so no hostname redirects to `auth`, and
+the authelia portal is the only thing the name reaches.
 
 **Symptom during a ts-web outage:** you are on the LAN, `10.87.42.10` is
-reachable, and the authelia login page still does not load. Every route
-behind the filter then fails at the redirect, not at the route itself.
+reachable, and the authelia login page still does not load. Nothing else
+fails with it.
 
 **Recovery: disconnect tailscale.** That drops the MagicDNS pin, restores the
-blocky answer of `TRAEFIK_IP`, and the tier-1 route on `websecure` serves the
+blocky answer of `TRAEFIK_IP`, and the public route on `websecure` serves the
 login page again. A LAN client that was never on the tailnet is unaffected
 throughout.
 
-This is a real narrowing of a break-glass path. #3724 deletes authelia and
-removes the pin with it.
+This costs no break-glass path. #3724 deletes authelia and removes the pin
+with it.
 
 ## Why this is accepted, not fixed
 
@@ -362,10 +361,9 @@ on the LAN. See "authelia login depends on ts-web for a tailscale-up client"
 above. The recovery is to disconnect tailscale, which needs no kubeconfig and
 no name resolution.
 
-That does not change the sentence in bold. No repair tool sits behind the
-`forwardauth-authelia` filter: `unifi` never carried it, and `traefik`,
-`longhorn` and `hubble-ui` lost theirs in wave A. The six routes that still
-carry it are the *arr applications, and none of them repairs a cluster.
+That does not change the sentence in bold. No route carries the
+`forwardauth-authelia` filter (#3730), so no repair tool sits behind a login
+that itself depends on ts-web.
 
 The three that moved did not lose their repair path; they changed it.
 `kubectl port-forward` reaches each one directly, and it depends on a working

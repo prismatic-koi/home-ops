@@ -232,7 +232,11 @@ spec:
         - port: 443
           protocol: TCP
 ---
-# Allow egress to Authelia for forward-auth.
+# Allow egress to Authelia. This rule is LOAD-BEARING: it is the only egress
+# path from traefik to the authelia pod, so the auth portal route needs it. No
+# route carries the forwardauth-authelia filter (#3730), so the forward-auth
+# caller is gone -- do not read that as making this rule dead. #3724 deletes it
+# with authelia.
 # AND-shape: namespaceSelector (auth) AND podSelector (authelia instance).
 # Port 80 is Authelia's actual containerPort (Service targetPort 80 → pod 80),
 # NOT 9091 — see #2942 forward-auth correction.

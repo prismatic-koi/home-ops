@@ -118,16 +118,24 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
-            # Keep this filter until #3726 closes. qBittorrent has no
-            # administrator password. It mints a random one on each container
-            # start and writes it only to the pod log, so authelia is the only
-            # identity control this route has.
-            filters:
-              - type: 'ExtensionRef'
-                extensionRef:
-                  group: 'traefik.io'
-                  kind: 'Middleware'
-                  name: 'forwardauth-authelia'
+            # NO forwardauth-authelia middleware (#3730). qBittorrent performs
+            # no authentication of its own. Two controls, two paths: the
+            # headscale ACL grant (ben@ -> tag:ts-web tcp:443 in
+            # policy.hujson) is the whole control on the browser path, because
+            # the ts-web tailnet proxy is the only way in; the media
+            # NetworkPolicies are a per-application allow-list on a
+            # default-deny and bound the in-cluster path only, because the
+            # traefik ingress rule admits the whole networking namespace.
+            #
+            # This application is the sharpest case in the namespace: its
+            # WebUI can set an external program to run on torrent completion,
+            # which is command execution in this container. #3726 accepted
+            # that without a password because the ingress allow-list admits
+            # only the *arr pods, two monitoring probes and traefik. Widen
+            # that allow-list and you widen command execution.
+            #
+            # Restore the filter before you bind this route to a listener that
+            # has a LAN or a public address.
     networkpolicies:
       default-deny:
         controller: main

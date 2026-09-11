@@ -20,13 +20,12 @@ headscale policy grants exactly one identity to that proxy
 (`ben@ -> tag:ts-web`). That listener binding is the whole access control for a
 tier-3 route.
 
-Every tier-3 route is unauthenticated (or will be after #3730 removes the last
-`forwardauth-authelia` filters, and #3724 deletes authelia). So a single wrong
-`sectionName` — `websecurets` changed to `websecure` in one file — puts an
-unauthenticated administrator interface on the public internet, with no other
-signal that anything changed. `forwardauth-authelia` is today an accidental
-backstop against that mistake; this lint is the deliberate replacement, and it
-must exist before #3724.
+Every tier-3 route is unauthenticated. No route carries a
+`forwardauth-authelia` filter (#3730), and #3724 deletes authelia. So a single
+wrong `sectionName` — `websecurets` changed to `websecure` in one file — puts
+an unauthenticated administrator interface on the public internet, with no
+other signal that anything changed. This lint is the only control against that
+mistake.
 
 The DNS label is not the control. #3635 records that withdrawing a public DNS
 record reduces discoverability, not reachability, because traefik routes by the
@@ -51,7 +50,8 @@ Rules
   * A tier-3 route declares exactly one `parentRefs` entry, `sectionName`
     `websecurets`.
   * The `auth/authelia` route is the ONE permitted dual-bind: `websecure` AND
-    `websecurets`. It is a named exception, with the reason recorded below.
+    `websecurets`. It is a named exception, and the dual-bind is vestigial —
+    see the note below.
   * A route that declares NO hostname passes (it can never be reached by a
     `Host` header a client controls; there is nothing to expose).
   * A vendored upstream manifest is exempt (see EXEMPT_SOURCE_SUFFIXES).
@@ -97,15 +97,14 @@ TIER_LISTENER = {
 VALID_VALUES = tuple(TIER_LISTENER.keys())
 
 # The ONE permitted dual-bind. `auth/authelia` binds `websecure` AND
-# `websecurets`, and no other route may. The reason (#3720): every route that
-# carries the `forwardauth-authelia` filter redirects to the `auth` hostname.
-# A tailnet client resolves that name to the ts-web proxy, so the redirect
-# target must exist on `websecurets`. A LAN client that is not on the tailnet
-# resolves `auth` to TRAEFIK_IP through a blocky pin, so `websecure` must stay.
-# authelia sits on the public tier, so it carries tier 1; the exception permits
-# the extra `websecurets` bind. Do NOT generalise this into a "two listeners
-# are allowed" rule — that would permit the exact public-exposure mistake this
-# lint exists to catch. #3724 deletes this route with authelia.
+# `websecurets`, and no other route may. The dual-bind is vestigial: no route
+# carries the `forwardauth-authelia` filter any more (#3730), so no redirect
+# to the `auth` hostname needs a target on `websecurets`. The exception stays
+# because the live route still declares both listeners, and #3724 deletes the
+# route with authelia. authelia sits on the public tier, so it carries tier 1;
+# the exception permits the extra `websecurets` bind. Do NOT generalise this
+# into a "two listeners are allowed" rule — that would permit the exact
+# public-exposure mistake this lint exists to catch.
 AUTH_EXCEPTION_NS = "auth"
 AUTH_EXCEPTION_NAME = "authelia"
 AUTH_EXCEPTION_TIER = "1"
