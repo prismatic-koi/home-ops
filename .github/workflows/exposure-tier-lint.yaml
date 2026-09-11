@@ -7,16 +7,17 @@ name: Exposure tier lint
 # listener it binds — `websecure` sits behind the traefik LoadBalancer,
 # `websecurets` sits behind traefik-ts, a ClusterIP Service reachable only
 # through the ts-web tailnet proxy (#3635, #3718, #3739). Every tier-3 route is
-# unauthenticated once #3730 removes the last forwardauth-authelia filters, so a
-# single `sectionName` changed from `websecurets` to `websecure` puts an
-# unauthenticated administrator interface on the public internet.
+# unauthenticated, because no route carries a forwardauth-authelia filter
+# (#3730), so a single `sectionName` changed from `websecurets` to `websecure`
+# puts an unauthenticated administrator interface on the public internet.
 #
 # The tier lives in the repository as the label `exposure.home-ops/tier` on the
 # same object that carries `dns.home-ops/public`, so a tier change is a visible,
 # reviewable edit. This lint fails a pull request when a route that declares a
 # hostname carries no valid tier label, or when its listener binding does not
 # match its tier. `auth/authelia` is the one permitted dual-bind
-# (`websecure` + `websecurets`), encoded as a named exception (#3720). A render
+# (`websecure` + `websecurets`), encoded as a named exception; the dual-bind is
+# vestigial and #3724 removes it with authelia (#3720, #3730). A render
 # with no HTTPRoute fails loudly, never vacuously (#3601). See issue #3734 and
 # AGENTS.md, "Exposure tiers are a labelled, linted decision".
 #
