@@ -272,3 +272,14 @@ spec:
     # node-exporter: exposes host-level metrics (CPU, memory, disk, filesystem).
     nodeExporter:
       enabled: true
+    # prometheus-node-exporter: subchart values for the node-exporter above.
+    # extraArgs is a list, and Helm replaces lists rather than merging them, so
+    # both chart-default exclude entries are restated verbatim here alongside
+    # the new mountstats flag. Dropping them would flood node_filesystem_* with
+    # a series per container and kubelet mount on every node (the same fail-open
+    # shape as the external-dns labelFilter regression, #3597).
+    prometheus-node-exporter:
+      extraArgs:
+        - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+        - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
+        - --collector.mountstats
