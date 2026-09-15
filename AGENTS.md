@@ -383,7 +383,7 @@ not a private default — CI fails it (see "CI enforces the decision" below). A
 route that declares no hostname needs no label.
 
 Before #3518 the default was the reverse: every HTTPRoute was published unless
-it carried `external-dns.alpha.kubernetes.io/controller: none`. A route added
+it carried `external-dns.kubernetes.io/controller: none`. A route added
 without that annotation got a public record silently. That is the defect the
 label fixes.
 
@@ -570,7 +570,7 @@ The `grafana` chart uses the same `route.<name>.labels` key as `app-template`.
 To keep a new hostname private, set the label to `"false"` and state why in a
 comment. `"false"` is a recorded decision; an absent label is a forgotten one,
 and CI rejects it. Do not copy the old
-`external-dns.alpha.kubernetes.io/controller: none` annotation onto new objects.
+`external-dns.kubernetes.io/controller: none` annotation onto new objects.
 One route still carries it — `monitoring/kube-prometheus-stack/app/httproute.yaml`
 — and keeps it as deliberate defence in depth.
 
@@ -614,7 +614,7 @@ recorded nowhere else:
 
 | Route | Declares a hostname? | Value | Why it is private |
 |---|---|---|---|
-| `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | `"false"` | Tailnet-only pilot (#3466). The `"false"` keeps it off public DNS. **Do not change it to `"true"`.** It also keeps `external-dns.alpha.kubernetes.io/controller: none` as defence in depth. |
+| `monitoring/prometheus-ts-web` | Yes, `prometheus.ts.…` | `"false"` | Tailnet-only pilot (#3466). The `"false"` keeps it off public DNS. **Do not change it to `"true"`.** It also keeps `external-dns.kubernetes.io/controller: none` as defence in depth. |
 | `home/searxng` | Yes, `search.…` | `"false"` | Withdrawn from public DNS in #3555, the contract half of an expand-then-contract migration. The headscale `nameservers.split` entry plus the `extra_records` pin (#3553) are the only resolution path left: #3631 removed the blocky `customDNS` pin, and #3648 moved the route to the tailnet-only `websecurets` listener, so the hostname has no LAN path at all. **That headscale pin is load-bearing — remove it and no client resolves the hostname.** Change the value to `"true"` only to roll the withdrawal back. |
 
 Do not remove any of these labels, and do not add a row for a route whose

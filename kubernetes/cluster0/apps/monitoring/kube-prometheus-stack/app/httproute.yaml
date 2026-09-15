@@ -28,13 +28,13 @@
 # public record before #3518 and kept it, where the label change alone did not
 # withdraw anything.
 #
-# external-dns.alpha.kubernetes.io/controller: none is KEPT as a second,
+# external-dns.kubernetes.io/controller: none is KEPT as a second,
 # independent layer (#3466). It is no longer the primary control, but it costs
 # nothing and it holds even if someone copies this file and pastes the opt-in
 # label in by mistake. Two independent mechanisms must both fail before this
 # hostname leaks to public DNS. `none` is the only per-object opt-out that
-# external-dns v0.21.0 actually reads — the `.../exclude` annotation does NOT
-# exist in that version and is silently ignored.
+# external-dns actually reads — the `.../exclude` annotation does NOT exist
+# and is silently ignored.
 # =============================================================================
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -51,13 +51,9 @@ metadata:
     # and the parentRefs sectionName must agree; the lint enforces it.
     exposure.home-ops/tier: "3"
   annotations:
-    # Expand half of an expand-then-contract migration (#3783, step 1b).
-    # Step 2 sets --annotation-prefix=external-dns.kubernetes.io/ on
-    # external-dns, and step 3 removes the alpha annotation below. Not a DNS
-    # risk either way: this route also carries dns.home-ops/public: "false",
-    # and the label filter already excludes it, so this annotation is
-    # defence in depth only (see the block comment above).
-    external-dns.alpha.kubernetes.io/controller: none
+    # Contract half of an expand-then-contract migration (#3783, step 3).
+    # The alpha annotation is dead now that --annotation-prefix has flipped;
+    # this is defence in depth only (see the block comment above).
     external-dns.kubernetes.io/controller: none
 spec:
   hostnames:
