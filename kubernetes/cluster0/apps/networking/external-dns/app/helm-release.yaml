@@ -65,6 +65,27 @@ spec:
     # PUBLIC DNS even on the LAN, so withdrawal must be paired with internal
     # resolution for that hostname. See AGENTS.md.
     labelFilter: dns.home-ops/public=true
+    # The annotation prefix is PINNED, and it differs from the default of the
+    # running image (#3783). external-dns v0.21.0 defaults to
+    # external-dns.alpha.kubernetes.io/. v0.22.0, which arrives with chart
+    # 1.22.0, defaults to this value and reads no alpha key at all. Pinning it
+    # makes the chart bump change no annotation behaviour. Keep this value at
+    # 1.22.0: it then equals the upstream default and costs nothing.
+    #
+    # --annotation-prefix takes ONE value, and external-dns reads no other
+    # prefix. So every annotated object must ALREADY carry a key under this
+    # prefix. A new prefix set in the same commit that adds its keys is the
+    # #3522 shape: the controller acts on a partial view and withdraws records.
+    #
+    # This prefix rebuilds EVERY annotation key, not the record-shaping keys
+    # alone. /target, /hostname and /controller all move together, so an
+    # object that keeps only an alpha /controller silently stops being read.
+    #
+    # Objects that carry a key under this prefix today: Gateway
+    # networking/traefik-gateway (/target and /hostname) and HTTPRoute
+    # monitoring/prometheus-ts-web (/controller). Add the key here before you
+    # annotate a new object.
+    annotationPrefix: "external-dns.kubernetes.io/"
     extraArgs:
       # The two --crd-source-* args are RETAINED DELIBERATELY for a future
       # DNSEndpoint (#3581). With zero DNSEndpoint objects in the repo they are
