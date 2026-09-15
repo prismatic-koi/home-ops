@@ -64,11 +64,19 @@ spec:
       kubernetesGateway:
         enabled: true
     gateway:
+      # Expand half of an expand-then-contract migration (#3783). Step 2 sets
+      # --annotation-prefix=external-dns.kubernetes.io/ on external-dns, and
+      # step 3 removes the alpha pair below. That flag takes one value, so no
+      # mode reads both prefixes. Both prefixes must already be on the Gateway
+      # when the flag flips, or external-dns reads no target annotation and
+      # rewrites the target of every record it owns.
       annotations:
         external-dns.alpha.kubernetes.io/target: &hostname "ipv4.${SECRET_PUBLIC_DOMAIN}"
+        external-dns.kubernetes.io/target: *hostname
       infrastructure:
         annotations:
             external-dns.alpha.kubernetes.io/hostname: *hostname
+            external-dns.kubernetes.io/hostname: *hostname
       listeners:
         web:
           port: 80
