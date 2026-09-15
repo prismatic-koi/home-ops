@@ -51,7 +51,14 @@ metadata:
     # and the parentRefs sectionName must agree; the lint enforces it.
     exposure.home-ops/tier: "3"
   annotations:
+    # Expand half of an expand-then-contract migration (#3783, step 1b).
+    # Step 2 sets --annotation-prefix=external-dns.kubernetes.io/ on
+    # external-dns, and step 3 removes the alpha annotation below. Not a DNS
+    # risk either way: this route also carries dns.home-ops/public: "false",
+    # and the label filter already excludes it, so this annotation is
+    # defence in depth only (see the block comment above).
     external-dns.alpha.kubernetes.io/controller: none
+    external-dns.kubernetes.io/controller: none
 spec:
   hostnames:
     - prometheus.ts.${SECRET_PUBLIC_DOMAIN}
