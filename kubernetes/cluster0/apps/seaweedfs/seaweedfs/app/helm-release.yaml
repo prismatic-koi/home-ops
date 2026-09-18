@@ -95,3 +95,15 @@ spec:
       # on seaweedfs-s3-config secret rotation.
       podAnnotations:
         reloader.stakater.com/auto: "true"
+      # Pre-create the "loki" bucket (#3798). SeaweedFS makes a bucket on the
+      # first PUT, but Loki LISTs the bucket during startup before it writes,
+      # hits 404 NoSuchBucket, and never becomes Ready — so it never issues
+      # the PUT that would create the bucket. This chart hook breaks that
+      # deadlock with no extra image and no S3 CLI: the chart renders a
+      # post-install/post-upgrade Job on the `chrislusf/seaweedfs` image
+      # (the same image master/volume/filer/s3 already run) that calls
+      # `weed shell s3.bucket.create`. It lists buckets first and skips an
+      # existing one, so a restart or reschedule never crash-loops. This
+      # replaces the old S3-CLI initContainer on the Loki StatefulSet (#3798).
+      createBuckets:
+        - name: loki
