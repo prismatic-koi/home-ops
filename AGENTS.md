@@ -329,6 +329,21 @@ The two checks were consolidated into one script and one workflow (#3601)
 because both read the same rendered external-dns objects, and a second
 full-tree `flate` render on every PR costs real minutes.
 
+### `ipv4` is hand-managed, not generated (#3787)
+
+`ipv4.${SECRET_PUBLIC_DOMAIN}` is the apex A record that every other public
+hostname CNAMEs to, via the `external-dns.kubernetes.io/target` annotation on
+the traefik Gateway. It is maintained by hand in Cloudflare, not by
+external-dns:
+
+| Reason | Detail |
+|---|---|
+| No source reads it | `service` is deliberately not in the external-dns `sources:` list (`ingress`, `crd`, `gateway-httproute`). external-dns never lists Service objects, so an annotation on `svc/traefik` is unreadable regardless of what the traefik chart propagates. |
+| The cluster cannot generate the value | The record must point at the public WAN address. `svc/traefik` carries only the private LAN address `${TRAEFIK_IP}`. A generated record would resolve the whole public estate to an unroutable RFC1918 address. |
+
+A `gateway.infrastructure.annotations` block once tried to reach `svc/traefik`
+with this hostname; it was inert for the reasons above and was removed.
+
 #### Rendering `flate` output locally
 
 CI renders with `flate` 0.6.5 (#3696, #3697). Use `scripts/render.sh` to get

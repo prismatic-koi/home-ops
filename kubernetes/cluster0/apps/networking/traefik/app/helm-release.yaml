@@ -67,11 +67,13 @@ spec:
       # Contract half of an expand-then-contract migration (#3783, step 3).
       # --annotation-prefix=external-dns.kubernetes.io/ has already flipped
       # (step 2); the alpha-prefix pair is dead and is removed here.
+      #
+      # ipv4.${SECRET_PUBLIC_DOMAIN} is hand-managed in Cloudflare, not by
+      # external-dns (#3787). The cluster cannot know its own WAN address,
+      # and svc/traefik holds only the private LAN address ${TRAEFIK_IP}, so
+      # no Service-side automation can generate this record.
       annotations:
-        external-dns.kubernetes.io/target: &hostname "ipv4.${SECRET_PUBLIC_DOMAIN}"
-      infrastructure:
-        annotations:
-            external-dns.kubernetes.io/hostname: *hostname
+        external-dns.kubernetes.io/target: "ipv4.${SECRET_PUBLIC_DOMAIN}"
       listeners:
         web:
           port: 80
