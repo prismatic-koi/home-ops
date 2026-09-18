@@ -146,40 +146,16 @@ spec:
       extraEnvFrom:
         - secretRef:
             name: loki-s3-credentials
-      # Hotfix (#3347 Phase 1 follow-up): the "loki" S3 bucket does not
-      # exist in SeaweedFS. Loki's startup/readiness GETs/lists the bucket
-      # before it ever writes, so it hits 404 NoSuchBucket and never becomes
-      # Ready -- which means it never issues the PUT that would otherwise
-      # let SeaweedFS auto-create the bucket. This initContainer breaks that
-      # deadlock by idempotently creating the bucket first. `mc mb
-      # --ignore-existing` is a no-op when the bucket already exists, so
-      # restarts/reschedules never crash-loop on it. Reuses the existing
-      # loki-s3-credentials secret -- no new credentials introduced.
-      initContainers:
-        - name: bootstrap-s3-bucket
-          # MinIO deleted their Docker Hub repositories, so the short Hub form
-          # 404s. Pin stays on quay.io -- do not switch it back.
-          image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z@sha256:993e8c454a7ec632923f7e3e61adf1d473261da6354cefd641aedd33a2cfe112
-          command:
-            - sh
-            - -c
-            - |
-              set -eu
-              mc alias set seaweedfs "$MC_HOST_URL" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
-              mc mb --ignore-existing seaweedfs/loki
-          env:
-            - name: MC_HOST_URL
-              value: http://seaweedfs-s3.seaweedfs.svc:8333
-            - name: HOME
-              value: /tmp
-          envFrom:
-            - secretRef:
-                name: loki-s3-credentials
-          # Mount the chart's built-in tmp emptyDir so mc can write config to /tmp/.mc
-          # (chart v6.55.0 defines tmp as an emptyDir in the StatefulSet spec.volumes)
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
+      # The "loki" S3 bucket that Loki LISTs during startup is created by the
+      # SeaweedFS chart, not here (#3798). SeaweedFS makes a bucket on the
+      # first PUT, but Loki LISTs it before it writes, hits 404 NoSuchBucket,
+      # and never becomes Ready -- so it never issues the PUT that would
+      # create the bucket. The old fix was an S3-CLI initContainer here; the
+      # vendor deleted their Docker Hub repositories and broke Loki startup,
+      # so the bucket is now declared through the seaweedfs HelmRelease
+      # `s3.createBuckets` value, which runs a chart hook on the seaweedfs
+      # image already in use. loki dependsOn cluster-apps-seaweedfs (ks.yaml),
+      # so the bucket exists before this StatefulSet reconciles.
       persistence:
         enabled: true
         size: 10Gi
