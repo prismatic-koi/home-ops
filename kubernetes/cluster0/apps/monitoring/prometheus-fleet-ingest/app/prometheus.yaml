@@ -20,8 +20,9 @@
 #     namespace cannot share the default `prometheus-operated` governing
 #     service.
 #   * Distinct ServiceAccount (`fleet-ingest`) — see rbac.yaml.
-#   * Nil scrape-target selectors: this instance MUST NOT scrape. It exists
-#     purely as a remote_write sink.
+#   * This instance MUST NOT scrape. It carries one scrape selector that
+#     matches nothing (see "Scrape targets" below) purely to flip the
+#     operator into managed-config mode. It does not scrape anything.
 #
 # Reversibility
 # -------------
@@ -33,17 +34,21 @@
 #
 # Growth bound
 # ------------
-# `retention: 7d` + `retentionSize: 4GB` cap on-disk data (whichever hits
+# `retention: 90d` + `retentionSize: 8GB` cap on-disk data (whichever hits
 # first). PVC is 10Gi giving headroom for WAL + head chunks; the size cap
 # stops runaway growth if push volume balloons. TSDB block compaction keeps
-# 7d of typical fleet metrics well below the retentionSize cap.
+# the retained fleet metrics within the retentionSize cap.
 #
 # Storage class choice
 # --------------------
 # `local-path` mirrors the HA pair's storage class. Trade-off:
-#   * Node failure loses the pod's data until reschedule (acceptable —
-#     7d retention on exploratory data; roaming devices continue pushing
-#     to the new pod).
+#   * Node failure loses the pod's data until reschedule. This is a bigger
+#     cost at 90d retention than it was at the old 7d value — up to 90
+#     days of local-path fleet data can be lost, not just 7. Still
+#     accepted for now because this is exploratory data (see
+#     "Reversibility" above) and roaming devices continue pushing to the
+#     new pod once it reschedules. Revisit if the exploration proves
+#     lasting — see "Migration to longhorn (or Mimir)" below.
 #   * Longhorn would give replicated durability but adds operational load
 #     for an exploratory instance the design says "may be retired".
 # Migration to longhorn (or Mimir) is future work if the exploration
@@ -88,17 +93,33 @@ spec:
   enableAdminAPI: false
 
   # =========================================================================
-  # Scrape targets: NONE.
+  # Scrape targets: NONE, but the operator must still MANAGE this config.
   #
-  # Nil selectors (omit the field entirely) cause the operator to select no
-  # resources of that type. Contrast the kube-prometheus-stack chart's
-  # `xxxSelectorNilUsesHelmValues: false` which forces `{}` (select all).
-  # This instance is push-only; setting `{}` here would make it try to
-  # scrape every ServiceMonitor / PodMonitor in the cluster and fight the
-  # HA pair for the same targets. We do NOT want that.
+  # With all scrape-target selectors nil, prometheus-operator v0.94.1 does
+  # not write a config secret for this Prometheus at all ("unmanaged-config"
+  # mode) -- it logs `the operator doesn't manage the Prometheus
+  # configuration secret because neither serviceMonitorSelector nor
+  # podMonitorSelector, nor probeSelector, nor scrapeConfigSelector is
+  # specified` and leaves `storage.tsdb.retention.*` out of the rendered
+  # config, so Prometheus falls back to its own defaults (15d / 0B) and
+  # ignores `spec.retention` / `spec.retentionSize` below entirely (#3855).
+  #
+  # `scrapeConfigSelector` below is a matchLabels selector that no object in
+  # the cluster carries. That flips the operator into managed-config mode
+  # (any one non-nil selector is enough) without adding a single scrape
+  # target -- `scrapeConfigNamespaceSelector` is left nil, so the match is
+  # scoped to this namespace only. Do NOT change this to `{}`: an empty
+  # selector selects every object of that type, which would make this
+  # instance scrape the whole cluster and fight the HA pair for the same
+  # targets.
   # =========================================================================
-  # serviceMonitorSelector, podMonitorSelector, probeSelector,
-  # scrapeConfigSelector: intentionally not set.
+  scrapeConfigSelector:
+    matchLabels:
+      fleet-ingest.home-ops/managed-config-anchor: "true"
+  # serviceMonitorSelector, podMonitorSelector, probeSelector:
+  # intentionally left nil -- one non-nil selector is enough to flip the
+  # operator into managed-config mode; these stay nil so no ServiceMonitor
+  # or PodMonitor is ever selected.
 
   # No alerting: the ingest is a data sink; alert evaluation happens on the
   # HA pair (which owns all the PrometheusRule resources).
@@ -108,8 +129,8 @@ spec:
   # Storage — real PVC, not emptyDir. See file header for storage class
   # rationale and growth bound.
   # =========================================================================
-  retention: 7d
-  retentionSize: 4GB
+  retention: 90d
+  retentionSize: 8GB
   walCompression: true
   storage:
     volumeClaimTemplate:
