@@ -42,9 +42,13 @@
 # Storage class choice
 # --------------------
 # `local-path` mirrors the HA pair's storage class. Trade-off:
-#   * Node failure loses the pod's data until reschedule (acceptable —
-#     7d retention on exploratory data; roaming devices continue pushing
-#     to the new pod).
+#   * Node failure loses the pod's data until reschedule. This is a bigger
+#     cost at 90d retention than it was at the old 7d value — up to 90
+#     days of local-path fleet data can be lost, not just 7. Still
+#     accepted for now because this is exploratory data (see
+#     "Reversibility" above) and roaming devices continue pushing to the
+#     new pod once it reschedules. Revisit if the exploration proves
+#     lasting — see "Migration to longhorn (or Mimir)" below.
 #   * Longhorn would give replicated durability but adds operational load
 #     for an exploratory instance the design says "may be retired".
 # Migration to longhorn (or Mimir) is future work if the exploration
