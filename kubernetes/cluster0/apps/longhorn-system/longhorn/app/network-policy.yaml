@@ -320,6 +320,35 @@ spec:
         - ipBlock:
             cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
 ---
+# K8s API egress — longhorn-global-manager (Deployment added in chart 1.13.0).
+# Selects no pod on chart 1.12.1; pre-staged so the 1.13.x upgrade does not
+# repeat the #3106 / #3122 outage. Same rules as longhorn-manager-allow-k8s-api.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-global-manager-allow-k8s-api
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-global-manager
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.43.0.0/16  # Service CIDR (kubernetes.default.svc)
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.87.42.2/32  # control plane node (defence-in-depth)
+---
 # -----------------------------------------------------------------------------
 # K8s API egress — longhorn-csi-plugin (DaemonSet).
 #

@@ -163,3 +163,19 @@ spec:
   egress:
     - toEntities:
         - kube-apiserver
+---
+# longhorn-global-manager (chart 1.13.0+) — see the matching NetworkPolicy
+# `longhorn-global-manager-allow-k8s-api` in ./network-policy.yaml. Selects no
+# pod on chart 1.12.1.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-global-manager-allow-kube-apiserver
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-global-manager
+  egress:
+    - toEntities:
+        - kube-apiserver
