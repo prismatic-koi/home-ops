@@ -1,0 +1,23 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cluster-apps-mqtt-recorder
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: cluster-apps-mosquitto
+  path: ./kubernetes/cluster0/apps/home/mqtt-recorder/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: home-ops-cluster0
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: mqtt-recorder
+      namespace: home
+  interval: 30m
+  retryInterval: 1m
+  timeout: 3m
