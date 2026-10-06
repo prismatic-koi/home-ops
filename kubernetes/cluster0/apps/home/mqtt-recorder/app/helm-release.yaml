@@ -56,7 +56,8 @@ spec:
                 exec mosquitto_sub -h mosquitto.home.svc.cluster.local -p 1883 -v \
                   -t 'zigbee2mqtt/+/set' \
                   -t 'zigbee2mqtt/bridge/#' \
-                  -T 'zigbee2mqtt/bridge/logging'
+                  -T 'zigbee2mqtt/bridge/logging' \
+                  -T 'zigbee2mqtt/bridge/response/backup'
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
