@@ -31,6 +31,7 @@ spec:
             runAsNonRoot: true
             runAsUser: 1883
             runAsGroup: 1883
+            seccompProfile: { type: RuntimeDefault }
         containers:
           app:
             image:
@@ -57,7 +58,7 @@ spec:
                   -t 'zigbee2mqtt/+/set' \
                   -t 'zigbee2mqtt/bridge/#' \
                   -T 'zigbee2mqtt/bridge/logging' \
-                  -T 'zigbee2mqtt/bridge/response/backup'
+                  -T 'zigbee2mqtt/bridge/response/backup'  # The backup zip holds the Zigbee network key.
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
