@@ -27,6 +27,10 @@ spec:
     controllers:
       main:
         pod:
+          # mosquitto reads passwd only at start, and a subPath mount does not
+          # update. A mosquitto-passwd change needs a pod restart.
+          annotations:
+            reloader.stakater.com/auto: "true"
           securityContext:
             fsGroup: 1883
             fsGroupChangePolicy: OnRootMismatch
@@ -110,6 +114,21 @@ spec:
                   podSelector:
                     matchLabels:
                       app.kubernetes.io/instance: zigbee2mqtt
+              ports:
+                - port: 1883
+                  protocol: TCP
+      allow-mqtt-recorder-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: home
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: mqtt-recorder
               ports:
                 - port: 1883
                   protocol: TCP
