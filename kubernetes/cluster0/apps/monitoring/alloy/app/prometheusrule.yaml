@@ -1,0 +1,23 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zigbee2mqtt-failures
+  namespace: monitoring
+  annotations:
+    # Keep the Prometheus template variables in the annotations literal.
+    kustomize.toolkit.fluxcd.io/substitute: disabled
+spec:
+  groups:
+    - name: zigbee2mqtt-failures
+      rules:
+        # #3885: the counter comes from the Alloy log pipeline. Only the Alloy
+        # pod on the zigbee2mqtt node increments it, so sum over instance and pod.
+        - alert: Zigbee2mqttCoordinatorRefusingCommands
+          expr: sum(increase(loki_process_custom_zigbee2mqtt_command_failures_total{reason="send"}[5m])) > 5
+          labels:
+            severity: warning
+          annotations:
+            summary: "Zigbee coordinator is refusing commands"
+            description: "zigbee2mqtt logged {{ $value }} failures with reason=send (failed to send ZCL request) in 5 minutes. The coordinator refused or dropped these commands before it sent them. Look for automations that send commands in the same second."
