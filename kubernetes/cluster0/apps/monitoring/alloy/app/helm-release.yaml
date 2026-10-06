@@ -283,6 +283,56 @@ spec:
               replace    = "debug"
             }
 
+            // zigbee2mqtt failed-command counter (#3885). Only the zigbee2mqtt
+            // stream enters this block, and only failed Publish lines pass the
+            // line filter, so no other entry changes. stage.metrics reads its
+            // labels from the entry label set, so stage.labels promotes device
+            // and reason first. The final stage.label_keep below drops both
+            // from the Loki stream labels.
+            stage.match {
+              selector = "{app=\"zigbee2mqtt\"} |~ \"Publish .* failed\""
+
+              stage.regex {
+                expression = "Publish '[^']*' '[^']*' to '(?P<device>[^']*)' failed"
+              }
+
+              // Seed the reason, then overwrite it for the two known causes.
+              stage.template {
+                source   = "reason"
+                template = "other"
+              }
+              stage.regex {
+                expression = "(?P<reason>failed to send ZCL request|No ZCL response received)"
+              }
+              stage.replace {
+                source     = "reason"
+                expression = "(failed to send ZCL request)"
+                replace    = "send"
+              }
+              stage.replace {
+                source     = "reason"
+                expression = "(No ZCL response received)"
+                replace    = "timeout"
+              }
+
+              stage.labels {
+                values = {
+                  device = "",
+                  reason = "",
+                }
+              }
+
+              stage.metrics {
+                metric.counter {
+                  name              = "zigbee2mqtt_command_failures_total"
+                  description       = "Failed zigbee2mqtt Publish commands, by device and reason."
+                  source            = "device"
+                  action            = "inc"
+                  max_idle_duration = "24h"
+                }
+              }
+            }
+
             // Promote extracted level -> stream label. namespace/app/container
             // already arrive as stream labels via discovery.relabel and are
             // preserved by stage.label_keep below; running them through
