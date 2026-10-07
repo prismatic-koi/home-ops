@@ -99,6 +99,24 @@
       "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
       "automerge": false
     },
+    // Never auto-merge eclipse-mosquitto (any update type). Both mosquitto and
+    // mqtt-recorder use this image. mosquitto 2.1 patch releases add new
+    // refusals: 2.1.1 and later refuse a symlinked password or ACL file. A
+    // future release can refuse a file that the broker does not own (#3893).
+    // If the broker refuses passwd or acl, no client can log in, and Home
+    // Assistant loses every Zigbee device. Auto-merge lands an update at any
+    // time of day, with no person to run the post-deploy test.
+    //
+    // Owner decision (2026-10-07): this rule stays after #3893 is done.
+    // Revisit it when an automated check proves, after each update, that every
+    // MQTT user can log in and that the ACL works (see #3898). Then digest,
+    // patch and minor updates can auto-merge. Major updates stay manual.
+    {
+      "description": "Never auto-merge eclipse-mosquitto (a release can refuse passwd or acl and lock out every MQTT client, #3903)",
+      "matchPackageNames": ["eclipse-mosquitto"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
+      "automerge": false
+    },
     // Disable automerge for databases
     {
       "description": "Disable auto-merge for databases",
