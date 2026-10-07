@@ -167,6 +167,9 @@ spec:
               - path: /mosquitto/secret/passwd
                 subPath: passwd
                 readOnly: true
+      # Every user in mosquitto-passwd needs a block in mosquitto-acl. mosquitto
+      # denies all topics to a user that the ACL does not list, and it logs no
+      # denial at the default log level.
       acl:
         type: secret
         name: mosquitto-acl
