@@ -54,10 +54,12 @@ spec:
                 -u $MQTT_USERNAME
                 -P $MQTT_PASSWORD
                 EOF
+                # bridge/definitions is about 352 KB. Loki drops lines larger than 256 KB.
                 exec mosquitto_sub -h mosquitto.home.svc.cluster.local -p 1883 -v \
                   -t 'zigbee2mqtt/+/set' \
                   -t 'zigbee2mqtt/bridge/#' \
                   -T 'zigbee2mqtt/bridge/logging' \
+                  -T 'zigbee2mqtt/bridge/definitions' \
                   -T 'zigbee2mqtt/bridge/response/backup'  # The backup zip holds the Zigbee network key.
             securityContext:
               allowPrivilegeEscalation: false
