@@ -196,6 +196,35 @@ spec:
           // back to reading from e.Labels when the extracted key is missing
           // (see stages/structured_metadata.go), which is why pod/node work.
           loki.process "normalise" {
+            // Drop a line that is more than 45 minutes old when Alloy reads it
+            // (#3892). Each hour, loki.source.kubernetes re-opens the log
+            // stream of each container and sends the last line it read again.
+            // If that line is more than 1h behind the newest line of its Loki
+            // stream (max_chunk_age / 2), or older than
+            // reject_old_samples_max_age, Loki rejects it. Loki stores the
+            // other lines of the push but returns HTTP 400, and loki.write
+            // then counts every entry of the batch as dropped (reason
+            // ingester_error).
+            //
+            // In steady state the tailer follows the stream and reads each
+            // line when the container writes it, so only a re-sent line is
+            // this old.
+            // 45m is the 1h Loki window minus about 10m, the longest time
+            // that loki.write retries one batch with its default settings.
+            // As a result, a line that passes this stage is still inside the
+            // Loki window when the push arrives.
+            //
+            // Cost: after an Alloy or Loki outage of more than 45m, Alloy
+            // drops the part of the backlog that is older than 45m.
+            //
+            // Keep this stage first. If it moves below the zigbee2mqtt
+            // stage.match, a re-sent failure line older than 45m increments
+            // that counter again.
+            stage.drop {
+              older_than          = "45m"
+              drop_counter_reason = "older_than_45m"
+            }
+
             // Pre-seed extracted[level] = "unknown" for every entry. The
             // regex/klog stages below will overwrite this if they extract
             // a level from the log line; if none match, the seed survives

@@ -62,18 +62,18 @@ spec:
             summary: "Loki is discarding ingested log samples (limit hit)"
             description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). Common causes by reason: `rate_limited` / `per_stream_rate_limit` -> a stream or tenant hit the ingestion_rate_mb / per_stream_rate_limit guardrails in limits_config; `stream_limit` / `per_stream_series_limit` -> too many distinct label combinations for a stream/tenant, check discovered stream label cardinality in Loki first (see #3395 for prior art); `line_too_long` / `max_line_size` -> a source is emitting abnormally large log lines. Investigate the source pod/namespace before increasing limits."
 
-        # #3401: age-based rejects (greater_than_max_sample_age,
-        # too_far_behind, out_of_order) are benign background noise --
-        # Alloy re-shipping a handful of genuinely old log lines from
-        # longhorn-system after a restart (not stream collapse; labels are
-        # correct, see #3401 investigation). A `> 0` floor on
-        # loki_discarded_samples_total flaps on any trickle, however small,
-        # because the 15m rate window keeps re-arming. Alert on the RATIO of
-        # age-based discards to lines received instead, so a few old lines
-        # against a healthy ingest stream stays silent, and only page when
-        # age-based discards become a material fraction (>1%) of ingest --
-        # which would indicate a genuine, large-scale timestamp/ordering
-        # problem rather than a few stale re-shipped lines.
+        # Age-based rejects (greater_than_max_sample_age, too_far_behind,
+        # out_of_order). The in-cluster Alloy drops a line that is more than
+        # 45m old when it reads it (#3892). So the hourly
+        # loki.source.kubernetes re-send and the re-read after an Alloy
+        # restart do not reach Loki, and a steady trickle of these rejects is
+        # not expected. A short burst can still occur, for example after an
+        # outage or from a client outside the cluster. A `> 0` floor on
+        # loki_discarded_samples_total flaps on any small burst, because the
+        # 15m rate window keeps re-arming. Alert on the RATIO of age-based
+        # discards to lines received instead. The alert fires only when
+        # age-based discards are more than 1% of ingest, which indicates a
+        # large-scale timestamp/ordering problem.
         # clamp_min(..., 1) guards the denominator so the ratio is 0 (not
         # firing, not NaN) when ingest is idle, instead of dividing by ~0
         # and spuriously firing on noise.
@@ -89,6 +89,6 @@ spec:
             severity: warning
           annotations:
             summary: "Loki is discarding a material fraction of ingested lines as too old/out-of-order"
-            description: "Loki has discarded more than 1% of received lines over the last 15 minutes due to age/ordering (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}), current ratio {{ $value | humanizePercentage }}. `too_far_behind` / `greater_than_max_sample_age` / `out_of_order` at this scale suggest stream collapse from over-aggressive label rewriting (e.g. a bad Alloy pipeline stamping the same value on many pods) producing out-of-order timestamps that trip the ingester's window -- do NOT just raise limits; check discovered stream label cardinality in Loki first (see #3395 for prior art). A low, steady trickle of old-log replay (e.g. from Alloy re-shipping stale longhorn-system logs after a restart, see #3401) is expected and should not reach this ratio."
+            description: "Loki has discarded more than 1% of received lines over the last 15 minutes due to age/ordering (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}), current ratio {{ $value | humanizePercentage }}. `too_far_behind` / `greater_than_max_sample_age` / `out_of_order` at this scale suggest stream collapse from over-aggressive label rewriting (e.g. a bad Alloy pipeline stamping the same value on many pods) producing out-of-order timestamps that trip the ingester's window -- do NOT just raise limits; check discovered stream label cardinality in Loki first (see #3395 for prior art). The in-cluster Alloy drops lines older than 45m before it sends them (#3892), so a steady trickle of age-based discards is not expected either. If discards continue below this ratio, read the Loki write-failure logs (`write operation failed`) to find the stream and the client that send old lines."
 
 
