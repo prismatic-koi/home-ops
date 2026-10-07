@@ -175,6 +175,16 @@ spec:
           # Every user in mosquitto-passwd needs a block in this ACL. mosquitto
           # denies all topics to a user that the ACL does not list, and it logs
           # no denial at the default log level.
+          #
+          # A wrong ACL fails with no log line (#3898). After each ACL change,
+          # do the active test:
+          #   1. Send a command to a zigbee2mqtt device from Home Assistant.
+          #      Make sure that the device changes state. Make sure that
+          #      `{app="mqtt-recorder"} |= "/set "` in Loki shows the command.
+          #   2. Run the recorder test publish below. Make sure that it prints
+          #      `Not authorized`. The command reads the credentials from the
+          #      options file that the recorder writes at start.
+          #      kubectl -n home exec deploy/mqtt-recorder -- sh -c 'umask 077 && cp "$XDG_CONFIG_HOME/mosquitto_sub" "$XDG_CONFIG_HOME/mosquitto_pub" && mosquitto_pub -h mosquitto.home.svc.cluster.local -V mqttv5 -q 1 -t "zigbee2mqtt/acl-test/set" -m "{\"state\":\"ON\"}"'
           acl: |
             user homeassistant
             topic readwrite #
