@@ -149,7 +149,9 @@ gh issue edit <number>
   (cert-manager, trust-manager, cloudnative-pg, external-dns,
   kube-prometheus-stack, longhorn, plus the Tier 1 list) on major/minor;
   databases (postgres*, valkey, redis) on major/minor; home-assistant
-  (calendar versioning); seaweedfs (phantom appVersions upstream); and all
+  (calendar versioning); seaweedfs (phantom appVersions upstream);
+  mosquitto (`eclipse-mosquitto`) on any update type (a release can refuse
+  the passwd or acl file and lock out every MQTT client, #3903); and all
   major updates. Treat `.github/renovate/automerge.json5` as the source of
   truth if this list drifts.
 - **Schedule**: Runs on the schedule configured by Renovate (Pacific/Auckland
