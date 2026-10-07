@@ -27,13 +27,38 @@ spec:
     controllers:
       main:
         pod:
-          # mosquitto reads passwd only at start, and a subPath mount does not
-          # update. A mosquitto-passwd change needs a pod restart.
+          # The copy-auth init container copies passwd only at pod start. A
+          # mosquitto-passwd change needs a pod restart.
           annotations:
             reloader.stakater.com/auto: "true"
           securityContext:
             fsGroup: 1883
             fsGroupChangePolicy: OnRootMismatch
+        initContainers:
+          # mosquitto warns when it does not own passwd or acl. A Secret or
+          # ConfigMap volume always sets owner root on its files. The copies
+          # get owner 1883, the uid of this container, so no chown is necessary.
+          # CAUTION: Do not replace the copy with a symlink. mosquitto 2.1.1
+          # and later refuse a symlinked passwd or acl file.
+          copy-auth:
+            image:
+              repository: eclipse-mosquitto
+              tag: 2.1.2-alpine@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                set -eu
+                install -m 0400 /src/passwd /mosquitto/auth/passwd
+                install -m 0400 /src/acl /mosquitto/auth/acl
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1883
+              runAsGroup: 1883
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+              seccompProfile: { type: RuntimeDefault }
         containers:
           app:
             image:
@@ -143,8 +168,8 @@ spec:
           mosquitto.conf: |
             listener 1883
             allow_anonymous false
-            password_file /mosquitto/secret/passwd
-            acl_file /mosquitto/config/acl
+            password_file /mosquitto/auth/passwd
+            acl_file /mosquitto/auth/acl
             persistence false
             connection_messages false
           # Every user in mosquitto-passwd needs a block in this ACL. mosquitto
@@ -170,14 +195,22 @@ spec:
             app:
               - path: /mosquitto/config/mosquitto.conf
                 subPath: mosquitto.conf
+      # Keep defaultMode 0440 on passwd and acl. copy-auth reads them through
+      # group 1883 from fsGroup, and mode 0400 locks it out.
+      # CAUTION: Generate each passwd line with the eclipse-mosquitto image of
+      # the running version. Before you commit, run the salt-length check on
+      # the decrypted file: the base64 salt of each $6$ or $7$ line must
+      # decode to 12 or 64 bytes. mosquitto 2.1 does not start if one line
+      # does not decode, and Reloader restarts the broker after each change
+      # to mosquitto-passwd. So one bad line stops every MQTT client.
       passwd:
         type: secret
         name: mosquitto-passwd
         defaultMode: 0440
         advancedMounts:
           main:
-            app:
-              - path: /mosquitto/secret/passwd
+            copy-auth:
+              - path: /src/passwd
                 subPath: passwd
                 readOnly: true
       acl:
@@ -186,7 +219,19 @@ spec:
         defaultMode: 0440
         advancedMounts:
           main:
-            app:
-              - path: /mosquitto/config/acl
+            copy-auth:
+              - path: /src/acl
                 subPath: acl
+                readOnly: true
+      # Memory medium: the passwd copy never touches the node disk.
+      auth:
+        type: emptyDir
+        medium: Memory
+        sizeLimit: 1Mi
+        advancedMounts:
+          main:
+            copy-auth:
+              - path: /mosquitto/auth
+            app:
+              - path: /mosquitto/auth
                 readOnly: true
