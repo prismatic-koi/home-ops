@@ -27,8 +27,9 @@ spec:
     controllers:
       main:
         pod:
-          # mosquitto reads passwd only at start, and a subPath mount does not
-          # update. A mosquitto-passwd change needs a pod restart.
+          # mosquitto reads passwd and acl only at start, and a subPath mount
+          # does not update. A change to mosquitto-passwd or mosquitto-acl
+          # needs a pod restart.
           annotations:
             reloader.stakater.com/auto: "true"
           securityContext:
@@ -144,6 +145,7 @@ spec:
             listener 1883
             allow_anonymous false
             password_file /mosquitto/secret/passwd
+            acl_file /mosquitto/secret/acl
             persistence false
             connection_messages false
     persistence:
@@ -164,4 +166,14 @@ spec:
             app:
               - path: /mosquitto/secret/passwd
                 subPath: passwd
+                readOnly: true
+      acl:
+        type: secret
+        name: mosquitto-acl
+        defaultMode: 0440
+        advancedMounts:
+          main:
+            app:
+              - path: /mosquitto/secret/acl
+                subPath: acl
                 readOnly: true
