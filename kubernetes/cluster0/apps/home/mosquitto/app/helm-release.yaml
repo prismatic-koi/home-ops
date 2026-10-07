@@ -27,9 +27,8 @@ spec:
     controllers:
       main:
         pod:
-          # mosquitto reads passwd and acl only at start, and a subPath mount
-          # does not update. A change to mosquitto-passwd or mosquitto-acl
-          # needs a pod restart.
+          # mosquitto reads passwd only at start, and a subPath mount does not
+          # update. A mosquitto-passwd change needs a pod restart.
           annotations:
             reloader.stakater.com/auto: "true"
           securityContext:
@@ -145,9 +144,23 @@ spec:
             listener 1883
             allow_anonymous false
             password_file /mosquitto/secret/passwd
-            acl_file /mosquitto/secret/acl
+            acl_file /mosquitto/config/acl
             persistence false
             connection_messages false
+          # Every user in mosquitto-passwd needs a block in this ACL. mosquitto
+          # denies all topics to a user that the ACL does not list, and it logs
+          # no denial at the default log level.
+          acl: |
+            user homeassistant
+            topic readwrite #
+
+            user zigbee2mqtt
+            topic readwrite #
+
+            user mqtt-recorder
+            topic read zigbee2mqtt/+/set
+            topic read zigbee2mqtt/bridge/#
+            topic deny zigbee2mqtt/bridge/response/backup
     persistence:
       config:
         type: configMap
@@ -167,16 +180,13 @@ spec:
               - path: /mosquitto/secret/passwd
                 subPath: passwd
                 readOnly: true
-      # Every user in mosquitto-passwd needs a block in mosquitto-acl. mosquitto
-      # denies all topics to a user that the ACL does not list, and it logs no
-      # denial at the default log level.
       acl:
-        type: secret
-        name: mosquitto-acl
+        type: configMap
+        name: mosquitto
         defaultMode: 0440
         advancedMounts:
           main:
             app:
-              - path: /mosquitto/secret/acl
+              - path: /mosquitto/config/acl
                 subPath: acl
                 readOnly: true
