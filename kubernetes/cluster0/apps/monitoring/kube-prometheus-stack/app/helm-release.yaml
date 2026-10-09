@@ -269,6 +269,57 @@ spec:
     # Required for most kubernetesApps and kubernetesStorage alert rules to function.
     kubeStateMetrics:
       enabled: true
+    # kube-state-metrics subchart values. customResourceState turns Flux
+    # HelmRelease and Kustomization status into gotk_resource_info series (#3929).
+    # The `ready` label holds the status of the Ready condition. It is empty if the
+    # object has no Ready condition yet. The `suspended` label holds spec.suspend.
+    kube-state-metrics:
+      rbac:
+        extraRules:
+          - apiGroups: ["helm.toolkit.fluxcd.io"]
+            resources: ["helmreleases"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+            resources: ["kustomizations"]
+            verbs: ["get", "list", "watch"]
+      customResourceState:
+        enabled: true
+        config:
+          kind: CustomResourceStateMetrics
+          spec:
+            resources:
+              - groupVersionKind:
+                  group: helm.toolkit.fluxcd.io
+                  version: v2
+                  kind: HelmRelease
+                metricNamePrefix: gotk
+                metrics:
+                  - name: resource_info
+                    help: Flux HelmRelease status.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          resource_name: [metadata, name]
+                          resource_namespace: [metadata, namespace]
+                          ready: [status, conditions, "[type=Ready]", status]
+                          suspended: [spec, suspend]
+              - groupVersionKind:
+                  group: kustomize.toolkit.fluxcd.io
+                  version: v1
+                  kind: Kustomization
+                metricNamePrefix: gotk
+                metrics:
+                  - name: resource_info
+                    help: Flux Kustomization status.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          resource_name: [metadata, name]
+                          resource_namespace: [metadata, namespace]
+                          ready: [status, conditions, "[type=Ready]", status]
+                          suspended: [spec, suspend]
     # node-exporter: exposes host-level metrics (CPU, memory, disk, filesystem).
     nodeExporter:
       enabled: true

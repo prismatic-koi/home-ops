@@ -1,0 +1,25 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: flux
+  namespace: monitoring
+spec:
+  groups:
+    - name: flux.status
+      rules:
+        # Source: gotk_resource_info from kube-state-metrics customResourceState
+        # (kube-prometheus-stack helm-release.yaml). A ready label of False,
+        # Unknown, or empty (no Ready condition) all match ready!="True".
+        - alert: FluxObjectNotReady
+          expr: |
+            gotk_resource_info{customresource_kind=~"HelmRelease|Kustomization", ready!="True", suspended!="true"} == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Flux {{ $labels.customresource_kind }} {{ $labels.resource_namespace }}/{{ $labels.resource_name }} is not ready"
+            description: |
+              Flux {{ $labels.customresource_kind }} {{ $labels.resource_namespace }}/{{ $labels.resource_name }}
+              has had a Ready condition of "{{ $labels.ready }}" for 15 minutes.

@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./helm-release.yaml
   - ./httproute.yaml
+  - ./prometheusrule-flux.yaml
   - ./network-policy.yaml
   - ./cilium-network-policy.yaml
 labels:
