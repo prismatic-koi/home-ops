@@ -147,7 +147,10 @@ gh issue edit <number>
   Tier 1 infrastructure (k3s, system-upgrade-controller, rancher/k3s-upgrade,
   cilium, coredns, traefik, flux) on any update type; Tier 2 infrastructure
   (cert-manager, trust-manager, cloudnative-pg, external-dns,
-  kube-prometheus-stack, longhorn, plus the Tier 1 list) on major/minor;
+  longhorn, plus the Tier 1 list) on major/minor;
+  kube-prometheus-stack minor updates auto-merge (#3929), because the
+  `FluxObjectNotReady` alert reports a failed upgrade, but its majors need a
+  human (global majors rule);
   databases (postgres*, valkey, redis) on major/minor; home-assistant
   (calendar versioning); seaweedfs (phantom appVersions upstream);
   mosquitto (`eclipse-mosquitto`) on any update type (a release can refuse
