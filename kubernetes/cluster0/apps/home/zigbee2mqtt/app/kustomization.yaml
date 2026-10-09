@@ -1,10 +1,12 @@
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# secret.sops.yaml has no metadata.namespace. This line puts its Secret in
+# home, the namespace of the pod that reads it.
+namespace: home
 resources:
   - ./helm-release.yaml
-  # - ./configmap.yaml
-  # - ./secret.sops.yaml
+  - ./secret.sops.yaml
   - ./probe.yaml
 labels:
   - pairs:

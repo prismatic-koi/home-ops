@@ -33,9 +33,41 @@ spec:
             image:
               repository: ghcr.io/koenkk/zigbee2mqtt
               tag: 2.14.2@sha256:addbfb08fcef2e4477de1535636118241e10d13e898fbe4d9faba8a4d7396311
+            # zigbee2mqtt writes each ZIGBEE2MQTT_CONFIG_* value into
+            # /data/configuration.yaml at start and at each save. A frontend
+            # change to one of these keys does not persist. Change it here.
+            # Do not set advanced.channel, advanced.pan_id,
+            # advanced.ext_pan_id or advanced.transmit_power by env var. A
+            # wrong channel or PAN ID can make zigbee2mqtt form a new network,
+            # and then every device must pair again.
             env:
               TZ: "${TIMEZONE}"
               ZIGBEE2MQTT_DATA: /data
+              ZIGBEE2MQTT_CONFIG_HOMEASSISTANT_ENABLED: "true"
+              ZIGBEE2MQTT_CONFIG_HOMEASSISTANT_DISCOVERY_TOPIC: homeassistant
+              ZIGBEE2MQTT_CONFIG_HOMEASSISTANT_STATUS_TOPIC: homeassistant/status
+              ZIGBEE2MQTT_CONFIG_ADVANCED_LAST_SEEN: ISO_8601
+              ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_LEVEL: info
+              ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_OUTPUT: '["console"]'
+              ZIGBEE2MQTT_CONFIG_FRONTEND_ENABLED: "true"
+              ZIGBEE2MQTT_CONFIG_FRONTEND_PORT: "8080"
+              ZIGBEE2MQTT_CONFIG_MQTT_BASE_TOPIC: zigbee2mqtt
+              ZIGBEE2MQTT_CONFIG_MQTT_SERVER: mqtt://mosquitto.home.svc.cluster.local:1883
+              ZIGBEE2MQTT_CONFIG_MQTT_USER: zigbee2mqtt
+              ZIGBEE2MQTT_CONFIG_MQTT_INCLUDE_DEVICE_INFORMATION: "true"
+              ZIGBEE2MQTT_CONFIG_MQTT_KEEPALIVE: "60"
+              ZIGBEE2MQTT_CONFIG_MQTT_REJECT_UNAUTHORIZED: "true"
+              ZIGBEE2MQTT_CONFIG_MQTT_VERSION: "4"
+              ZIGBEE2MQTT_CONFIG_SERIAL_PORT: /dev/ttyACM0
+              ZIGBEE2MQTT_CONFIG_SERIAL_ADAPTER: deconz
+              ZIGBEE2MQTT_CONFIG_AVAILABILITY_ENABLED: "true"
+              ZIGBEE2MQTT_CONFIG_AVAILABILITY_ACTIVE_TIMEOUT: "5"
+              ZIGBEE2MQTT_CONFIG_AVAILABILITY_PASSIVE_TIMEOUT: "60"
+            # ZIGBEE2MQTT_CONFIG_ADVANCED_NETWORK_KEY and
+            # ZIGBEE2MQTT_CONFIG_MQTT_PASSWORD come from this Secret.
+            envFrom:
+              - secretRef:
+                  name: zigbee2mqtt-secrets
             securityContext:
               privileged: true
     service:
@@ -158,17 +190,6 @@ spec:
                       app.kubernetes.io/instance: mosquitto
 
     persistence:
-      # config:
-      #   enabled: true
-      #   type: "custom"
-      #   volumeSpec:
-      #     configMap:
-      #       name: zigbee2mqtt-settings
-      #  advancedMounts:
-      #    main:
-      #      main:
-      #        - path: /app/data/configuration.yaml"
-      #          subPath: "configuration.yaml"
       data:
         existingClaim: pvc-zigbee2mqtt
         advancedMounts:
