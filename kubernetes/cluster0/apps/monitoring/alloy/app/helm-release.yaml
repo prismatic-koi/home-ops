@@ -357,7 +357,10 @@ spec:
                   description       = "Failed zigbee2mqtt Publish commands, by device and reason."
                   source            = "device"
                   action            = "inc"
-                  max_idle_duration = "24h"
+                  // Failures are rare. An expired series restarts at 1, and
+                  // Prometheus increase() does not count the first sample of a
+                  // new series. A short idle time hides most single failures.
+                  max_idle_duration = "8760h"
                 }
               }
             }
