@@ -6,6 +6,10 @@ metadata:
   namespace: monitoring
 spec:
   interval: 15m
+  # Each upgrade waits about 10 minutes with the default poller strategy.
+  # See #3931. Remove this if the upgrade time does not fall.
+  waitStrategy:
+    name: legacy
   chart:
     spec:
       chart: kube-prometheus-stack
