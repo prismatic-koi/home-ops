@@ -43,6 +43,61 @@ spec:
         policies:
           - orgId: 1
             receiver: email-admin
+      rules.yaml:
+        apiVersion: 1
+        groups:
+          - orgId: 1
+            name: prism-spawn-budget
+            folder: Fleet
+            interval: 1m
+            rules:
+              - uid: prism-spawn-budget-95
+                title: Prism spawn budget at 95%
+                condition: C
+                data:
+                  - refId: A
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    datasourceUid: P09FC0E78B5F11C2D
+                    model:
+                      refId: A
+                      expr: sum(increase(prism_spawns_total{agent_role="worker"}[7d])) / max(prism_spawn_limit)
+                      instant: true
+                      range: false
+                  - refId: B
+                    datasourceUid: __expr__
+                    model:
+                      refId: B
+                      type: reduce
+                      expression: A
+                      reducer: last
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: C
+                    datasourceUid: __expr__
+                    model:
+                      refId: C
+                      type: threshold
+                      expression: B
+                      conditions:
+                        - evaluator:
+                            type: gt
+                            params: [0.9499999]
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                noDataState: OK
+                execErrState: Error
+                for: 5m
+                annotations:
+                  summary: The 7-day worker spawn count is at 95% of the limit or more. Finish the current work and stop for the day.
+                labels:
+                  severity: warning
+                notification_settings:
+                  receiver: email-admin
+                  repeat_interval: 24h
     rbac:
       pspEnabled: false # disable psp, deprecatd in k8s 1.25
     replicas: 1
