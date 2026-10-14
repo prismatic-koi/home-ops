@@ -21,6 +21,28 @@ spec:
     grafana.ini:
       users:
         default_timezone: Pacific/Auckland
+      smtp:
+        enabled: true
+        host: ${SECRET_SMTP_HOST}:587
+        from_address: ${SECRET_NOTIFICATION_EMAIL}
+        ehlo_identity: ${SECRET_PUBLIC_DOMAIN}
+        startTLS_policy: MandatoryStartTLS
+    alerting:
+      contactpoints.yaml:
+        apiVersion: 1
+        contactPoints:
+          - orgId: 1
+            name: email-admin
+            receivers:
+              - uid: email-admin
+                type: email
+                settings:
+                  addresses: ${SECRET_ADMIN_EMAIL}
+      policies.yaml:
+        apiVersion: 1
+        policies:
+          - orgId: 1
+            receiver: email-admin
     rbac:
       pspEnabled: false # disable psp, deprecatd in k8s 1.25
     replicas: 1
