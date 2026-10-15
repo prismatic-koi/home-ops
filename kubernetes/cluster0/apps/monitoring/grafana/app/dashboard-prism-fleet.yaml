@@ -125,10 +125,112 @@ data:
       "panels": [
         {
           "type": "row",
+          "id": 30,
+          "title": "Workload budget",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "id": 31,
+          "title": "Worker spawns vs limit (7d)",
+          "description": "Worker spawns in the rolling 7 days as a percentage of max(prism_spawn_limit). Fixed 7d window. Shows no data until nixos-config#3177 exports the limit.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 1 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "orange", "value": 95 }, { "color": "red", "value": 100 } ] }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "instant": true,
+              "expr": "100 * sum(increase(prism_spawns_total{agent_role=\"worker\"}[7d])) / max(prism_spawn_limit)",
+              "legendFormat": "of limit"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "id": 32,
+          "title": "Worker spawns, rolling 7d (30d view)",
+          "description": "Rolling 7-day worker spawn count. The limit is the current value of max(prism_spawn_limit), read by an instant query (LIMIT) and applied as a threshold through a Config from query results transformation. The limit draws as a horizontal line across the whole range, and the line and area turn red where the count is over the limit. The panel overrides the dashboard time range with the last 30d.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "timeFrom": "30d",
+          "gridPos": { "h": 8, "w": 10, "x": 6, "y": 1 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "gradientMode": "scheme", "showPoints": "never", "thresholdsStyle": { "mode": "line+area" } },
+              "unit": "short",
+              "min": 0,
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "expr": "sum(increase(prism_spawns_total{agent_role=\"worker\"}[7d]))",
+              "legendFormat": "worker spawns (7d)"
+            },
+            {
+              "refId": "LIMIT",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "instant": true,
+              "expr": "max(prism_spawn_limit)",
+              "legendFormat": "limit",
+              "hide": false
+            }
+          ],
+          "transformations": [
+            {
+              "id": "configFromData",
+              "options": {
+                "configRefId": "LIMIT",
+                "applyTo": { "id": "byName", "options": "worker spawns (7d)" },
+                "mappings": [
+                  { "fieldName": "limit", "handlerKey": "threshold1", "handlerArguments": { "threshold": { "color": "red" } } }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "bargauge",
+          "id": 33,
+          "title": "Limit overrides by repo (7d)",
+          "description": "increase(prism_spawn_overrides_total[7d]) by repo. Shows no data until nixos-config#3178 exports the counter.",
+          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+          "fieldConfig": { "defaults": { "unit": "short", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
+              "instant": true,
+              "expr": "sum by (repo) (increase(prism_spawn_overrides_total[7d]))",
+              "legendFormat": "{{repo}}"
+            }
+          ]
+        },
+        {
+          "type": "row",
           "id": 1,
           "title": "Fleet health",
           "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
           "panels": []
         },
         {
@@ -137,7 +239,7 @@ data:
           "title": "Sessions by state & role",
           "description": "prism_sessions_active. state=\"finished\" counts known sessions, not running ones. Empty repo is an upstream defect (nixos-config#2764), left visible.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 1 },
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 10 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" },
@@ -162,7 +264,7 @@ data:
           "title": "Sidecars live by repo",
           "description": "prism_sidecars_live.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 1 },
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 10 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" },
@@ -187,7 +289,7 @@ data:
           "title": "Merge queue depth by repo",
           "description": "prism_merge_queue_depth. Empty when no merges are queued.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 7, "w": 24, "x": 0, "y": 8 },
+          "gridPos": { "h": 7, "w": 24, "x": 0, "y": 17 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" },
@@ -211,7 +313,7 @@ data:
           "id": 10,
           "title": "Spend",
           "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
           "panels": []
         },
         {
@@ -220,7 +322,7 @@ data:
           "title": "Cost by account (range total)",
           "description": "increase(prism_model_cost_usd_total) joined to prism_account_info for the readable account name. The info side is deduplicated with max by (account_org_id, account) so it stays one row per account when more than one host reports.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 25 },
           "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
           "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
           "targets": [
@@ -239,7 +341,7 @@ data:
           "title": "Cost by model (range total)",
           "description": "increase(prism_model_cost_usd_total) grouped by model_id.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 25 },
           "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
           "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
           "targets": [
@@ -258,7 +360,7 @@ data:
           "title": "Cost by profile (range total)",
           "description": "increase(prism_spend_by_profile_usd_total). Answers whether --profile max earns its keep. profile=\"default\" is a spawn with no explicit --profile.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 25 },
           "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
           "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
           "targets": [
@@ -277,7 +379,7 @@ data:
           "title": "Token rate by kind (log scale)",
           "description": "rate(prism_model_tokens_total) by kind. cache_read exceeds input by ~2 orders of magnitude, so the Y axis is logarithmic to keep input legible instead of flat at zero.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 33 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "scaleDistribution": { "type": "log", "log": 10 } },
@@ -301,7 +403,7 @@ data:
           "id": 20,
           "title": "Throughput & quality",
           "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
           "panels": []
         },
         {
@@ -310,7 +412,7 @@ data:
           "title": "Spawns by role & profile (range total)",
           "description": "increase(prism_spawns_total) by agent_role and profile.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
           "fieldConfig": { "defaults": { "unit": "short", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
           "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
           "targets": [
@@ -329,7 +431,7 @@ data:
           "title": "Merge outcomes by status",
           "description": "rate(prism_merges_by_status). cancelled and abandoned are the failure signal.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" },
@@ -357,7 +459,7 @@ data:
           "title": "Review pass rate",
           "description": "increase(prism_review_verdicts_total{verdict=\"pass\"}[$__range]) / increase(prism_review_verdicts_total[$__range]).",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
           "fieldConfig": {
             "defaults": {
               "unit": "percentunit",
@@ -384,7 +486,7 @@ data:
           "title": "Escalation rate by repo",
           "description": "rate(prism_escalations_total) by repo.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 50 },
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
@@ -399,101 +501,6 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "expr": "sum by (repo) (rate(prism_escalations_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\"}[$__rate_interval]))",
-              "legendFormat": "{{repo}}"
-            }
-          ]
-        },
-        {
-          "type": "row",
-          "id": 30,
-          "title": "Workload budget",
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
-          "panels": []
-        },
-        {
-          "type": "stat",
-          "id": 31,
-          "title": "Worker spawns vs limit (7d)",
-          "description": "Worker spawns in the rolling 7 days as a percentage of max(prism_spawn_limit). Fixed 7d window. Shows no data until nixos-config#3177 exports the limit.",
-          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 50 },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "min": 0,
-              "color": { "mode": "thresholds" },
-              "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "orange", "value": 95 }, { "color": "red", "value": 100 } ] }
-            },
-            "overrides": []
-          },
-          "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "instant": true,
-              "expr": "100 * sum(increase(prism_spawns_total{agent_role=\"worker\"}[7d])) / max(prism_spawn_limit)",
-              "legendFormat": "of limit"
-            }
-          ]
-        },
-        {
-          "type": "timeseries",
-          "id": 32,
-          "title": "Worker spawns, rolling 7d (30d view)",
-          "description": "Rolling 7-day worker spawn count with the 95% and 100% levels of max(prism_spawn_limit). The panel overrides the dashboard time range with the last 30d.",
-          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "timeFrom": "30d",
-          "gridPos": { "h": 8, "w": 10, "x": 6, "y": 50 },
-          "fieldConfig": {
-            "defaults": {
-              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" },
-              "unit": "short",
-              "min": 0
-            },
-            "overrides": [
-              { "matcher": { "id": "byName", "options": "95% of limit" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }, { "id": "custom.fillOpacity", "value": 0 } ] },
-              { "matcher": { "id": "byName", "options": "100% of limit" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }, { "id": "custom.fillOpacity", "value": 0 } ] }
-            ]
-          },
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "sum(increase(prism_spawns_total{agent_role=\"worker\"}[7d]))",
-              "legendFormat": "worker spawns (7d)"
-            },
-            {
-              "refId": "B",
-              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "0.95 * max(prism_spawn_limit)",
-              "legendFormat": "95% of limit"
-            },
-            {
-              "refId": "C",
-              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "max(prism_spawn_limit)",
-              "legendFormat": "100% of limit"
-            }
-          ]
-        },
-        {
-          "type": "bargauge",
-          "id": 33,
-          "title": "Limit overrides by repo (7d)",
-          "description": "increase(prism_spawn_overrides_total[7d]) by repo. Shows no data until nixos-config#3178 exports the counter.",
-          "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 50 },
-          "fieldConfig": { "defaults": { "unit": "short", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
-          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "instant": true,
-              "expr": "sum by (repo) (increase(prism_spawn_overrides_total[7d]))",
               "legendFormat": "{{repo}}"
             }
           ]
