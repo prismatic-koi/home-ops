@@ -88,7 +88,7 @@ spec:
                       datasource:
                         type: __expr__
                         uid: __expr__
-                noDataState: OK
+                noDataState: KeepLast
                 execErrState: Error
                 for: 5m
                 annotations:
