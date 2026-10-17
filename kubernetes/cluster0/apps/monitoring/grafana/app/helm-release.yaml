@@ -205,7 +205,7 @@ spec:
                     model:
                       refId: clear_at
                       type: math
-                      expression: 'floor($limit * 95 / 100)'
+                      expression: 'ceil($limit * 95 / 100) - 1'
                       datasource:
                         type: __expr__
                         uid: __expr__
