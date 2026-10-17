@@ -38,6 +38,33 @@ spec:
                 type: email
                 settings:
                   addresses: ${SECRET_ADMIN_EMAIL}
+                  # Notification template "prism-spawn-budget" (templates.yaml).
+                  subject: '{{`{{ template "prism.subject" . }}`}}'
+                  message: '{{`{{ template "prism.message" . }}`}}'
+      templates.yaml:
+        apiVersion: 1
+        templates:
+          - orgId: 1
+            name: prism-spawn-budget
+            template: |-
+              {{`{{ define "prism.subject" }}{{ with .Alerts.Firing }}{{ with index . 0 }}{{ if .Annotations.state }}Spawn budget {{ .Annotations.state }}: rest today{{ else }}Spawn budget alert: rest today{{ end }}{{ end }}{{ else }}{{ with .Alerts.Resolved }}{{ with index . 0 }}{{ if .Annotations.state }}Spawn budget back under: {{ .Annotations.state }}{{ else }}Spawn budget back under limit{{ end }}{{ end }}{{ end }}{{ end }}{{ end }}
+              {{ define "prism.message" }}{{ range .Alerts.Firing }}{{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}The spawn budget alert is firing. Open the dashboard for the numbers.{{ end }}
+              {{ if .Annotations.projection }}{{ .Annotations.projection }}
+              {{ end }}{{ if .Annotations.last_24h }}{{ .Annotations.last_24h }}
+              {{ end }}{{ if .PanelURL }}Dashboard: {{ .PanelURL }}
+              {{ end }}{{ end }}{{ range .Alerts.Resolved }}{{ if .Annotations.resolved }}{{ .Annotations.resolved }}{{ else }}The 7-day worker spawn count is back under budget.{{ end }}
+              {{ if .PanelURL }}Dashboard: {{ .PanelURL }}
+              {{ end }}{{ end }}{{ end }}`}}
+      timeintervals.yaml:
+        apiVersion: 1
+        timeIntervals:
+          - orgId: 1
+            name: prism-morning-window
+            time_intervals:
+              - times:
+                  - start_time: "08:00"
+                    end_time: "09:00"
+                location: Pacific/Auckland
       policies.yaml:
         apiVersion: 1
         policies:
@@ -53,34 +80,168 @@ spec:
             rules:
               - uid: prism-spawn-budget-95
                 title: Prism spawn budget at 95%
-                condition: C
+                condition: threshold
                 data:
-                  - refId: A
+                  - refId: count_query
                     relativeTimeRange:
                       from: 600
                       to: 0
                     datasourceUid: P09FC0E78B5F11C2D
                     model:
-                      refId: A
-                      expr: sum(increase(prism_spawns_total{agent_role="worker"}[7d])) / max(prism_spawn_limit)
+                      refId: count_query
+                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[7d]))'
                       instant: true
                       range: false
-                  - refId: B
+                  - refId: count
                     datasourceUid: __expr__
                     model:
-                      refId: B
+                      refId: count
                       type: reduce
-                      expression: A
+                      expression: count_query
                       reducer: last
                       datasource:
                         type: __expr__
                         uid: __expr__
-                  - refId: C
+                  - refId: limit_query
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    datasourceUid: P09FC0E78B5F11C2D
+                    model:
+                      refId: limit_query
+                      expr: 'max(last_over_time(prism_spawn_limit[7d]))'
+                      instant: true
+                      range: false
+                  - refId: limit
                     datasourceUid: __expr__
                     model:
-                      refId: C
+                      refId: limit
+                      type: reduce
+                      expression: limit_query
+                      reducer: last
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: count_1d_query
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    datasourceUid: P09FC0E78B5F11C2D
+                    model:
+                      refId: count_1d_query
+                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[1d])) or vector(0)'
+                      instant: true
+                      range: false
+                  - refId: count_1d
+                    datasourceUid: __expr__
+                    model:
+                      refId: count_1d
+                      type: reduce
+                      expression: count_1d_query
+                      reducer: last
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: count_6d_query
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    datasourceUid: P09FC0E78B5F11C2D
+                    model:
+                      refId: count_6d_query
+                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[6d])) or vector(0)'
+                      instant: true
+                      range: false
+                  - refId: count_6d
+                    datasourceUid: __expr__
+                    model:
+                      refId: count_6d
+                      type: reduce
+                      expression: count_6d_query
+                      reducer: last
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: count_5d_query
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    datasourceUid: P09FC0E78B5F11C2D
+                    model:
+                      refId: count_5d_query
+                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[5d])) or vector(0)'
+                      instant: true
+                      range: false
+                  - refId: count_5d
+                    datasourceUid: __expr__
+                    model:
+                      refId: count_5d
+                      type: reduce
+                      expression: count_5d_query
+                      reducer: last
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: ratio
+                    datasourceUid: __expr__
+                    model:
+                      refId: ratio
+                      type: math
+                      expression: '$count / $limit'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: percent
+                    datasourceUid: __expr__
+                    model:
+                      refId: percent
+                      type: math
+                      expression: '$ratio * 100'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: clear_at
+                    datasourceUid: __expr__
+                    model:
+                      refId: clear_at
+                      type: math
+                      expression: 'floor($limit * 95 / 100)'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: to_leave
+                    datasourceUid: __expr__
+                    model:
+                      refId: to_leave
+                      type: math
+                      expression: '$count - $clear_at'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: pct_24h
+                    datasourceUid: __expr__
+                    model:
+                      refId: pct_24h
+                      type: math
+                      expression: '$count_6d / $limit * 100'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: pct_48h
+                    datasourceUid: __expr__
+                    model:
+                      refId: pct_48h
+                      type: math
+                      expression: '$count_5d / $limit * 100'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                  - refId: threshold
+                    datasourceUid: __expr__
+                    model:
+                      refId: threshold
                       type: threshold
-                      expression: B
+                      expression: ratio
                       conditions:
                         - evaluator:
                             type: gt
@@ -92,12 +253,26 @@ spec:
                 execErrState: Error
                 for: 5m
                 annotations:
-                  summary: The 7-day worker spawn count is at 95% of the limit or more. Finish the current work and stop for the day.
+                  __dashboardUid__: prism-fleet-telemetry
+                  __panelId__: "31"
+                  summary: |-
+                    {{`{{ $c := "?" }}{{ with $values.count }}{{ $c = printf "%.0f" .Value }}{{ end }}{{ $l := "?" }}{{ with $values.limit }}{{ $l = printf "%.0f" .Value }}{{ end }}{{ $p := "?" }}{{ with $values.percent }}{{ $p = printf "%.0f" .Value }}{{ end }}{{ $k := "?" }}{{ with $values.clear_at }}{{ $k = printf "%.0f" .Value }}{{ end }}{{ $t := "?" }}{{ with $values.to_leave }}{{ $t = printf "%.0f" .Value }}{{ end }}{{ $c }} of {{ $l }} worker spawns in the last 7 days ({{ $p }}%). The alert clears at {{ $k }} or fewer. {{ $t }} more spawns must leave the 7-day window. Finish the current work and stop for the day.`}}
+                  projection: |-
+                    {{`{{ $c6 := "?" }}{{ with $values.count_6d }}{{ $c6 = printf "%.0f" .Value }}{{ end }}{{ $p24 := "?" }}{{ with $values.pct_24h }}{{ $p24 = printf "%.0f" .Value }}{{ end }}{{ $c5 := "?" }}{{ with $values.count_5d }}{{ $c5 = printf "%.0f" .Value }}{{ end }}{{ $p48 := "?" }}{{ with $values.pct_48h }}{{ $p48 = printf "%.0f" .Value }}{{ end }}If you spawn nothing, you are at {{ $c6 }} ({{ $p24 }}%) in 24 hours and {{ $c5 }} ({{ $p48 }}%) in 48 hours.`}}
+                  last_24h: |-
+                    {{`{{ $c1 := "?" }}{{ with $values.count_1d }}{{ $c1 = printf "%.0f" .Value }}{{ end }}{{ if eq $c1 "0" }}Last 24 hours: 0 spawns. The pause is working.{{ else }}Last 24 hours: {{ $c1 }} spawns.{{ end }}`}}
+                  state: |-
+                    {{`{{ $c := "?" }}{{ with $values.count }}{{ $c = printf "%.0f" .Value }}{{ end }}{{ $l := "?" }}{{ with $values.limit }}{{ $l = printf "%.0f" .Value }}{{ end }}{{ $p := "?" }}{{ with $values.percent }}{{ $p = printf "%.0f" .Value }}{{ end }}{{ $c }}/{{ $l }} ({{ $p }}%)`}}
+                  resolved: |-
+                    {{`{{ $c := "?" }}{{ with $values.count }}{{ $c = printf "%.0f" .Value }}{{ end }}{{ $l := "?" }}{{ with $values.limit }}{{ $l = printf "%.0f" .Value }}{{ end }}{{ $p := "?" }}{{ with $values.percent }}{{ $p = printf "%.0f" .Value }}{{ end }}Back under budget: {{ $c }} of {{ $l }} ({{ $p }}%).`}}
                 labels:
                   severity: warning
                 notification_settings:
                   receiver: email-admin
-                  repeat_interval: 24h
+                  # 23h, not 24h: the 1-hour active window then never drifts out of reach.
+                  repeat_interval: 23h
+                  active_time_intervals:
+                    - prism-morning-window
     rbac:
       pspEnabled: false # disable psp, deprecatd in k8s 1.25
     replicas: 1
