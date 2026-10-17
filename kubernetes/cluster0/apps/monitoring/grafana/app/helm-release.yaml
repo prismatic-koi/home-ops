@@ -51,6 +51,7 @@ spec:
               {{ define "prism.message" }}{{ range .Alerts.Firing }}{{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}The spawn budget alert is firing. Open the dashboard for the numbers.{{ end }}
               {{ if .Annotations.projection }}{{ .Annotations.projection }}
               {{ end }}{{ if .Annotations.last_24h }}{{ .Annotations.last_24h }}
+              {{ end }}{{ if .Annotations.last_reminder }}{{ .Annotations.last_reminder }}
               {{ end }}{{ if .PanelURL }}Dashboard: {{ .PanelURL }}
               {{ end }}{{ end }}{{ range .Alerts.Resolved }}{{ if .Annotations.resolved }}{{ .Annotations.resolved }}{{ else }}The 7-day worker spawn count is back under budget.{{ end }}
               {{ if .PanelURL }}Dashboard: {{ .PanelURL }}
@@ -236,6 +237,15 @@ spec:
                       datasource:
                         type: __expr__
                         uid: __expr__
+                  - refId: last_reminder
+                    datasourceUid: __expr__
+                    model:
+                      refId: last_reminder
+                      type: math
+                      expression: '$count_6d <= $clear_at'
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
                   - refId: threshold
                     datasourceUid: __expr__
                     model:
@@ -261,6 +271,8 @@ spec:
                     {{`{{ $c6 := "?" }}{{ with $values.count_6d }}{{ $c6 = printf "%.0f" .Value }}{{ end }}{{ $p24 := "?" }}{{ with $values.pct_24h }}{{ $p24 = printf "%.0f" .Value }}{{ end }}{{ $c5 := "?" }}{{ with $values.count_5d }}{{ $c5 = printf "%.0f" .Value }}{{ end }}{{ $p48 := "?" }}{{ with $values.pct_48h }}{{ $p48 = printf "%.0f" .Value }}{{ end }}If you spawn nothing, you are at {{ $c6 }} ({{ $p24 }}%) in 24 hours and {{ $c5 }} ({{ $p48 }}%) in 48 hours.`}}
                   last_24h: |-
                     {{`{{ $c1 := "?" }}{{ with $values.count_1d }}{{ $c1 = printf "%.0f" .Value }}{{ end }}{{ if eq $c1 "0" }}Last 24 hours: 0 spawns. The pause is working.{{ else }}Last 24 hours: {{ $c1 }} spawns.{{ end }}`}}
+                  last_reminder: |-
+                    {{`{{ with $values.last_reminder }}{{ if eq .Value 1.0 }}If you spawn nothing, this is the last reminder. The alert clears before tomorrow morning.{{ end }}{{ end }}`}}
                   state: |-
                     {{`{{ $c := "?" }}{{ with $values.count }}{{ $c = printf "%.0f" .Value }}{{ end }}{{ $l := "?" }}{{ with $values.limit }}{{ $l = printf "%.0f" .Value }}{{ end }}{{ $p := "?" }}{{ with $values.percent }}{{ $p = printf "%.0f" .Value }}{{ end }}{{ $c }}/{{ $l }} ({{ $p }}%)`}}
                   resolved: |-
