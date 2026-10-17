@@ -57,7 +57,7 @@ spec:
               {{ end }}{{ end }}{{ end }}`}}
       timeintervals.yaml:
         apiVersion: 1
-        timeIntervals:
+        muteTimes:
           - orgId: 1
             name: prism-morning-window
             time_intervals:
