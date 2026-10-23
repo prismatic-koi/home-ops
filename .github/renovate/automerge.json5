@@ -116,6 +116,22 @@
       "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
       "automerge": false
     },
+    // TEMPORARY: never auto-merge the alloy Helm chart (any update type). The
+    // Alloy HelmRelease carries a stage.drop with older_than = "45m" as a
+    // workaround for re-sent logs. The fix, grafana/alloy#7507, ships in Alloy
+    // v1.21.3. A patch update auto-merges, so nothing prompts a person to
+    // remove the stage. This hold puts a reminder in each Alloy PR body.
+    // The PR that removes the stage.drop must also remove this rule (#3901).
+    {
+      "description": "TEMPORARY: never auto-merge the alloy Helm chart until the 45m stage.drop is removed (#3901)",
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["alloy"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
+      "automerge": false,
+      "prBodyNotes": [
+        "**Alloy hold (#3901):** Check the chart appVersion. If it is v1.21.3 or later, the release contains grafana/alloy#7507. Then remove the 45m `stage.drop` in the Alloy `helm-release.yaml`, and remove this Renovate rule from `.github/renovate/automerge.json5` (#3901). If it is earlier, merge as normal."
+      ]
+    },
     // Disable automerge for databases
     {
       "description": "Disable auto-merge for databases",
