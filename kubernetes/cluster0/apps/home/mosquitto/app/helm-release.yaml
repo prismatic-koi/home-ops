@@ -66,6 +66,23 @@ spec:
               tag: 2.1.2-alpine@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408
             env:
               TZ: "${TIMEZONE}"
+            # uid and gid 1883 match the owner and group of the copy-auth
+            # copies. mosquitto warns when the owner or group of passwd or acl
+            # differs from its own uid or gid. The warning states that future
+            # versions refuse the file.
+            # With this mosquitto.conf, mosquitto writes no file: the log goes
+            # to stderr, persistence is false, and no pid_file is set. A new
+            # write path (persistence_location, a log file, or a pid_file)
+            # needs an emptyDir.
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1883
+              runAsGroup: 1883
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+              seccompProfile: { type: RuntimeDefault }
     service:
       app:
         controller: main
