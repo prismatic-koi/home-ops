@@ -157,6 +157,8 @@ gh issue edit <number>
   the passwd or acl file and lock out every MQTT client, #3903);
   `ghcr.io/tailscale/tailscale` on any update type (four Deployments pin
   runAsUser/runAsGroup 65534, which depends on facts inside the image, #3688);
+  the `alloy` Helm chart on any update type (TEMPORARY hold until the 45m
+  `stage.drop` is removed; the PR that removes it also removes the rule, #3901);
   and all
   major updates. Treat `.github/renovate/automerge.json5` as the source of
   truth if this list drifts.
