@@ -49,7 +49,7 @@ spec:
         # above. This is expected occasionally under a genuine burst, but
         # sustained discards for 15m mean something is stuck emitting logs
         # far above normal volume. Scoped to reasons that indicate a real
-        # limit was hit (as opposed to benign age-based rejects, handled by
+        # limit was hit (as opposed to age-based discards, handled by
         # LokiIngestionDiscardsAgeBasedHigh below) -- kept at a `> 0` floor
         # since these reasons should never fire under normal operation.
         - alert: LokiIngestionDiscardsHigh
@@ -62,11 +62,11 @@ spec:
             summary: "Loki is discarding ingested log samples (limit hit)"
             description: "Loki has discarded log samples over the last 15 minutes (reason={{ $labels.reason }}, tenant={{ $labels.tenant }}). Common causes by reason: `rate_limited` / `per_stream_rate_limit` -> a stream or tenant hit the ingestion_rate_mb / per_stream_rate_limit guardrails in limits_config; `stream_limit` / `per_stream_series_limit` -> too many distinct label combinations for a stream/tenant, check discovered stream label cardinality in Loki first (see #3395 for prior art); `line_too_long` / `max_line_size` -> a source is emitting abnormally large log lines. Investigate the source pod/namespace before increasing limits."
 
-        # Age-based rejects (greater_than_max_sample_age, too_far_behind,
+        # Age-based discards (greater_than_max_sample_age, too_far_behind,
         # out_of_order). The in-cluster Alloy drops a line that is more than
         # 45m old when it reads it (#3892). So the hourly
         # loki.source.kubernetes re-send and the re-read after an Alloy
-        # restart do not reach Loki, and a steady trickle of these rejects is
+        # restart do not reach Loki, and a steady trickle of these discards is
         # not expected. A short burst can still occur, for example after an
         # outage or from a client outside the cluster. A `> 0` floor on
         # loki_discarded_samples_total flaps on any small burst, because the
