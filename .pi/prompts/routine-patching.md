@@ -20,15 +20,23 @@ Carve-outs that always require a human (i.e. show up here):
 
 - **Tier 1 critical infrastructure** — never auto-merges, any update type:
   `k3s-io/k3s`, `system-upgrade-controller`, `rancher/k3s-upgrade`, `cilium`,
-  `coredns`, `traefik`.
+  `coredns`, `traefik`, `fluxcd/flux2`, `ghcr.io/fluxcd/flux-manifests`.
 - **Tier 2 infrastructure** — major/minor only (patches still auto-merge):
   `cert-manager`, `trust-manager`, `cilium`, `cloudnative-pg`, `coredns`,
-  `external-dns`, `traefik`, `kube-prometheus-stack`, `longhorn`.
+  `external-dns`, `traefik`, `longhorn`.
+- **ghcr.io/tailscale/tailscale** — never auto-merges, any update type. Four
+  Deployments pin runAsUser/runAsGroup 65534, which depends on facts inside
+  the image (#3688, #3662).
+- **eclipse-mosquitto** — never auto-merges, any update type. A release can
+  refuse the passwd or acl file and lock out every MQTT client (#3903).
 - **Databases** — `postgres*`, `valkey`, `redis` major/minor.
 - **home-assistant** — calendar-versioned, never auto-merges.
 - **seaweedfs** — never auto-merges (upstream chart appVersion has shipped
   image refs that don't exist on Docker Hub; see `.github/renovate/automerge.json5`).
 - **Major updates** for everything else.
+
+`kube-prometheus-stack` is not a carve-out: its minor updates auto-merge
+(#3929). Its major updates need a human.
 
 If `.github/renovate/automerge.json5` changes, this list will drift — treat the
 config as the source of truth.

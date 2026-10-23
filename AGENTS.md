@@ -154,7 +154,10 @@ gh issue edit <number>
   databases (postgres*, valkey, redis) on major/minor; home-assistant
   (calendar versioning); seaweedfs (phantom appVersions upstream);
   mosquitto (`eclipse-mosquitto`) on any update type (a release can refuse
-  the passwd or acl file and lock out every MQTT client, #3903); and all
+  the passwd or acl file and lock out every MQTT client, #3903);
+  `ghcr.io/tailscale/tailscale` on any update type (four Deployments pin
+  runAsUser/runAsGroup 65534, which depends on facts inside the image, #3688);
+  and all
   major updates. Treat `.github/renovate/automerge.json5` as the source of
   truth if this list drifts.
 - **Schedule**: Runs on the schedule configured by Renovate (Pacific/Auckland
