@@ -6,7 +6,7 @@
 #   :12345 (HTTP — Alloy UI + /metrics for the ServiceMonitor scrape)
 # Egress to:
 #   loki.monitoring.svc :3100          (log push)
-#   kube-apiserver      :443 / :6443   (discovery.kubernetes + loki.source.kubernetes)
+#   kube-apiserver      :443 / :6443   (discovery.kubernetes)
 # Note: kube-apiserver egress needs the companion CiliumNetworkPolicy in
 # cilium-network-policy.yaml — the same silent-bypass caveat as loki applies
 # here (kubeProxyReplacement + kube-apiserver entity identity).
@@ -92,8 +92,8 @@ spec:
         - port: 12345
           protocol: TCP
 ---
-# Allow egress to the K8s API server for pod discovery + log tailing
-# (discovery.kubernetes + loki.source.kubernetes). Mirrors the loki-allow-k8s-api
+# Allow egress to the K8s API server for pod discovery
+# (discovery.kubernetes). Mirrors the loki-allow-k8s-api
 # pattern — ipBlock is the enforcement path for non-Cilium fallbacks; the
 # CiliumNetworkPolicy alongside is what actually enforces the allow when
 # kubeProxyReplacement is on (see the CNP file for the full explanation).

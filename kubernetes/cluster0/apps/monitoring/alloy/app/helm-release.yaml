@@ -41,11 +41,25 @@ spec:
       tolerations:
         - effect: NoSchedule
           operator: Exists
+      volumes:
+        extra:
+          # The kubelet log files of the pods on this node. Read-only.
+          - name: pod-logs
+            hostPath:
+              path: /var/log/pods
+              type: Directory
+          # Alloy data, including the read positions of loki.source.file.
+          # This is the only writable hostPath. It is on the node, so the
+          # positions stay when the Alloy pod restarts.
+          - name: alloy-data
+            hostPath:
+              path: /var/lib/alloy
+              type: DirectoryOrCreate
 
     # Least-privilege RBAC. The chart's default rules grant get/list/watch on
     # ConfigMaps, Secrets, PrometheusRules, AlertmanagerConfigs, ReplicaSets,
     # etc. — none of which are needed for pod-log discovery. Override to the
-    # minimum for `discovery.kubernetes` (role=pod) and `loki.source.kubernetes`.
+    # minimum for `discovery.kubernetes` (role=pod).
     rbac:
       create: true
       # Rules are split across `rules` and `clusterRules` only to work around a
@@ -53,12 +67,12 @@ spec:
       # invalid `[]` / `null` token into the ClusterRole `rules:` block
       # (upstream `templates/rbac.yaml` unconditionally toYaml's both). Both
       # lists get concatenated into the ClusterRole — verify with
-      # `helm template`. The union is exactly the pod + log discovery set we
+      # `helm template`. The union is exactly the pod discovery set we
       # need; the default clusterRules (nodes, nodes/pods, nodes/metrics,
       # /metrics, ConfigMaps, Secrets, PrometheusRules, ...) is dropped.
       rules:
         - apiGroups: [""]
-          resources: ["pods", "pods/log"]
+          resources: ["pods"]
           verbs: ["get", "list", "watch"]
       clusterRules:
         - apiGroups: [""]
@@ -71,20 +85,29 @@ spec:
       enabled: true
 
     alloy:
-      # /var/log/pods is a symlink chain into /var/log/containers → the
-      # kubelet-managed container log files. loki.source.kubernetes streams
-      # via the API but we also mount /var/log for the file-tailer path.
+      # Read positions must stay when the pod restarts, so the storage path
+      # is the alloy-data hostPath, not the chart default /tmp/alloy.
+      storagePath: /var/lib/alloy
       mounts:
-        varlog: true
+        # The chart varlog mount gives all of /var/log. Alloy reads only the
+        # pod log files, so mount /var/log/pods alone.
+        varlog: false
+        extra:
+          - name: pod-logs
+            mountPath: /var/log/pods
+            readOnly: true
+          - name: alloy-data
+            mountPath: /var/lib/alloy
       # Anonymous usage stats — opt out.
       enableReporting: false
       configMap:
         create: true
         # Alloy config (river/alloy syntax). Pipeline:
         #   discovery.kubernetes (pods on this node)
-        #     -> discovery.relabel (derive namespace/app/container/pod/node)
-        #     -> loki.source.kubernetes (tail via K8s API)
-        #     -> loki.process (normalise level, enforce label set)
+        #     -> discovery.relabel (derive namespace/app/container/pod/node
+        #        and the log file path)
+        #     -> loki.source.file (read the pod log files on this node)
+        #     -> loki.process (parse CRI, normalise level, enforce label set)
         #     -> loki.write (push to in-cluster Loki)
         content: |
           logging {
@@ -169,13 +192,59 @@ spec:
               source_labels = ["__meta_kubernetes_pod_node_name"]
               target_label  = "node"
             }
+            // Log files of the container: /var/log/pods/<namespace>_<pod>_<uid>/
+            // <container>/<restart count>.log. The glob does not match a
+            // rotated file (0.log.20261030-043403) or a compressed file
+            // (.gz), so Alloy does not read a rotated file a second time.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              target_label  = "__path__"
+              replacement   = "/var/log/pods/*$1/*.log"
+            }
+            // The log directory of a static pod (kube-vip) has the config
+            // hash in place of the pod UID. The UID of its mirror pod does
+            // not match a directory.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash", "__meta_kubernetes_pod_annotation_kubernetes_io_config_hash", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              regex         = "true/(.*)"
+              target_label  = "__path__"
+              replacement   = "/var/log/pods/*$1/*.log"
+            }
           }
 
-          // Tail container logs for the discovered pods via the K8s API.
-          // Requires pods/log RBAC (granted above).
-          loki.source.kubernetes "pods" {
-            targets    = discovery.relabel.pod_logs.output
-            forward_to = [loki.process.normalise.receiver]
+          // Read the kubelet log file of each container on this node.
+          // loki.source.file keeps a read position for each file under
+          // --storage.path, which is the alloy-data hostPath. So when Alloy
+          // restarts, it continues each file at its stored position, and it
+          // does not send the old lines of the file again.
+          //
+          // tail_from_end = false: a file with no stored position starts at
+          // its start. So Alloy sends every line of a new container, also of
+          // a container that stops at once, and every line of a file that
+          // the kubelet makes while Alloy is down. Do not set it to true:
+          // then Alloy does not send the lines that a new file holds before
+          // Alloy opens it.
+          //
+          // At the first start there is no positions file, so Alloy reads
+          // each file from its start one time. The 45m stage.drop in
+          // loki.process "normalise" stops the old lines of that re-read.
+          //
+          // The positions file stores the position of each file under the
+          // path and the target labels of the file. If a change to
+          // discovery.relabel changes the target labels, no file has a
+          // stored position, and Alloy reads every file again from its start.
+          loki.source.file "pods" {
+            targets       = discovery.relabel.pod_logs.output
+            forward_to    = [loki.process.normalise.receiver]
+            tail_from_end = false
+
+            // Expand the __path__ glob, and look again for new files every
+            // sync_period (default 10s).
+            file_match {
+              enabled = true
+            }
           }
 
           // Normalise the level field and enforce the approved label set.
@@ -196,19 +265,23 @@ spec:
           // back to reading from e.Labels when the extracted key is missing
           // (see stages/structured_metadata.go), which is why pod/node work.
           loki.process "normalise" {
-            // Drop a line that is more than 45 minutes old when Alloy reads it
-            // (#3892). Each hour, loki.source.kubernetes re-opens the log
-            // stream of each container and sends the last line it read again.
-            // If that line is more than 1h behind the newest line of its Loki
-            // stream (max_chunk_age / 2), or older than
-            // reject_old_samples_max_age, Loki rejects it. Loki stores the
-            // other lines of the push but returns HTTP 400, and loki.write
-            // then counts every entry of the batch as dropped (reason
-            // ingester_error).
+            // Parse the CRI format of the kubelet log file:
+            // "<time> <stream> <flag> <content>". The stage sets the entry
+            // timestamp to <time>, joins partial lines (flag P) into one
+            // line, and keeps only <content> as the line. Keep this stage
+            // first, because the stages below match on the content.
+            stage.cri {}
+
+            // Drop a line that is more than 45m old when Alloy reads it. This
+            // stage absorbs the one-time re-read at the change to
+            // loki.source.file (#3901). At the first start there is no
+            // positions file, so Alloy reads each log file from its start.
+            // Loki discards a line that is more than 1h behind the newest
+            // line of its stream (max_chunk_age / 2), or older than
+            // reject_old_samples_max_age. Loki stores the other lines of the
+            // push but returns HTTP 400, and loki.write then counts every
+            // entry of the batch as dropped (reason ingester_error).
             //
-            // In steady state the tailer follows the stream and reads each
-            // line when the container writes it, so only a re-sent line is
-            // this old.
             // 45m is the 1h Loki window minus about 10m, the longest time
             // that loki.write retries one batch with its default settings.
             // As a result, a line that passes this stage is still inside the
@@ -217,8 +290,15 @@ spec:
             // Cost: after an Alloy or Loki outage of more than 45m, Alloy
             // drops the part of the backlog that is older than 45m.
             //
-            // Keep this stage first. If it moves below the zigbee2mqtt
-            // stage.match, a re-sent failure line older than 45m increments
+            // The contract PR of #3901 removes this stage after the restart
+            // check of #4060 passes: after an Alloy restart that follows the
+            // cutover on all 4 nodes, the new Alloy pods show no
+            // older_than_45m drops.
+            //
+            // Keep this stage directly after stage.cri. Before stage.cri, the
+            // entry timestamp is the time that Alloy read the line, so no
+            // line is old. If this stage moves below the zigbee2mqtt
+            // stage.match, a re-read failure line older than 45m increments
             // that counter again.
             stage.drop {
               older_than          = "45m"
@@ -310,6 +390,17 @@ spec:
               source     = "level"
               expression = "^(?i)(trace)$"
               replace    = "debug"
+            }
+
+            // Remove the filename label (from loki.source.file) and the stream
+            // label (from stage.cri). stage.metrics below takes its labels
+            // from the entry labels, and filename holds the restart count of
+            // the container. Without this stage, a container restart starts a
+            // new counter series, and increase() does not count the first
+            // sample of a new series (#3920). stage.label_keep removes both
+            // labels from the Loki stream in any case.
+            stage.label_drop {
+              values = ["filename", "stream"]
             }
 
             // zigbee2mqtt failed-command counter (#3885). Only the zigbee2mqtt

@@ -117,11 +117,14 @@
       "automerge": false
     },
     // TEMPORARY: never auto-merge the alloy Helm chart (any update type). The
-    // Alloy HelmRelease carries a stage.drop with older_than = "45m" as a
-    // workaround for re-sent logs. The fix, grafana/alloy#7507, ships in Alloy
-    // v1.21.3. A patch update auto-merges, so nothing prompts a person to
-    // remove the stage. This hold puts a reminder in each Alloy PR body.
-    // The PR that removes the stage.drop must also remove this rule (#3901).
+    // Alloy HelmRelease carries a stage.drop with older_than = "45m". It
+    // absorbs the one-time re-read when Alloy changes to loki.source.file
+    // (#3901). The contract PR of #3901 removes the stage after the restart
+    // check of #4060 passes: after an Alloy restart that follows the cutover
+    // on all 4 nodes, the new Alloy pods show no older_than_45m drops. A patch
+    // update auto-merges, so nothing prompts a person to remove the stage.
+    // This hold puts a reminder in each Alloy PR body. The PR that removes the
+    // stage.drop must also remove this rule.
     {
       "description": "TEMPORARY: never auto-merge the alloy Helm chart until the 45m stage.drop is removed (#3901)",
       "matchDatasources": ["helm"],
@@ -129,7 +132,7 @@
       "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
       "automerge": false,
       "prBodyNotes": [
-        "**Alloy hold (#3901):** Check the chart appVersion. If it is v1.21.3 or later, the release contains grafana/alloy#7507. Then remove the 45m `stage.drop` in the Alloy `helm-release.yaml`, and remove this Renovate rule from `.github/renovate/automerge.json5` (#3901). If it is earlier, merge as normal."
+        "**Alloy hold (#3901):** The 45m `stage.drop` in the Alloy `helm-release.yaml` is temporary. The contract PR of #3901 removes the stage and this Renovate rule after the restart check of #4060 passes. This chart update does not depend on that PR, so merge it as normal. Its rollout restarts Alloy, so it can be the restart check. 5 minutes after the rollout completes, read `sum by (pod, reason) (loki_process_dropped_lines_total)`. If the new Alloy pods show an `older_than_45m` series, the read positions did not survive the restart: do not open the contract PR, and report it on #3901. If they show no `older_than_45m` series, and the contract PR does not exist yet, open it."
       ]
     },
     // Disable automerge for databases
