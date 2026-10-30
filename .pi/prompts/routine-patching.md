@@ -30,9 +30,11 @@ Carve-outs that always require a human (i.e. show up here):
 - **eclipse-mosquitto** — never auto-merges, any update type. A release can
   refuse the passwd or acl file and lock out every MQTT client (#3903).
 - **alloy** (Helm chart) — TEMPORARY hold, never auto-merges, any update
-  type. The 45m `stage.drop` in the Alloy HelmRelease stays until the chart
-  appVersion is v1.21.3 or later. The PR that removes the stage also removes
-  this rule (#3901).
+  type. The 45m `stage.drop` in the Alloy HelmRelease stays until the
+  contract PR of #3901. That PR comes after the restart check of #4060
+  passes: after an Alloy restart that follows the cutover on all 4 nodes, the
+  new Alloy pods show no `older_than_45m` drops. The PR that removes the stage
+  also removes this rule (#3901).
 - **Databases** — `postgres*`, `valkey`, `redis` major/minor.
 - **home-assistant** — calendar-versioned, never auto-merges.
 - **seaweedfs** — never auto-merges (upstream chart appVersion has shipped
