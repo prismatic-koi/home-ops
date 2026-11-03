@@ -303,6 +303,13 @@
       pinDigests: false,
     },
     {
+      // A k3s minor can wait for CNI support (Cilium) for weeks. A separate
+      // PR for the patch makes sure the patch does not wait behind it.
+      description: 'Open k3s patch updates in a PR separate from k3s minor updates, so a patch does not wait behind a minor that is blocked on CNI support',
+      matchPackageNames: ['k3s-io/k3s', 'rancher/k3s-upgrade'],
+      separateMinorPatch: true,
+    },
+    {
       // Disable digest pinning on grafana/grafana. Renovate's docker datasource
       // cannot reliably resolve new digests when the image is pinned via the
       // helm chart's `image.tag` value (see closed #2832 and the unpin in #2985).
