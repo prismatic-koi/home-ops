@@ -68,7 +68,7 @@ spec:
   # operator's baked-in default drifting under us. Bump alongside the HA
   # pair when kube-prometheus-stack is upgraded.
   version: v3.13.1-distroless
-  image: quay.io/prometheus/prometheus:v3.15.1-distroless@sha256:451a845bae1d51622b41af1780eb2ad911bbb79a9855bc8e9bb67fabbc03f934
+  image: quay.io/prometheus/prometheus:v3.16.0-distroless@sha256:9764044e09eb2c9e1abdb12d0f0188d4efb7384b0262d3c080f0fc59045c89ba
 
   replicas: 1
 
