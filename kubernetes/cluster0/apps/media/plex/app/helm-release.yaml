@@ -64,8 +64,12 @@ spec:
               PLEX_GID: 0
             resources:
               requests:
+                # Plex maintenance uses about 6.5 cores at night. The limit keeps
+                # node1 from saturating. The request gives playback a CPU share.
+                cpu: 250m
                 gpu.intel.com/i915: 1
               limits:
+                cpu: 4
                 gpu.intel.com/i915: 1
     service:
       app:
