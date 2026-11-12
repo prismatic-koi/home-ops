@@ -446,10 +446,24 @@ The pull request checkout in CI is a detached merge commit. So the diff job
 points `refs/heads/main` at `HEAD` in that checkout before it runs `flate
 diff`.
 
-To run `flate diff` locally, use two ordinary clones, not linked worktrees:
-one for the branch and one for `main`. `scripts/render.sh` runs only
-`flate build`, so it does not cover this case. In the clone of the branch,
-run `git update-ref refs/heads/main HEAD`.
+`scripts/render.sh` runs only `flate build`, so it does not cover a local
+`flate diff`. To run one:
+
+1. Make two ordinary clones, not linked worktrees, outside any worktree:
+   `pull` for the branch and `default` for `main`.
+2. In each clone, run
+   `git remote set-url origin ssh://git@github.com/prismatic-koi/home-ops`.
+   Do not add `.git`. If the origin is a local path, for example `.bare`,
+   `flate` treats the source as remote and hangs (#3659, #3700).
+3. In `pull`, run `git update-ref refs/heads/main HEAD`.
+4. From the parent directory of the two clones, run the diff:
+
+```bash
+flate diff kustomization \
+  --path pull/kubernetes/cluster0/flux \
+  --path-orig default/kubernetes/cluster0/flux \
+  --supply pull/kubernetes/flate-supply.yaml
+```
 
 ##### No local fallback renderer
 
