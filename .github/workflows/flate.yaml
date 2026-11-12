@@ -49,9 +49,9 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install flate
-        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        uses: home-operations/flate/action@bbb6ebc344da051752dbdb1b413860ceffcfb63d # v0.7.3
         with:
-          version: "0.6.5"
+          version: "0.7.3"
 
       - name: Run flate test
         env:
@@ -63,7 +63,11 @@ jobs:
           # `diff` does — so the fix is to stop FLATE_BASE reaching this step,
           # not to fetch full history.
           FLATE_BASE: ""
-        run: flate test all --path kubernetes/cluster0/flux
+        run: >-
+          flate test all
+          --path kubernetes/cluster0/flux
+          --supply kubernetes/flate-supply.yaml
+          --strict-substitutions
 
   diff:
     if: ${{ needs.filter.outputs.changed-files != '[]' }}
@@ -102,10 +106,20 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ steps.app-token.outputs.token }}
 
+      # The GitRepository home-ops-cluster0 declares `ref.branch: main`. In
+      # diff mode, flate resolves that ref in each checkout. flate renders the
+      # working tree only when the ref points at HEAD. The pull request
+      # checkout is a detached merge commit with no `main` ref, so flate tries
+      # an SSH fetch and the render fails. If `main` points at a different
+      # commit, flate renders that commit, and the diff is wrong with no error.
+      # The merge commit is the content that main holds after the merge.
+      - name: Point main at the pull request checkout
+        run: git -C pull update-ref refs/heads/main HEAD
+
       - name: Install flate
-        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        uses: home-operations/flate/action@bbb6ebc344da051752dbdb1b413860ceffcfb63d # v0.7.3
         with:
-          version: "0.6.5"
+          version: "0.7.3"
 
       - name: Run flate diff
         env:
@@ -132,11 +146,15 @@ jobs:
         #                                 truncation against GitHub's comment cap.
         #   --sources home-ops-cluster0-> flate discovers the single source under
         #                                 --path; this repo has one.
+        # No --strict-substitutions here. Both sides read the PR copy of the
+        # supply file, so a PR that removes a key fails the `default/` side.
+        # The test job renders the PR side in strict mode.
         run: |-
           flate diff ${{ matrix.resource }} \
             --no-progress \
             --path pull/kubernetes/cluster0/flux \
             --path-orig default/kubernetes/cluster0/flux \
+            --supply pull/kubernetes/flate-supply.yaml \
             --strip-attr helm.sh/chart \
             --strip-attr checksum/ \
             --strip-attr app.kubernetes.io/version \

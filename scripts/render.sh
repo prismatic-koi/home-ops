@@ -20,6 +20,9 @@ set -euo pipefail
 # (#3659). Do not add it.
 readonly ORIGIN_URL="ssh://git@github.com/prismatic-koi/home-ops"
 readonly RENDER_TIMEOUT="${RENDER_TIMEOUT:-120}"
+# Placeholder values for the SOPS keys flate cannot read. CI passes the same
+# file, so the local render matches the CI render.
+readonly SUPPLY_FILE="kubernetes/flate-supply.yaml"
 
 err() {
 	echo "render.sh: error: $*" >&2
@@ -96,7 +99,9 @@ tar --exclude=.git -C "${toplevel}" -cf - . | tar -C "${clone_dir}" -xf -
 #    from a normal clone, so the worktree guard must not fire. If it does,
 #    something above is wrong.
 if (cd "${clone_dir}" && timeout "${RENDER_TIMEOUT}" flate build all \
-	--path kubernetes/cluster0/flux) \
+	--path kubernetes/cluster0/flux \
+	--supply "${SUPPLY_FILE}" \
+	--strict-substitutions) \
 	>"${render_file}" 2>"${tmp_dir}/flate.stderr"; then
 	:
 else
