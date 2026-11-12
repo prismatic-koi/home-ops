@@ -98,8 +98,8 @@ spec:
       configMap:
         create: true
         # The chart passes this content through the Helm tpl function. Do not
-        # put a Go template action (two open braces) in it, also not in a
-        # comment.
+        # put a Go template action (two open braces) in it. This rule also
+        # applies to a comment.
         content: |
           logging {
             level  = "info"
