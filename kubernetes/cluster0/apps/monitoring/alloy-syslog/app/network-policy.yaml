@@ -30,8 +30,10 @@ spec:
 # Cilium matches an ipBlock peer with the same CIDR selector as a
 # CiliumNetworkPolicy fromCIDR peer. A CIDR selector matches a source outside
 # the cluster, such as the router. It does not match a node address. So this
-# rule needs externalTrafficPolicy Local on the Service, which keeps the
-# source address of the router.
+# rule needs the source address of the router at the pod. Cilium DSR mode keeps
+# it when the lease node forwards a datagram to the pod on another node. If
+# Cilium changes the source to a node address (SNAT), this rule drops every
+# datagram that arrives on a node with no receiver pod.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
