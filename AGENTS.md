@@ -357,7 +357,7 @@ with this hostname; it was inert for the reasons above and was removed.
 
 #### Rendering `flate` output locally
 
-CI renders with `flate` 0.6.5 (#3696, #3697). Use `scripts/render.sh` to get
+CI renders with `flate` 0.7.3. Use `scripts/render.sh` to get
 the same render locally — the script and CI both use `flate`, so the local
 render is no longer an approximation:
 
@@ -391,6 +391,57 @@ against a linked worktree** — always go through the script.
 The script makes no commit, no push, and no change of any kind to your
 worktree or to `.bare`. It cleans up its temporary directory on success, on
 failure, and on interrupt.
+
+`scripts/render.sh` needs `flate` 0.7.0 or later. An earlier `flate` stops
+with `unknown flag: --supply`.
+
+##### Placeholder values for SOPS keys (`kubernetes/flate-supply.yaml`)
+
+`flate` cannot decrypt SOPS data. Since 0.7.0 it removes every encrypted key
+from the objects that it reads. The `substituteFrom` Secret `cluster-secrets`
+then has no readable keys. Without a supplied value, each `${VAR}` from it
+renders as an empty string. An empty `${SECRET_PUBLIC_DOMAIN}` gives the
+traefik wildcard `Certificate` an empty `metadata.name`, and the render fails.
+
+`kubernetes/flate-supply.yaml` gives each key of `cluster-secrets` a
+placeholder value. CI passes the file with `--supply` to every `flate`
+command, and `scripts/render.sh` passes it too. `flate test`, the three lint
+renders and `scripts/render.sh` also pass `--strict-substitutions`. The
+`flate diff` job does not, because both sides of the diff read the PR copy
+of the file. The file is reference-only input:
+
+- Flux never applies it. The `GitRepository` reads only `kubernetes/cluster0`.
+- `flate` reads it to resolve references. `flate` never emits it as an object.
+- It sits under `kubernetes/`, so the path filter of every render workflow
+  matches a change to it.
+
+Rules for the file:
+
+- Every value must be an obvious placeholder: a `placeholder-` string, an
+  `.invalid` name, or an address in `192.0.2.0/24`. This repository is
+  public. Never copy a decrypted value into the file.
+- When you add a key to `cluster-secrets.sops.yaml`, add the same key to
+  `kubernetes/flate-supply.yaml`. If a referenced key is absent, the strict
+  renders fail with `variable not set (strict mode)`.
+- A supplied value only resolves a reference: a `substituteFrom` input or a
+  `valuesFrom` input. It does not fill an encrypted key in an emitted object.
+  So a placeholder for any other SOPS Secret changes nothing in the render.
+  The remaining `SOPSUnreadable` warnings in the `flate` output are expected.
+
+##### `flate diff` reads the `main` ref of each checkout
+
+The `GitRepository` `home-ops-cluster0` declares `ref.branch: main`. In diff
+mode, `flate` resolves that ref in each checkout, and renders the working
+tree only when `main` points at `HEAD`:
+
+- If the checkout has no `main` ref, `flate` tries an SSH fetch, and the
+  render fails.
+- If `main` points at a different commit, `flate` renders that commit. The
+  diff is then wrong, with no error.
+
+The pull request checkout in CI is a detached merge commit. So the diff job
+points `refs/heads/main` at `HEAD` in that checkout before it runs `flate
+diff`. Do the same for a local diff.
 
 ##### No local fallback renderer
 

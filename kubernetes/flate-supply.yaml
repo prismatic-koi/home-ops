@@ -1,0 +1,35 @@
+---
+# Reference-only input for `flate --supply`. CI and scripts/render.sh pass
+# this file to every flate command. Flux never applies it, because the
+# GitRepository reads only kubernetes/cluster0. Do not move it into that
+# directory.
+#
+# flate cannot decrypt SOPS data, so the substituteFrom Secret
+# `cluster-secrets` has no readable keys offline. Keep the key set equal to
+# the key set of kubernetes/cluster0/flux/vars/cluster-secrets.sops.yaml.
+# The renders use --strict-substitutions, so a referenced key that is absent
+# here fails the render.
+#
+# This repository is public. Every value must be an obvious placeholder: a
+# `placeholder-` string, an `.invalid` name (RFC 2606), or an address in
+# 192.0.2.0/24 (RFC 5737). Never put a decrypted value in this file.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-secrets
+  namespace: flux-system
+stringData:
+  BLOCKY_VALKEY_PASSWORD: placeholder-blocky-valkey-password
+  SECRET_ADMIN_EMAIL: admin@example.invalid
+  SECRET_CNPG_MINIO_ACCESS_KEY: placeholder-cnpg-minio-access-key
+  SECRET_CNPG_MINIO_SECRET_KEY: placeholder-cnpg-minio-secret-key
+  SECRET_CNPG_SUPER_PASS: placeholder-cnpg-super-pass
+  SECRET_CNPG_SUPER_USER: placeholder-cnpg-super-user
+  SECRET_LDAP_BASE_DN: dc=example,dc=invalid
+  SECRET_NOTIFICATION_EMAIL: notification@example.invalid
+  SECRET_PARTNER_EMAIL: partner@example.invalid
+  SECRET_PUBLIC_DOMAIN: example.invalid
+  SECRET_PUBLIC_INSTANCE_NAME: placeholder-instance-name
+  SECRET_PUBLIC_IP: 192.0.2.1
+  SECRET_SMTP_HOST: smtp.example.invalid
+  SECRET_TEST_EMAIL: test@example.invalid
