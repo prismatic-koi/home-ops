@@ -1,0 +1,29 @@
+---
+# The LAN address of the syslog receiver. The UCG Ultra sends to
+# ${UNIFI_SYSLOG_IP}:514/UDP.
+#
+# externalTrafficPolicy Local keeps the source address of each datagram. The
+# ingress policy in network-policy.yaml admits the router addresses only.
+#
+# With externalTrafficPolicy Local, Cilium BGP advertises this address to the
+# router only from the node that runs the receiver pod. The Cilium L2
+# announcement does not obey this setting, so its lease can be on a node with
+# no receiver pod. That node drops the datagrams that it gets through ARP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy-syslog
+  namespace: monitoring
+  annotations:
+    io.cilium/lb-ipam-ips: ${UNIFI_SYSLOG_IP}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: alloy-syslog
+    app.kubernetes.io/instance: alloy-syslog
+  ports:
+    - name: syslog-udp
+      port: 514
+      targetPort: 514
+      protocol: UDP

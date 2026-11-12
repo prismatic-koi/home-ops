@@ -22,6 +22,7 @@ data:
   PLEX_IP:          "10.87.42.12"
   SYNC_ENDPOINT:    "10.87.42.14"
   SECONDARY_DNS_IP: "10.87.42.15"
+  UNIFI_SYSLOG_IP:  "10.87.42.17"
   # external service IPs
   NAS0_IP:          "10.87.42.200"
   UNIFI_IP:         "10.87.1.1"

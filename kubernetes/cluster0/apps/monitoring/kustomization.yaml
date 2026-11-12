@@ -7,6 +7,7 @@ resources:
   - ./namespace.yaml
   # Flux-Kustomizations
   - ./alloy/ks.yaml
+  - ./alloy-syslog/ks.yaml
   - ./blackbox-exporter/ks.yaml
   - ./changedetection-io/ks.yaml
   - ./grafana/ks.yaml

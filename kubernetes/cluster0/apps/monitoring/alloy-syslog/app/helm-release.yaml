@@ -1,0 +1,182 @@
+---
+# Grafana Alloy syslog receiver for the UCG Ultra (#4145).
+#
+# One replica receives syslog on UDP 514 and pushes it to the in-cluster Loki.
+# The LoadBalancer Service in service.yaml gives it the fixed LAN address
+# ${UNIFI_SYSLOG_IP}.
+#
+# This is a separate release from the alloy DaemonSet. The DaemonSet runs one
+# pod per node, and a syslog receiver needs one fixed address.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy-syslog
+  namespace: monitoring
+spec:
+  interval: 15m
+  chart:
+    spec:
+      chart: alloy
+      version: 1.15.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana-charts
+        namespace: flux-system
+      interval: 15m
+  install:
+    remediation:
+      retries: 5
+  upgrade:
+    remediation:
+      retries: 5
+  values:
+    # The pod label app.kubernetes.io/name takes this value. With the chart
+    # default ("alloy"), every policy of the alloy DaemonSet also selects this
+    # pod, and that grants it kube-apiserver access that it does not need.
+    nameOverride: alloy-syslog
+
+    # The alloy release owns the PodLogs CRD. This release does not use it.
+    crds:
+      create: false
+
+    controller:
+      type: deployment
+      replicas: 1
+      volumes:
+        extra:
+          - name: tmp
+            emptyDir: {}
+
+    # The config uses no Kubernetes API, so the pod gets no RBAC and no
+    # service account token. As a result, it needs no kube-apiserver egress.
+    rbac:
+      create: false
+    serviceAccount:
+      create: true
+      automountServiceAccountToken: false
+
+    # The chart Service always adds the TCP 12345 port of the Alloy UI. A
+    # LoadBalancer of the chart would publish the UI on the LAN address, so
+    # service.yaml holds the LoadBalancer with UDP 514 only.
+    service:
+      enabled: false
+
+    global:
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+        # Lets the non-root user bind UDP 514. This sysctl is in the safe set
+        # of the kubelet, and it applies to the network namespace of the pod
+        # only. If the bind fails, Alloy logs an error but the pod stays Ready
+        # with no syslog listener.
+        sysctls:
+          - name: net.ipv4.ip_unprivileged_port_start
+            value: "0"
+
+    alloy:
+      enableReporting: false
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      # The chart default storagePath /tmp/alloy is inside this emptyDir. The
+      # root filesystem is read-only.
+      mounts:
+        extra:
+          - name: tmp
+            mountPath: /tmp
+      extraPorts:
+        - name: syslog-udp
+          port: 514
+          targetPort: 514
+          protocol: UDP
+      configMap:
+        create: true
+        # The chart passes this content through the Helm tpl function. Do not
+        # put a Go template action (two open braces) in it, also not in a
+        # comment.
+        content: |
+          logging {
+            level  = "info"
+            format = "logfmt"
+          }
+
+          // UniFi gateways send BSD syslog (RFC 3164). The default format is
+          // RFC 5424, which cannot parse these messages.
+          //
+          // Do not set use_incoming_timestamp. RFC 3164 timestamps have no
+          // year and no time zone, so entries use the time of receipt.
+          loki.source.syslog "unifi" {
+            listener {
+              address       = "0.0.0.0:514"
+              protocol      = "udp"
+              syslog_format = "rfc3164"
+              labels        = { job = "unifi-syslog" }
+            }
+
+            relabel_rules = loki.relabel.syslog_header.rules
+            forward_to    = [loki.process.unifi.receiver]
+          }
+
+          // Copy the syslog header fields out of the internal __syslog_
+          // labels, which loki.source.syslog removes before it forwards an
+          // entry. loki.process then moves them to structured metadata.
+          loki.relabel "syslog_header" {
+            forward_to = []
+
+            rule {
+              source_labels = ["__syslog_message_hostname"]
+              target_label  = "hostname"
+            }
+            rule {
+              source_labels = ["__syslog_message_app_name"]
+              target_label  = "app_name"
+            }
+            rule {
+              source_labels = ["__syslog_message_severity"]
+              target_label  = "severity"
+            }
+            rule {
+              source_labels = ["__syslog_message_facility"]
+              target_label  = "facility"
+            }
+          }
+
+          loki.process "unifi" {
+            // Keep the header fields searchable, but not as stream labels. A
+            // UniFi device can put its MAC address in the hostname field.
+            stage.structured_metadata {
+              values = {
+                hostname = "",
+                app_name = "",
+                severity = "",
+                facility = "",
+              }
+            }
+
+            // The only stream label is job. Do not add a label from the
+            // message or its header. These hold client names, MAC addresses
+            // and IP addresses. Search for a client with a line filter.
+            stage.label_keep {
+              values = ["job"]
+            }
+
+            forward_to = [loki.write.default.receiver]
+          }
+
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
+            }
+          }
+      resources:
+        requests:
+          cpu: 10m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
