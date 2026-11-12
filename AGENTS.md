@@ -357,7 +357,8 @@ with this hostname; it was inert for the reasons above and was removed.
 
 #### Rendering `flate` output locally
 
-CI renders with `flate` 0.7.3. Use `scripts/render.sh` to get
+CI renders with `flate` 0.7.3, the version pinned in
+`.github/workflows/flate.yaml`. Use `scripts/render.sh` to get
 the same render locally — the script and CI both use `flate`, so the local
 render is no longer an approximation:
 
@@ -407,8 +408,10 @@ traefik wildcard `Certificate` an empty `metadata.name`, and the render fails.
 placeholder value. CI passes the file with `--supply` to every `flate`
 command, and `scripts/render.sh` passes it too. `flate test`, the three lint
 renders and `scripts/render.sh` also pass `--strict-substitutions`. The
-`flate diff` job does not, because both sides of the diff read the PR copy
-of the file. The file is reference-only input:
+`flate diff` job does not. Both sides of the diff read the PR copy of the
+file, so a PR that removes a key and its last reference fails on the
+`default/` side, which still has the reference. Do not add
+`--strict-substitutions` to the diff job. The file is reference-only input:
 
 - Flux never applies it. The `GitRepository` reads only `kubernetes/cluster0`.
 - `flate` reads it to resolve references. `flate` never emits it as an object.
@@ -441,7 +444,12 @@ tree only when `main` points at `HEAD`:
 
 The pull request checkout in CI is a detached merge commit. So the diff job
 points `refs/heads/main` at `HEAD` in that checkout before it runs `flate
-diff`. Do the same for a local diff.
+diff`.
+
+To run `flate diff` locally, use two ordinary clones, not linked worktrees:
+one for the branch and one for `main`. `scripts/render.sh` runs only
+`flate build`, so it does not cover this case. In the clone of the branch,
+run `git update-ref refs/heads/main HEAD`.
 
 ##### No local fallback renderer
 
