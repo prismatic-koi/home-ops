@@ -104,6 +104,9 @@ Some applications have multiple instances deployed:
   `auth` and went with authelia (#3724).
 - **blocky**: 1 HelmRelease running 2 replicas (consolidated from separate primary/secondary in #3563)
 - **postgres clusters**: Multiple managed by cloudnative-pg operator
+- **alloy**: 2 HelmReleases of the `alloy` chart in `monitoring`. `alloy` is a
+  DaemonSet that reads pod logs. `alloy-syslog` is a Deployment that receives
+  UCG Ultra syslog (#4145). One Renovate PR updates the chart in both.
 
 Always check all instances when reviewing updates.
 

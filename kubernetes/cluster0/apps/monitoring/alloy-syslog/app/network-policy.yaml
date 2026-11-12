@@ -1,0 +1,102 @@
+---
+# =============================================================================
+# alloy-syslog NetworkPolicy (#4145)
+# Pod label: app.kubernetes.io/name=alloy-syslog
+# Listens on:
+#   :514/UDP  (syslog from the UCG Ultra, through the alloy-syslog LoadBalancer)
+# Egress to:
+#   loki.monitoring.svc :3100  (log push)
+#   kube-dns            :53    (name resolution)
+#
+# The pod has no service account token and uses no Kubernetes API, so it has
+# no kube-apiserver egress and no CiliumNetworkPolicy.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-syslog-default-deny
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-syslog
+  policyTypes: [Ingress, Egress]
+---
+# Syslog over UDP has no authentication, and the LoadBalancer address is
+# reachable from the whole LAN. Admit the two router addresses only. The UCG
+# Ultra sends from the address of the interface on its route to the receiver.
+#
+# Cilium matches an ipBlock peer with the same CIDR selector as a
+# CiliumNetworkPolicy fromCIDR peer. A CIDR selector matches a source outside
+# the cluster, such as the router. It does not match a node address. So this
+# rule needs the source address of the router at the pod. Cilium DSR mode keeps
+# it when the lease node forwards a datagram to the pod on another node. If
+# Cilium changes the source to a node address (SNAT), this rule drops every
+# datagram that arrives on a node with no receiver pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-syslog-allow-unifi-syslog-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-syslog
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.87.42.1/32 # BGP_IP, router interface on the server network
+        - ipBlock:
+            cidr: 10.87.1.1/32 # UNIFI_IP
+      ports:
+        - port: 514
+          protocol: UDP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-syslog-allow-dns
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-syslog
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+---
+# Companion of loki-allow-alloy-syslog-ingress in the loki app.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-syslog-allow-loki-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-syslog
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 3100
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
