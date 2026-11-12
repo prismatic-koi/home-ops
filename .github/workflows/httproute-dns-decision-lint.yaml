@@ -55,9 +55,9 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install flate
-        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.6.5
+        uses: home-operations/flate/action@631b76b69c4e58c6f4d1cb01e23616fa61aebafa # v0.7.3
         with:
-          version: "0.6.5"
+          version: "0.7.3"
 
       - name: Render manifests with flate
         env:
