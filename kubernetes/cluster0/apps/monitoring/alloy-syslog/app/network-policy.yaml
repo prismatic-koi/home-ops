@@ -3,7 +3,7 @@
 # alloy-syslog NetworkPolicy (#4145)
 # Pod label: app.kubernetes.io/name=alloy-syslog
 # Listens on:
-#   :514/UDP  (syslog from the UCG Ultra, through the alloy-syslog LoadBalancer)
+#   :514/UDP  (syslog from each UniFi device, through the alloy-syslog LoadBalancer)
 # Egress to:
 #   loki.monitoring.svc :3100  (log push)
 #   kube-dns            :53    (name resolution)
@@ -24,13 +24,18 @@ spec:
   policyTypes: [Ingress, Egress]
 ---
 # Syslog over UDP has no authentication, and the LoadBalancer address is
-# reachable from the whole LAN. Admit the two router addresses only. The UCG
-# Ultra sends from the address of the interface on its route to the receiver.
+# reachable from the whole LAN. The UniFi SIEM setting makes each UniFi device
+# send syslog from its own address, not only the router (#4148). Admit each
+# device as one /32. Do not admit 10.87.1.0/24: that range holds other hosts,
+# and a source not on the list must send nothing to Loki. The rule fails
+# closed. If a device address changes, update its variable, or the rule drops
+# its logs. The UCG Ultra can also send from its address on the server
+# network (BGP_IP).
 #
 # Cilium matches an ipBlock peer with the same CIDR selector as a
 # CiliumNetworkPolicy fromCIDR peer. A CIDR selector matches a source outside
 # the cluster, such as the router. It does not match a node address. So this
-# rule needs the source address of the router at the pod. Cilium DSR mode keeps
+# rule needs the source address of the device at the pod. Cilium DSR mode keeps
 # it when the lease node forwards a datagram to the pod on another node. If
 # Cilium changes the source to a node address (SNAT), this rule drops every
 # datagram that arrives on a node with no receiver pod.
@@ -47,9 +52,19 @@ spec:
   ingress:
     - from:
         - ipBlock:
-            cidr: 10.87.42.1/32 # BGP_IP, router interface on the server network
+            cidr: ${BGP_IP}/32 # router interface on the server network
         - ipBlock:
-            cidr: 10.87.1.1/32 # UNIFI_IP
+            cidr: ${UNIFI_IP}/32 # UCG Ultra
+        - ipBlock:
+            cidr: ${UNIFI_US8_IP}/32 # US 8
+        - ipBlock:
+            cidr: ${UNIFI_US8_60W_IP}/32 # US 8 60W
+        - ipBlock:
+            cidr: ${UNIFI_AP_HALLWAY_IP}/32 # UAP-AC-Lite, hallway
+        - ipBlock:
+            cidr: ${UNIFI_AP_OFFICE_IP}/32 # U6 Pro, office
+        - ipBlock:
+            cidr: ${UNIFI_AP_LOUNGE_IP}/32 # U6 Pro, lounge
       ports:
         - port: 514
           protocol: UDP

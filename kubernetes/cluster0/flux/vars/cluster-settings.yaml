@@ -27,4 +27,10 @@ data:
   NAS0_IP:          "10.87.42.200"
   UNIFI_IP:         "10.87.1.1"
   OCTOPRINT_IP:     "10.87.1.74"
+  # UniFi devices that send syslog (#4148)
+  UNIFI_US8_IP:         "10.87.1.118"
+  UNIFI_US8_60W_IP:     "10.87.1.140"
+  UNIFI_AP_HALLWAY_IP:  "10.87.1.58"
+  UNIFI_AP_OFFICE_IP:   "10.87.1.213"
+  UNIFI_AP_LOUNGE_IP:   "10.87.1.117"
   BGP_IP:           "10.87.42.1"
