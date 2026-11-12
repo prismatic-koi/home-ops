@@ -37,7 +37,7 @@ spec:
           app:
             image:
               repository: lscr.io/linuxserver/sabnzbd
-              tag: "5.1.3@sha256:693c208f697d0b411410edd92a98b52c8c754c01f5c078a975cbc892044260f5"
+              tag: "5.1.3@sha256:b356d0a9b22db584e9005364ec4e752dfc081ce501b7145e9a5c0bb38e4d1ba4"
             env:
               TZ: "${TIMEZONE}"
               # PUID/PGID are read by the linuxserver s6-overlay entrypoint;
