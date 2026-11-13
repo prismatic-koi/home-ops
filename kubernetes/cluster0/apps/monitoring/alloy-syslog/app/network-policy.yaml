@@ -35,10 +35,9 @@ spec:
 # Cilium matches an ipBlock peer with the same CIDR selector as a
 # CiliumNetworkPolicy fromCIDR peer. A CIDR selector matches a source outside
 # the cluster, such as the router. It does not match a node address. So this
-# rule needs the source address of the device at the pod. Cilium DSR mode keeps
-# it when the lease node forwards a datagram to the pod on another node. If
-# Cilium changes the source to a node address (SNAT), this rule drops every
-# datagram that arrives on a node with no receiver pod.
+# rule needs the source address of the device at the pod. The Local policy
+# delivers each datagram on the node that runs the pod, so Cilium does not
+# change the source address.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
