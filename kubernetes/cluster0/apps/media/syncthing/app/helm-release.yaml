@@ -45,6 +45,9 @@ spec:
         type: LoadBalancer
         annotations:
           io.cilium/lb-ipam-ips: ${SYNC_ENDPOINT}
+        # With Cluster, a UDP datagram that lands on a node without the pod
+        # is DSR-forwarded and lost (#4145).
+        externalTrafficPolicy: Local
         ports:
           discovery:
             enabled: true
