@@ -1050,6 +1050,21 @@ introduced a new upper-bound overreach into the node IPs and NAS0_IP, caught onl
 by a human second pass after two review rounds passed it. State the reserved
 addresses you checked, and the result, in the PR description.
 
+## A UDP LoadBalancer Service must use externalTrafficPolicy Local
+
+On this cluster, a LoadBalancer Service that carries UDP must set
+`externalTrafficPolicy: Local`.
+
+Cilium runs with DSR and BGP. With `Cluster`, BGP advertises the address from
+every node, and the router sends each flow to one node. If that node has no
+pod, Cilium forwards the datagram to the pod node with an IPv4 option. The
+datagram never arrives (#4145, #4156). With `Local`, only the pod node
+advertises the address.
+
+Known side effect: Cilium L2 announcements do not obey `Local`. The L2 lease
+node can hold the address and run no pod. A client that uses ARP instead of
+BGP then loses its datagrams (see the description of #4156).
+
 ## Renaming a LoadBalancer Service orphans its Cilium L2 announcement
 
 Renaming a LoadBalancer Service deletes the old object and creates a new
