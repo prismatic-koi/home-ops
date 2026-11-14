@@ -215,19 +215,19 @@ spec:
   egress:
     - to:
         - ipBlock:
-            cidr: 10.87.42.200/32 # nas0
+            cidr: ${NAS0_IP}/32 # nas0
       ports:
         - port: 5000
           protocol: TCP
     - to:
         - ipBlock:
-            cidr: 10.87.1.74/32 # octoprint
+            cidr: ${OCTOPRINT_IP}/32 # octoprint
       ports:
         - port: 80
           protocol: TCP
     - to:
         - ipBlock:
-            cidr: 10.87.1.1/32 # unifi
+            cidr: ${UNIFI_IP}/32 # unifi
       ports:
         - port: 443
           protocol: TCP

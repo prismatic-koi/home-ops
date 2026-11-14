@@ -27,5 +27,5 @@ data:
   NAS0_IP:          "10.87.42.200"
   UNIFI_IP:         "10.87.1.1"
   UNIFI_MGMT_CIDR:  "10.87.1.0/24"
-  OCTOPRINT_IP:     "10.87.1.74"
+  OCTOPRINT_IP:     "10.87.30.74"
   BGP_IP:           "10.87.42.1"
