@@ -106,7 +106,7 @@ Some applications have multiple instances deployed:
 - **postgres clusters**: Multiple managed by cloudnative-pg operator
 - **alloy**: 2 HelmReleases of the `alloy` chart in `monitoring`. `alloy` is a
   DaemonSet that reads pod logs. `alloy-syslog` is a Deployment that receives
-  syslog from each UniFi device (#4145, #4148). One Renovate PR updates the chart in both.
+  syslog from the UniFi management subnet and the router (#4145, #4148). One Renovate PR updates the chart in both.
 
 Always check all instances when reviewing updates.
 
