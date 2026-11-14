@@ -148,6 +148,16 @@ spec:
           }
 
           loki.process "unifi" {
+            // A UniFi device logs its inform authkey when it saves its
+            // config. The key authenticates the device to the controller,
+            // so it must not reach Loki. The expression matches a value of
+            // any format, not only hex. Keep this stage before every stage
+            // that reads the line, or that stage can copy the key.
+            stage.replace {
+              expression = "(?i)authkey:\\s*(\\S+)"
+              replace    = "<redacted>"
+            }
+
             // Keep the header fields searchable, but not as stream labels. A
             // UniFi device can put its MAC address in the hostname field.
             stage.structured_metadata {
