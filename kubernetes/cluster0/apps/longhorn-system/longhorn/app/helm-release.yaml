@@ -23,6 +23,8 @@ spec:
   values:
     defaultSettings:
       backupTarget: "nfs://${NAS0_IP}:/volume1/longhorn-backups"
+      # Parallel rebuilds filled the 1 Gbit/s link of one node (#4161).
+      concurrentReplicaRebuildPerNodeLimit: 2
     longhornUI:
       replicas: 3
     metrics:
