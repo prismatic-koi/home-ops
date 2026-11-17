@@ -90,7 +90,13 @@ spec:
                     datasourceUid: P09FC0E78B5F11C2D
                     model:
                       refId: count_query
-                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[7d]))'
+                      # A series with no sample in the 90d before the window is new: count its
+                      # last value, because increase() misses its first spawn. Keep the
+                      # lookback at or above the fleet-ingest retention (90d). The 1d, 6d
+                      # and 5d queries use the same pattern. A shorter lookback treats a
+                      # series of a host that slept longer than the lookback as new, and
+                      # counts its full cumulative value.
+                      expr: 'sum((last_over_time(prism_spawns_total{agent_role="worker"}[7d]) unless last_over_time(prism_spawns_total{agent_role="worker"}[90d] offset 7d)) or increase(prism_spawns_total{agent_role="worker"}[7d]))'
                       instant: true
                       range: false
                   - refId: count
@@ -130,7 +136,7 @@ spec:
                     datasourceUid: P09FC0E78B5F11C2D
                     model:
                       refId: count_1d_query
-                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[1d])) or vector(0)'
+                      expr: 'sum((last_over_time(prism_spawns_total{agent_role="worker"}[1d]) unless last_over_time(prism_spawns_total{agent_role="worker"}[90d] offset 1d)) or increase(prism_spawns_total{agent_role="worker"}[1d])) or vector(0)'
                       instant: true
                       range: false
                   - refId: count_1d
@@ -150,7 +156,7 @@ spec:
                     datasourceUid: P09FC0E78B5F11C2D
                     model:
                       refId: count_6d_query
-                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[6d])) or vector(0)'
+                      expr: 'sum((last_over_time(prism_spawns_total{agent_role="worker"}[6d]) unless last_over_time(prism_spawns_total{agent_role="worker"}[90d] offset 6d)) or increase(prism_spawns_total{agent_role="worker"}[6d])) or vector(0)'
                       instant: true
                       range: false
                   - refId: count_6d
@@ -170,7 +176,7 @@ spec:
                     datasourceUid: P09FC0E78B5F11C2D
                     model:
                       refId: count_5d_query
-                      expr: 'sum(increase(prism_spawns_total{agent_role="worker"}[5d])) or vector(0)'
+                      expr: 'sum((last_over_time(prism_spawns_total{agent_role="worker"}[5d]) unless last_over_time(prism_spawns_total{agent_role="worker"}[90d] offset 5d)) or increase(prism_spawns_total{agent_role="worker"}[5d])) or vector(0)'
                       instant: true
                       range: false
                   - refId: count_5d
