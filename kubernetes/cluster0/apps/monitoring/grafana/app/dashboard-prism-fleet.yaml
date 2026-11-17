@@ -153,7 +153,7 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "instant": true,
-              "expr": "100 * sum(increase(prism_spawns_total{agent_role=\"worker\"}[7d])) / max(prism_spawn_limit)",
+              "expr": "100 * sum((last_over_time(prism_spawns_total{agent_role=\"worker\"}[7d]) unless last_over_time(prism_spawns_total{agent_role=\"worker\"}[90d] offset 7d)) or increase(prism_spawns_total{agent_role=\"worker\"}[7d])) / max(prism_spawn_limit)",
               "legendFormat": "of limit"
             }
           ]
@@ -181,7 +181,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
-              "expr": "sum(increase(prism_spawns_total{agent_role=\"worker\"}[7d]))",
+              "expr": "sum((last_over_time(prism_spawns_total{agent_role=\"worker\"}[7d]) unless last_over_time(prism_spawns_total{agent_role=\"worker\"}[90d] offset 7d)) or increase(prism_spawns_total{agent_role=\"worker\"}[7d]))",
               "legendFormat": "worker spawns (7d)"
             },
             {
@@ -220,7 +220,7 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "instant": true,
-              "expr": "sum by (repo) ((increase(prism_spawn_overrides_total[7d]) unless (last_over_time(prism_spawn_overrides_total[7d]) unless last_over_time(prism_spawn_overrides_total[7d] offset 7d))) or (last_over_time(prism_spawn_overrides_total[7d]) unless last_over_time(prism_spawn_overrides_total[7d] offset 7d)))",
+              "expr": "sum by (repo) ((last_over_time(prism_spawn_overrides_total[7d]) unless last_over_time(prism_spawn_overrides_total[90d] offset 7d)) or increase(prism_spawn_overrides_total[7d]))",
               "legendFormat": "{{repo}}"
             }
           ]
@@ -420,7 +420,7 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "instant": true,
-              "expr": "sum by (agent_role, profile) (increase(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[$__range]))",
+              "expr": "sum by (agent_role, profile) ((last_over_time(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[$__range]) unless last_over_time(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[90d] offset $__range)) or increase(prism_spawns_total{hostname=~\"${hostname:regex}\", repo=~\"${repo:regex}\", agent_role=~\"${agent_role:regex}\", profile=~\"${profile:regex}\"}[$__range]))",
               "legendFormat": "{{agent_role}} / {{profile}}"
             }
           ]
