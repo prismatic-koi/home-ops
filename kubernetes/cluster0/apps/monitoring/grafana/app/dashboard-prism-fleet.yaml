@@ -135,7 +135,7 @@ data:
           "type": "stat",
           "id": 31,
           "title": "Worker spawns vs limit (7d)",
-          "description": "Worker spawns in the rolling 7 days as a percentage of max(prism_spawn_limit). Fixed 7d window. Shows no data until nixos-config#3177 exports the limit.",
+          "description": "Worker spawns in the rolling 7 days as a percentage of max(prism_spawn_limit). Fixed 7d window.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
           "gridPos": { "h": 8, "w": 6, "x": 0, "y": 1 },
           "fieldConfig": {
@@ -210,7 +210,7 @@ data:
           "type": "bargauge",
           "id": 33,
           "title": "Limit overrides by repo (7d)",
-          "description": "increase(prism_spawn_overrides_total[7d]) by repo. Shows no data until nixos-config#3178 exports the counter.",
+          "description": "increase(prism_spawn_overrides_total[7d]) by repo.",
           "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
           "fieldConfig": { "defaults": { "unit": "short", "min": 0, "color": { "mode": "palette-classic" } }, "overrides": [] },
@@ -220,7 +220,7 @@ data:
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "P09FC0E78B5F11C2D" },
               "instant": true,
-              "expr": "sum by (repo) (increase(prism_spawn_overrides_total[7d]))",
+              "expr": "sum by (repo) ((increase(prism_spawn_overrides_total[7d]) unless (last_over_time(prism_spawn_overrides_total[7d]) unless last_over_time(prism_spawn_overrides_total[7d] offset 7d))) or (last_over_time(prism_spawn_overrides_total[7d]) unless last_over_time(prism_spawn_overrides_total[7d] offset 7d)))",
               "legendFormat": "{{repo}}"
             }
           ]
