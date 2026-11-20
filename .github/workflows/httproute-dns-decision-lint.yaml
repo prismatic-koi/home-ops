@@ -57,6 +57,7 @@ jobs:
       - name: Install flate
         uses: home-operations/flate/action@bbb6ebc344da051752dbdb1b413860ceffcfb63d # v0.7.3
         with:
+          # renovate: datasource=github-releases depName=home-operations/flate
           version: "0.7.3"
 
       - name: Render manifests with flate

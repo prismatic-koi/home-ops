@@ -360,7 +360,7 @@ with this hostname; it was inert for the reasons above and was removed.
 
 #### Rendering `flate` output locally
 
-CI renders with `flate` 0.7.3, the version pinned in
+CI renders with `flate`, the version pinned in
 `.github/workflows/flate.yaml`. Use `scripts/render.sh` to get
 the same render locally — the script and CI both use `flate`, so the local
 render is no longer an approximation:
