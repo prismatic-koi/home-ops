@@ -49,10 +49,10 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install flate
-        uses: home-operations/flate/action@bbb6ebc344da051752dbdb1b413860ceffcfb63d # v0.7.3
+        uses: home-operations/flate/action@4e07f351352d235a335e5a1f0a088eab7ec40997 # v0.8.0
         with:
           # renovate: datasource=github-releases depName=home-operations/flate
-          version: "0.7.3"
+          version: "0.8.0"
 
       - name: Run flate test
         env:
@@ -118,10 +118,10 @@ jobs:
         run: git -C pull update-ref refs/heads/main HEAD
 
       - name: Install flate
-        uses: home-operations/flate/action@bbb6ebc344da051752dbdb1b413860ceffcfb63d # v0.7.3
+        uses: home-operations/flate/action@4e07f351352d235a335e5a1f0a088eab7ec40997 # v0.8.0
         with:
           # renovate: datasource=github-releases depName=home-operations/flate
-          version: "0.7.3"
+          version: "0.8.0"
 
       - name: Run flate diff
         env:
