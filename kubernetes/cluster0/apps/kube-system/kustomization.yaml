@@ -12,6 +12,7 @@ resources:
   # See the per-Kustomization comments in that file for the adoption story
   # and the two-outage post-mortem that shaped the guards.
   - ./coredns/ks.yaml
+  - ./csi-snapshot-crds/ks.yaml
   - ./intel-device-plugin/ks.yaml
   # The Flux Kustomization at ./local-path-provisioner/ks.yaml points at a
   # NetworkPolicy-only path (./local-path-provisioner/policy/) — the actual

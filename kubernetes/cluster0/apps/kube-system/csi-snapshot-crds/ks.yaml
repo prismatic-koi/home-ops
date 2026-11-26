@@ -1,0 +1,19 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cluster-apps-csi-snapshot-crds
+  namespace: flux-system
+spec:
+  path: ./kubernetes/cluster0/apps/kube-system/csi-snapshot-crds/app
+  # prune: false — deleting a CRD deletes every object of that kind
+  # (VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass and the
+  # group snapshot kinds).
+  prune: false
+  sourceRef:
+    kind: GitRepository
+    name: home-ops-cluster0
+  interval: 30m
+  retryInterval: 1m
+  timeout: 3m
