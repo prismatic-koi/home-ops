@@ -152,6 +152,41 @@ spec:
               ports:
                 - port: 9696
                   protocol: TCP
+      allow-arr-egress:
+        controller: main
+        policyTypes: [Egress]
+        rules:
+          egress:
+            - ports:
+                - port: 8989
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: sonarr
+            - ports:
+                - port: 7878
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: radarr
+            - ports:
+                - port: 8686
+                  protocol: TCP
+              to:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: lidarr
       allow-monitoring-ingress:
         controller: main
         policyTypes: [Ingress]
