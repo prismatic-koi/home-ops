@@ -129,6 +129,9 @@ spec:
         port: 443
         exposedPort: 443
         http:
+          # Some backends read X_Forwarded_For as X-Forwarded-For. delete drops
+          # such names, so a client cannot spoof a header that traefik sets.
+          aliasHeadersStrategy: delete
           tls:
             enabled: true
             options: "default"
@@ -143,6 +146,7 @@ spec:
         expose:
           default: false
         http:
+          aliasHeadersStrategy: delete
           tls:
             enabled: true
             options: "default"
