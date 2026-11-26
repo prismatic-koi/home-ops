@@ -911,6 +911,25 @@ names the Service port denies the translated traffic when the Service's
 `targetPort` differs from its `port`. This broke the tailnet path in #3623
 and was fixed in #3625.
 
+### From traefik v3.8, the `default` TLSOption does not apply to the Gateway listeners
+
+From traefik v3.8, the `default` TLSOption does not apply to the Gateway
+HTTPS listeners `websecure` and `websecurets`. traefik builds the TLS options
+of each listener in code and does not read `spec.listeners[].tls.options`.
+The operator accepted this regression (#4249).
+
+- `sniStrict` is not enforced on these listeners. A client with no SNI or an
+  unknown SNI gets the default wildcard certificate.
+- The TLS 1.2 minimum on these listeners comes from the Go default for a TLS
+  server, not from traefik.
+- `tlsOptions.default` must stay in the HelmRelease. traefik uses it as the
+  fallback when two routers on one entrypoint serve one host name with
+  different TLS options.
+
+The listener binding is still the access control, so the exposure tiers do
+not change. The upstream issue is
+https://github.com/traefik/traefik/issues/13818.
+
 ## Exposure tiers are a labelled, linted decision
 
 A route's exposure tier is the listener it binds, and that is the whole access
