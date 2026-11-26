@@ -19,6 +19,8 @@ spec:
     createNamespace: true
   values:
     grafana.ini:
+      log:
+        filters: search-manifest-watcher:error
       users:
         default_timezone: Pacific/Auckland
       smtp:
