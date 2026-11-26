@@ -147,6 +147,21 @@ spec:
               ports:
                 - port: 8686
                   protocol: TCP
+      allow-prowlarr-ingress:
+        controller: main
+        policyTypes: [Ingress]
+        rules:
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: media
+                  podSelector:
+                    matchLabels:
+                      app.kubernetes.io/instance: prowlarr
+              ports:
+                - port: 8686
+                  protocol: TCP
       allow-sabnzbd-egress:
         controller: main
         policyTypes: [Egress]
